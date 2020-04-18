@@ -45,6 +45,26 @@ for module in utils os; do
   fi
 done
 
+_primer_is_var() {
+    eval "[ ! -z \${$1:-} ]"
+    return $?  # Pedantic.
+}
+
+primer_load() {
+    _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
+    if _primer_is_var $_varname; then
+        yush_debug "$1 already loaded from \$$_varname"
+    else
+        _impl=$(primer_locate "$1" || true)
+        if [ -n "$_impl" ]; then
+            yush_info "Loading $1 implementation from $_impl"
+            # shellcheck disable=SC1090
+            . "$_impl"
+            _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
+            eval "${_varname}=${_impl}"
+        fi
+    fi
+}
 
 # Parse options
 while [ $# -gt 0 ]; do
@@ -52,6 +72,7 @@ while [ $# -gt 0 ]; do
         -v | --verbose)
             YUSH_LOG_LEVEL=$2; shift 2;;
         --verbose=*)
+            # shellcheck disable=SC2034
             YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
 
         -s | --steps)
@@ -64,6 +85,30 @@ while [ $# -gt 0 ]; do
         --path=*)
             PRIMER_PATH="${1#*=}"; shift 1;;
 
+        --*:*)
+            _val=${1#*=}
+            _key=${1%=*}
+            if [ "$_key" = "$_val" ]; then
+                _opt=${1#*:}
+                _tmp=${1%:*}
+                _step=${_tmp##*-}
+                yush_info "Passing option $_opt to $_step"
+                if primer_load "$_step"; then
+                    $_step option "$_opt" "$2"
+                fi
+                shift 2
+            else
+                _opt=${_key#*:}
+                _tmp=${_key%:*}
+                _step=${_tmp##*-}
+                yush_info "Passing option $_opt to $_step"
+                if primer_load "$_step"; then
+                    $_step option "$_opt" "$_val"
+                fi
+                shift 1
+            fi
+            ;;
+
         -h | --help)
             usage 0;;
         --)
@@ -74,7 +119,6 @@ while [ $# -gt 0 ]; do
             break;;
     esac
 done
-
 
 primer_sudo
 
@@ -88,22 +132,17 @@ fi
 case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
         for _step in $PRIMER_STEPS; do
-            _impl=$(primer_locate "$_step" || true)
-            if [ -n "$_impl" ]; then
-                yush_info "Running install@$_impl"
-                # shellcheck disable=SC1090
-                . "$_impl"
+            echo "$_step"
+            if primer_load "$_step"; then
+                yush_notice "Installing $_step"
                 $_step install
             fi
         done
         ;;
     clean | remove | down)
         for _step in $PRIMER_STEPS; do
-            _impl=$(primer_locate "$_step" || true)
-            if [ -n "$_impl" ]; then
-                yush_info "Running clean@$_impl"
-                # shellcheck disable=SC1090
-                . "$_impl"
+            if primer_load "$_step"; then
+                yush_notice "Cleaning $_step"
                 $_step clean
             fi
         done
