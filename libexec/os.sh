@@ -43,7 +43,7 @@ primer_update() {
         lsb_dist=$(primer_distribution)
         case "$lsb_dist" in
             ubuntu|*bian)
-                $PRIMER_SUDO apt-get update -y
+                DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get update -y
                 ;;
             alpine*)
                 $PRIMER_SUDO apk update
@@ -73,7 +73,7 @@ primer_dependency() {
         case "$lsb_dist" in
             ubuntu|*bian)
                 # shellcheck disable=SC2086
-                $PRIMER_SUDO apt-get install -y $pkgs
+                DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get install -y $pkgs
                 ;;
             alpine*)
                 # shellcheck disable=SC2086
