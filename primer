@@ -1,0 +1,111 @@
+#!/usr/bin/env sh
+
+# Shell sanity
+set -eu
+
+# Root directory of the script
+PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
+# Our library for scripts and dependencies.
+PRIMER_LIB_DIR=
+for _lib in libexec lib share/primer; do
+    [ -z "${PRIMER_LIB_DIR}" ] && [ -d "${PRIMER_ROOT_DIR}/$_lib" ] && PRIMER_LIB_DIR="${PRIMER_ROOT_DIR}/$_lib"
+    [ -z "${PRIMER_LIB_DIR}" ] && [ -d "${PRIMER_ROOT_DIR}/../$_lib" ] && PRIMER_LIB_DIR="${PRIMER_ROOT_DIR}/../$_lib"
+done
+[ -z "$PRIMER_LIB_DIR" ] && echo "Cannot find library directory!" >&2 && exit 1
+# Top directory for yu.sh
+PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
+! [ -d "$PRIMER_LIB_DIR" ] && echo "Cannot find yu.sh directory!" >&2 && exit 1
+
+# shellcheck disable=SC1090
+. "$PRIMER_YUSH_DIR/log.sh"
+# shellcheck disable=SC1090
+. "$PRIMER_YUSH_DIR/text.sh"
+
+
+# This is the colon separated path where to find priming steps
+PRIMER_PATH=${PRIMER_PATH:-}
+[ -z "$PRIMER_PATH" ] && PRIMER_PATH=${PRIMER_LIB_DIR}/steps
+
+# Space separated list of extensions for the steps
+PRIMER_EXTS=${PRIMER_EXTS:-".sh"}
+
+# These are a list of space separated steps to perform, the first step found in
+# the PRIMER_PATH will be used.
+PRIMER_STEPS=${PRIMER_STEPS:-}
+
+# Source in all relevant modules. This is where most of the "stuff" will occur.
+for module in utils os; do
+  module_path="${PRIMER_LIB_DIR}/${module}.sh"
+  if [ -f "$module_path" ]; then
+    # shellcheck disable=SC1090
+    . "$module_path"
+  else
+    echo "Cannot find module $module at $module_path !" >& 2
+    exit 1
+  fi
+done
+
+
+# Parse options
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -v | --verbose)
+            YUSH_LOG_LEVEL=$2; shift 2;;
+        --verbose=*)
+            YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
+
+        -s | --steps)
+            PRIMER_STEPS=$2; shift 2;;
+        --steps=*)
+            PRIMER_STEPS="${1#*=}"; shift 1;;
+
+        -p | --path)
+            PRIMER_PATH=$2; shift 2;;
+        --path=*)
+            PRIMER_PATH="${1#*=}"; shift 1;;
+
+        -h | --help)
+            usage 0;;
+        --)
+            shift; break;;
+        -*)
+            echo "Unknown option: $1 !" >&2 ; usage 1;;
+        *)
+            break;;
+    esac
+done
+
+
+primer_sudo
+
+if [ "$#" -gt 0 ]; then
+    cmd=$1
+    shift
+else
+    cmd=install
+fi
+
+case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
+    install | up)
+        for _step in $PRIMER_STEPS; do
+            _impl=$(primer_locate "$_step" || true)
+            if [ -n "$_impl" ]; then
+                yush_info "Running install@$_impl"
+                # shellcheck disable=SC1090
+                . "$_impl"
+                $_step install
+            fi
+        done
+        ;;
+    clean | remove | down)
+        for _step in $PRIMER_STEPS; do
+            _impl=$(primer_locate "$_step" || true)
+            if [ -n "$_impl" ]; then
+                yush_info "Running clean@$_impl"
+                # shellcheck disable=SC1090
+                . "$_impl"
+                $_step clean
+            fi
+        done
+        ;;
+esac
