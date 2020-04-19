@@ -37,7 +37,7 @@ PRIMER_STEPS=${PRIMER_STEPS:-}
 
 # Configuration file to read, this will be a .env like file that can be used to
 # pass options to the various implementations steps.
-PRIMER_CONFIG=${PRIMER_CONFIG:-}
+PRIMER_CONFIG=${PRIMER_CONFIG:-./primer.env}
 
 # Should we allow substitution in configuration file.
 PRIMER_SUBST=1
@@ -127,7 +127,8 @@ $_step $_opt $_val"
 done
 
 # Read configuration from .env formatted file
-if [ -n "$PRIMER_CONFIG" ]; then
+if [ -n "$PRIMER_CONFIG" ] && [ -f "$PRIMER_CONFIG" ]; then
+    yush_info "Reading installation configuration from $PRIMER_CONFIG"
     while IFS='=' read -r key val; do
         # Skip over lines containing comments.
         # (Lines starting with '#').
