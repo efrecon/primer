@@ -22,7 +22,7 @@ timezone() {
             lsb_dist=$(primer_distribution)
             case "$lsb_dist" in
                 ubuntu|*bian)
-                    $PRIMER_SUDO ln -fs "/usr/share/zoneinfo/$LOCATION" /etc/localtime
+                    $PRIMER_SUDO ln -fs "/usr/share/zoneinfo/$TIMEZONE_LOCATION" /etc/localtime
                     primer_dependency "" "tzdata"
                     $PRIMER_SUDO dpkg-reconfigure --frontend noninteractive tzdata
                     ;;
