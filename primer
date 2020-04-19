@@ -20,6 +20,8 @@ PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 . "$PRIMER_YUSH_DIR/log.sh"
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/text.sh"
+# shellcheck disable=SC1090
+. "$PRIMER_YUSH_DIR/multi-arch.sh"
 
 
 # This is the colon separated path where to find priming steps
@@ -32,6 +34,13 @@ PRIMER_EXTS=${PRIMER_EXTS:-".sh"}
 # These are a list of space separated steps to perform, the first step found in
 # the PRIMER_PATH will be used.
 PRIMER_STEPS=${PRIMER_STEPS:-}
+
+# Configuration file to read, this will be a .env like file that can be used to
+# pass options to the various implementations steps.
+PRIMER_CONFIG=${PRIMER_CONFIG:-}
+
+# Should we allow substitution in configuration file.
+PRIMER_SUBST=1
 
 # Source in all relevant modules. This is where most of the "stuff" will occur.
 for module in utils os; do
@@ -46,6 +55,7 @@ for module in utils os; do
 done
 
 # Parse options
+PRIMER_MODULE_OPTIONS= ; # --*:* options and their values will be saved here.
 while [ $# -gt 0 ]; do
     case "$1" in
         -v | --verbose)
@@ -77,11 +87,8 @@ while [ $# -gt 0 ]; do
                 _opt=${1#*:};  # Option is everything after the :
                 _tmp=${1%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                # Reconstruct option and pass it to module
-                yush_info "Passing option --$_opt to $_step"
-                if primer_load "$_step"; then
-                    $_step option "--$_opt" "$2"
-                fi
+                PRIMER_MODULE_OPTIONS="$PRIMER_MODULE_OPTIONS
+$_step $_opt $2"
                 shift 2
             else
                 # This captures options that look like --module:option=value. We
@@ -90,14 +97,19 @@ while [ $# -gt 0 ]; do
                 _opt=${_key#*:};  # Option is everything after the :
                 _tmp=${_key%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                # Reconstruct option and pass it to module
-                yush_info "Passing option --$_opt to $_step"
-                if primer_load "$_step"; then
-                    $_step option "--$_opt" "$_val"
-                fi
+                PRIMER_MODULE_OPTIONS="$PRIMER_MODULE_OPTIONS
+$_step $_opt $_val"
                 shift 1
             fi
             ;;
+
+        -c | --config)
+            PRIMER_CONFIG=$2; shift 2;;
+        --config=*)
+            PRIMER_CONFIG="${1#*=}"; shift 1;;
+
+        --no-subst)
+            PRIMER_SUBST=0; shift 1;;
 
         -h | --help)
             usage 0;;
@@ -109,6 +121,37 @@ while [ $# -gt 0 ]; do
             break;;
     esac
 done
+
+# Read configuration from .env formatted file
+while IFS='=' read -r key val; do
+    # Skip over lines containing comments.
+    # (Lines starting with '#').
+    [ "${key##\#*}" ] || continue
+
+    if [ -n "$key" ]; then
+        yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
+
+        yush_debug "Setting $key=$val"
+        export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
+    fi
+done < "$PRIMER_CONFIG"
+
+# Pass command-line options that were saved in PRIMER_MODULE_OPTIONS to their
+# respective modules. This is because command-line options should have
+# precedence over environment variables (even if read from file).
+while IFS= read -r line; do
+    if [ -n "$line" ]; then
+        _step=$(printf %s\\n "$line" | awk '{print $1}')
+        _opt=$(printf %s\\n "$line" | awk '{print $2}')
+        _val=$(printf %s\\n "$line" | awk '{print $3}')
+        yush_info "Passing option --$_opt to $_step"
+        if primer_load "$_step"; then
+            $_step option "--$_opt" "$_val"
+        fi
+    fi
+done <<EOF
+$(printf %s\\n "$PRIMER_MODULE_OPTIONS")
+EOF
 
 primer_sudo
 
@@ -123,7 +166,6 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
         yush_notice "Installing $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
-            echo "$_step"
             if primer_load "$_step"; then
                 yush_info "Installing $_step"
                 $_step install
