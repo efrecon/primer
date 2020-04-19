@@ -37,7 +37,7 @@ primer_load() {
             # shellcheck disable=SC1090
             . "$_impl"
             _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-            eval "${_varname}=${_impl}"
+            export "${_varname}=${_impl}"
         fi
     fi
 }
