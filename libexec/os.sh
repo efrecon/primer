@@ -66,7 +66,6 @@ primer_dependency() {
 
         if [ $# = 0 ]; then
             primer_packages add "$cmd"
-            pkgs="$cmd"
         else
             primer_packages add "$@"
         fi
@@ -87,11 +86,11 @@ primer_packages() {
                     ;;
                 alpine*)
                     # shellcheck disable=SC2086
-                    $PRIMER_SUDO apk add $pkgs
+                    $PRIMER_SUDO apk add "$@"
                     ;;
                 clear*linux*)
                     # shellcheck source=yu.sh/log.sh disable=SC2086
-                    $PRIMER_SUDO swupd bundle-add $pkgs
+                    $PRIMER_SUDO swupd bundle-add "$@"
                     ;;
                 *)
                     yush_warn "Dependency resolution NYI for $lsb_dist";;
