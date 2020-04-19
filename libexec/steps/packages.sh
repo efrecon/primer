@@ -50,34 +50,15 @@ packages() {
                 esac
             fi
 
-            # shellcheck disable=SC2086
             if [ -n "$PACKAGES_PACKAGES" ]; then
-                yush_debug "Installing packages: $PACKAGES_PACKAGES"
-                primer_dependency "" $PACKAGES_PACKAGES
+                # shellcheck disable=SC2086
+                primer_packages add $PACKAGES_PACKAGES
             fi
             ;;
         "clean")
             if [ -n "$PACKAGES_PACKAGES" ]; then
-                yush_debug "Removing packages: $PACKAGES_PACKAGES"
-                lsb_dist=$(primer_distribution)
-                case "$lsb_dist" in
-                    ubuntu|*bian)
-                        # shellcheck disable=SC2086
-                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get remove -y -q $PACKAGES_PACKAGES
-                        yush_debug "Cleaning orphan packages"
-                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get autoremove -y -q
-                        ;;
-                    alpine*)
-                        # shellcheck disable=SC2086
-                        $PRIMER_SUDO apk del $PACKAGES_PACKAGES
-                        ;;
-                    clear*linux*)
-                        # shellcheck disable=SC2086
-                        $PRIMER_SUDO swupd bundle-remove $PACKAGES_PACKAGES
-                        ;;
-                    *)
-                        yush_warn "Package removal NYI for $lsb_dist";;
-                esac
+                # shellcheck disable=SC2086
+                primer_packages del $PACKAGES_PACKAGES
             fi
             ;;
     esac
