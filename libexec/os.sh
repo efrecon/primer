@@ -65,29 +65,82 @@ primer_dependency() {
         shift
 
         if [ $# = 0 ]; then
+            primer_packages add "$cmd"
             pkgs="$cmd"
         else
-            # shellcheck disable=SC2124
-            pkgs="$@"
+            primer_packages add "$@"
         fi
-        lsb_dist=$(primer_distribution)
-        yush_notice "Automatically installing $pkgs for $lsb_dist"
-        primer_update
-        case "$lsb_dist" in
-            ubuntu|*bian)
-                # shellcheck disable=SC2086
-                DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get install -y $pkgs
-                ;;
-            alpine*)
-                # shellcheck disable=SC2086
-                $PRIMER_SUDO apk add $pkgs
-                ;;
-            clear*linux*)
-                # shellcheck source=yu.sh/log.sh disable=SC2086
-                $PRIMER_SUDO swupd bundle-add $pkgs
-                ;;
-            *)
-                yush_warn "Dependency resolution NYI for $lsb_dist";;
-        esac
+    fi
+}
+
+primer_packages() {
+    lsb_dist=$(primer_distribution)
+    case "$1" in
+        add|install)
+            shift
+            yush_info "Installing packages: $*"
+            primer_update
+            case "$lsb_dist" in
+                ubuntu|*bian)
+                    # shellcheck disable=SC2086
+                    DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get install -y "$@"
+                    ;;
+                alpine*)
+                    # shellcheck disable=SC2086
+                    $PRIMER_SUDO apk add $pkgs
+                    ;;
+                clear*linux*)
+                    # shellcheck source=yu.sh/log.sh disable=SC2086
+                    $PRIMER_SUDO swupd bundle-add $pkgs
+                    ;;
+                *)
+                    yush_warn "Dependency resolution NYI for $lsb_dist";;
+            esac
+            ;;
+        del*|remove|uninstall)
+            shift
+            yush_info "Removing packages: $*"
+            case "$lsb_dist" in
+                ubuntu|*bian)
+                    # shellcheck disable=SC2086
+                    DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get remove -y -q "$@"
+                    yush_debug "Cleaning orphan packages"
+                    DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get autoremove -y -q
+                    ;;
+                alpine*)
+                    # shellcheck disable=SC2086
+                    $PRIMER_SUDO apk del "$@"
+                    ;;
+                clear*linux*)
+                    # shellcheck disable=SC2086
+                    $PRIMER_SUDO swupd bundle-remove "$@"
+                    ;;
+                *)
+                    yush_warn "Package removal NYI for $lsb_dist";;
+            esac
+            ;;
+    esac
+}
+
+primer_service() {
+    if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart)'; then
+        if [ -x "$(command -v service)" ]; then
+            $PRIMER_SUDO service "$1" "$2"
+        elif [ -x "$(command -v systemctl)" ]; then
+            $PRIMER_SUDO systemctl "$1" "$2"
+        elif [ -x "$(command -v rc-service)" ]; then
+            case "$1" in
+                start|stop|restart)
+                    $PRIMER_SUDO rc-service "$2" "$1";;
+                enable)
+                    $PRIMER_SUDO rc-update add "$2";;
+                disable)
+                    $PRIMER_SUDO rc-update del "$2";;
+            esac
+        else
+            yush_error "Only service, systemctl (systemd) or alpine are supported for daemons"
+        fi
+    else
+        yush_warn "$1 is not a known command"
     fi
 }

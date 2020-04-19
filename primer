@@ -45,27 +45,6 @@ for module in utils os; do
   fi
 done
 
-_primer_is_var() {
-    eval "[ ! -z \${$1:-} ]"
-    return $?  # Pedantic.
-}
-
-primer_load() {
-    _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-    if _primer_is_var $_varname; then
-        yush_debug "$1 already loaded from \$$_varname"
-    else
-        _impl=$(primer_locate "$1" || true)
-        if [ -n "$_impl" ]; then
-            yush_info "Loading $1 implementation from $_impl"
-            # shellcheck disable=SC1090
-            . "$_impl"
-            _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-            eval "${_varname}=${_impl}"
-        fi
-    fi
-}
-
 # Parse options
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -86,24 +65,35 @@ while [ $# -gt 0 ]; do
             PRIMER_PATH="${1#*=}"; shift 1;;
 
         --*:*)
-            _val=${1#*=}
-            _key=${1%=*}
+            # Capture and makes the difference between options that look like
+            # --module:option and --module:option=value.
+            _val=${1#*=};  # The value, when present is everything after the =
+            _key=${1%=*};  # This is everything before the =, when present
             if [ "$_key" = "$_val" ]; then
-                _opt=${1#*:}
-                _tmp=${1%:*}
+                # This captures options that look like --module:option, where
+                # the value is the coming argument. We extract the different
+                # components using shell expansions and pass further a
+                # (reconstructed) option to the module.
+                _opt=${1#*:};  # Option is everything after the :
+                _tmp=${1%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                yush_info "Passing option $_opt to $_step"
+                # Reconstruct option and pass it to module
+                yush_info "Passing option --$_opt to $_step"
                 if primer_load "$_step"; then
-                    $_step option "$_opt" "$2"
+                    $_step option "--$_opt" "$2"
                 fi
                 shift 2
             else
-                _opt=${_key#*:}
-                _tmp=${_key%:*}
+                # This captures options that look like --module:option=value. We
+                # extract the different components using shell expansions and
+                # pass further a (reconstructed) option to the module.
+                _opt=${_key#*:};  # Option is everything after the :
+                _tmp=${_key%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                yush_info "Passing option $_opt to $_step"
+                # Reconstruct option and pass it to module
+                yush_info "Passing option --$_opt to $_step"
                 if primer_load "$_step"; then
-                    $_step option "$_opt" "$_val"
+                    $_step option "--$_opt" "$_val"
                 fi
                 shift 1
             fi
