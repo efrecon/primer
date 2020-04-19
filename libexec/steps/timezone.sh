@@ -19,16 +19,18 @@ timezone() {
             done
             ;;
         "install")
-            lsb_dist=$(primer_distribution)
-            case "$lsb_dist" in
-                ubuntu|*bian)
-                    $PRIMER_SUDO ln -fs "/usr/share/zoneinfo/$TIMEZONE_LOCATION" /etc/localtime
-                    primer_dependency "" "tzdata"
-                    $PRIMER_SUDO dpkg-reconfigure --frontend noninteractive tzdata
-                    ;;
-                *)
-                    yush_warn "Timezone setting NYI for $lsb_dist";;
-            esac
+            if [ -n "$TIMEZONE_LOCATION" ]; then
+                lsb_dist=$(primer_distribution)
+                case "$lsb_dist" in
+                    ubuntu|*bian)
+                        $PRIMER_SUDO ln -fs "/usr/share/zoneinfo/$TIMEZONE_LOCATION" /etc/localtime
+                        primer_dependency "" "tzdata"
+                        $PRIMER_SUDO dpkg-reconfigure --frontend noninteractive tzdata
+                        ;;
+                    *)
+                        yush_warn "Timezone setting NYI for $lsb_dist";;
+                esac
+            fi
             ;;
         "clean")
             yush_warn "Timezone information cannot be removed"
