@@ -42,6 +42,10 @@ PRIMER_CONFIG=${PRIMER_CONFIG:-}
 # Should we allow substitution in configuration file.
 PRIMER_SUBST=1
 
+# Where to install binaries and libraries
+PRIMER_LOCAL=${PRIMER_LOCAL:-/usr/local}
+PRIMER_BINDIR=${PRIMER_BINDIR:-${PRIMER_LOCAL%%/}/bin}
+
 # Source in all relevant modules. This is where most of the "stuff" will occur.
 for module in utils os; do
   module_path="${PRIMER_LIB_DIR}/${module}.sh"
@@ -123,18 +127,19 @@ $_step $_opt $_val"
 done
 
 # Read configuration from .env formatted file
-while IFS='=' read -r key val; do
-    # Skip over lines containing comments.
-    # (Lines starting with '#').
-    [ "${key##\#*}" ] || continue
+if [ -n "$PRIMER_CONFIG" ]; then
+    while IFS='=' read -r key val; do
+        # Skip over lines containing comments.
+        # (Lines starting with '#').
+        [ "${key##\#*}" ] || continue
 
-    if [ -n "$key" ]; then
-        yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
-
-        yush_debug "Setting $key=$val"
-        export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
-    fi
-done < "$PRIMER_CONFIG"
+        if [ -n "$key" ]; then
+            yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
+            yush_debug "Setting $key=$val"
+            export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
+        fi
+    done < "$PRIMER_CONFIG"
+fi
 
 # Pass command-line options that were saved in PRIMER_MODULE_OPTIONS to their
 # respective modules. This is because command-line options should have
@@ -153,8 +158,10 @@ done <<EOF
 $(printf %s\\n "$PRIMER_MODULE_OPTIONS")
 EOF
 
+# Discover how and if to sudo
 primer_sudo
 
+# Default command is to install
 if [ "$#" -gt 0 ]; then
     cmd=$1
     shift
@@ -162,6 +169,7 @@ else
     cmd=install
 fi
 
+# Pass the command to all relevant steps, in order.
 case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
         yush_notice "Installing $PRIMER_STEPS"
