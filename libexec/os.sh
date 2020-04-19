@@ -40,6 +40,7 @@ primer_distribution() {
 PRIMER_PKGIDX_UPDATED=${PRIMER_PKGIDX_UPDATED:-"0"}
 primer_update() {
     if [ "$PRIMER_PKGIDX_UPDATED" = "0" ]; then
+        yush_info "Updating package indices"
         lsb_dist=$(primer_distribution)
         case "$lsb_dist" in
             ubuntu|*bian)
@@ -51,6 +52,8 @@ primer_update() {
             clear*linux*)
                 $PRIMER_SUDO swupd update
                 ;;
+            *)
+                yush_warn "System update NYI for $lsb_dist";;
         esac
         PRIMER_PKGIDX_UPDATED=1
     fi
@@ -83,6 +86,8 @@ primer_dependency() {
                 # shellcheck source=yu.sh/log.sh disable=SC2086
                 $PRIMER_SUDO swupd bundle-add $pkgs
                 ;;
+            *)
+                yush_warn "Dependency resolution NYI for $lsb_dist";;
         esac
     fi
 }

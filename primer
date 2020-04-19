@@ -131,18 +131,20 @@ fi
 
 case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
+        yush_notice "Installing $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
             echo "$_step"
             if primer_load "$_step"; then
-                yush_notice "Installing $_step"
+                yush_info "Installing $_step"
                 $_step install
             fi
         done
         ;;
     clean | remove | down)
+        yush_notice "Removing $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
             if primer_load "$_step"; then
-                yush_notice "Cleaning $_step"
+                yush_info "Cleaning $_step"
                 $_step clean
             fi
         done

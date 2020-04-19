@@ -31,11 +31,14 @@ packages() {
 
             # Freshen up system to latest
             if yush_is_true "$PACKAGES_FRESH"; then
+                yush_info "Upgrading and cleaning system"
                 lsb_dist=$(primer_distribution)
                 case "$lsb_dist" in
                     ubuntu|*bian)
+                        yush_debug "Upgrading system"
                         DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get upgrade -y -q
                         DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get dist-upgrade -y -q
+                        yush_debug "Cleaning orphan packages"
                         DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get autoremove -y -q
                         ;;
                     alpine*)
@@ -43,20 +46,26 @@ packages() {
                     clear*linux*)
                         $PRIMER_SUDO swupd update;;
                     *)
-                        yush_warn "System update NYI for $lsb_dist";;
+                        yush_warn "System upgrade NYI for $lsb_dist";;
                 esac
             fi
 
             # shellcheck disable=SC2086
-            [ -n "$PACKAGES_PACKAGES" ] && primer_dependency "" $PACKAGES_PACKAGES
+            if [ -n "$PACKAGES_PACKAGES" ]; then
+                yush_debug "Installing packages: $PACKAGES_PACKAGES"
+                primer_dependency "" $PACKAGES_PACKAGES
+            fi
             ;;
         "clean")
             if [ -n "$PACKAGES_PACKAGES" ]; then
+                yush_debug "Removing packages: $PACKAGES_PACKAGES"
                 lsb_dist=$(primer_distribution)
                 case "$lsb_dist" in
                     ubuntu|*bian)
                         # shellcheck disable=SC2086
                         DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get remove -y -q $PACKAGES_PACKAGES
+                        yush_debug "Cleaning orphan packages"
+                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get autoremove -y -q
                         ;;
                     alpine*)
                         # shellcheck disable=SC2086
