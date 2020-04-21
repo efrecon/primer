@@ -40,6 +40,8 @@ compose() {
                         COMPOSE_PYTHON_PREFER=$2; shift 2;;
                     --version)
                         COMPOSE_VERSION=$2; shift 2;;
+                    --sha256)
+                        COMPOSE_SHA256=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !";;
                     *)
@@ -48,9 +50,9 @@ compose() {
             done
             ;;
         "install")
+            primer_dependency curl
             if ! [ -x "$(command -v "docker-compose")" ]; then
                 if [ -z "$COMPOSE_VERSION" ]; then
-                    primer_dependency curl
                     # Following uses the github API
                     # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
                     # for getting the list of latest releases and focuses solely on
@@ -70,33 +72,38 @@ compose() {
                     # download the first byte to check all the redirects, and on
                     # success we will download everything and possibly check
                     # against the sha256 sum.
-                    ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
-                    if curl -fsSL  "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -r 0-0 >/dev/null 2>&1; then
-                        curl --progress-bar -fSL "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" |
-                            $PRIMER_SUDO tee "${PRIMER_BINDIR%%/}/docker-compose" > /dev/null
+                    tmpdir=$(mktemp -d)
+                    if curl --progress-bar -fSL "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-compose"; then
                         # Check against the sha256 sum if necessary.
                         if [ -n "$COMPOSE_SHA256" ]; then
                             yush_debug "Verifying sha256 sum"
-                            if ! printf "%s  %s\n" "${COMPOSE_SHA256}" "${PRIMER_BINDIR%%/}/docker-compose" | sha256sum -c -; then
+                            if ! printf "%s  %s\n" "${COMPOSE_SHA256}" "${tmpdir}/docker-compose" | sha256sum -c -; then
                                 yush_error "SHA256 sum mismatch, should have been $COMPOSE_SHA256"
-                                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-compose"
+                                rm -f "${tmpdir}/docker-compose"
                             fi
                         fi
-                        # Install glibc on Alpine to ensure that docker-compose
-                        # works.
-                        if yush_glob 'alpine*' "$lsb_dist"; then
-                            _compose_glibc_install
-                        fi
-                        # Verify the binary actually works properly.
-                        if [ -f "${PRIMER_BINDIR%%/}/docker-compose" ]; then
-                            yush_debug "Verifying binary at ${PRIMER_BINDIR%%/}/docker-compose"
-                            chmod a+x "${PRIMER_BINDIR%%/}/docker-compose"
-                            if ! "${PRIMER_BINDIR%%/}/docker-compose" --version >/dev/null 2>&1; then
-                                yush_info "Downloaded binary at ${PRIMER_BINDIR%%/}/docker-compose probaby invalid, removing"
-                                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-compose"
+                        if [ -f "${tmpdir}/docker-compose" ]; then
+                            # Install glibc on Alpine to ensure that docker-compose
+                            # works.
+                            if yush_glob 'alpine*' "$lsb_dist"; then
+                                _compose_glibc_install
+                            fi
+                            # Verify the binary actually works properly.
+                            yush_debug "Verifying binary at ${tmpdir}/docker-compose"
+                            chmod a+x "${tmpdir}/docker-compose"
+                            if ! "${tmpdir}/docker-compose" --version >/dev/null 2>&1; then
+                                yush_info "Downloaded binary at ${PRIMER_BINDIR%%/}/docker-compose probaby invalid, will not install"
+                                rm -f "${tmpdir}/docker-compose"
+                            else
+                                yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-compose"
+                                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
+                                $PRIMER_SUDO mv -f "${tmpdir}/docker-compose" "${PRIMER_BINDIR%%/}/docker-compose"
                             fi
                         fi
+                    else
+                        yush_warn "No binary at ${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"
                     fi
+                    rm -rf "$tmpdir"
                 fi
 
                 # It failed, install the hard way through pip3. This has
