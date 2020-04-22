@@ -24,7 +24,7 @@ _primer_exists() {
     return $?  # Pedantic.
 }
 
-_primer_value() { eval printf %s\\n "\$$1"; }
+_primer_value() { eval printf %s "\$$1"; }
 
 primer_load() {
     _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
