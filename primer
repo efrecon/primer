@@ -147,9 +147,10 @@ fi
 # precedence over environment variables (even if read from file).
 while IFS= read -r line; do
     if [ -n "$line" ]; then
-        _step=$(printf %s\\n "$line" | awk '{print $1}')
-        _opt=$(printf %s\\n "$line" | awk '{print $2}')
-        _val=$(printf %s\\n "$line" | awk '{print $3}')
+        _step=$(printf %s\\n "$line" | cut -d " " -f 1)
+        _opt=$(printf %s\\n "$line" | cut -d " " -f 2)
+        # Take everything for the value in case it contains spaces.
+        _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
         yush_info "Passing option --$_opt to $_step"
         if primer_load "$_step"; then
             $_step option "--$_opt" "$_val"
