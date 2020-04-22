@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-# Version of Docker compose to download when not found. Can be set from the
+# Version of Docker compose to download. Can be set from the
 # outside, defaults to empty, meaning the latest as per the variable below.
 COMPOSE_VERSION=${COMPOSE_VERSION:-}
 
@@ -14,9 +14,9 @@ COMPOSE_RELEASES=https://api.github.com/repos/docker/compose/releases
 # Root URL to download location
 COMPOSE_DOWNLOAD=https://github.com/docker/compose/releases/download
 
-# Prefer the pure-python pip3-based installation in all cases. Otherwise, this
-# will be what we do when downloading the binary fails.
-COMPOSE_PYTHON_PREFER=${COMPOSE_PYTHON_PREFER:-0}
+# When should we install compose through pip: can be one of never, prefer or
+# failure (the default).
+COMPOSE_PYTHON=${COMPOSE_PYTHON:-failure}
 
 # glibc for Alpine package version to use. Can be set from the outside, defaults
 # to empty, meaning the latest as per the variable below.
@@ -37,7 +37,7 @@ compose() {
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --python)
-                        COMPOSE_PYTHON_PREFER=$2; shift 2;;
+                        COMPOSE_PYTHON=$2; shift 2;;
                     --version)
                         COMPOSE_VERSION=$2; shift 2;;
                     --sha256)
@@ -65,61 +65,22 @@ compose() {
                                         head -1)
                 fi
                 yush_info "Installing Docker compose $COMPOSE_VERSION and bash completion"
-                lsb_dist=$(primer_distribution)
-                if ! yush_is_true "$COMPOSE_PYTHON_PREFER"; then
-                    # Try downloadling from github first, making sure we can
-                    # actually execute the binary that we downloaded. We
-                    # download the first byte to check all the redirects, and on
-                    # success we will download everything and possibly check
-                    # against the sha256 sum.
-                    tmpdir=$(mktemp -d)
-                    if curl --progress-bar -fSL "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-compose"; then
-                        # Check against the sha256 sum if necessary.
-                        if [ -n "$COMPOSE_SHA256" ]; then
-                            yush_debug "Verifying sha256 sum"
-                            if ! printf "%s  %s\n" "${COMPOSE_SHA256}" "${tmpdir}/docker-compose" | sha256sum -c -; then
-                                yush_error "SHA256 sum mismatch, should have been $COMPOSE_SHA256"
-                                rm -f "${tmpdir}/docker-compose"
-                            fi
-                        fi
-                        if [ -f "${tmpdir}/docker-compose" ]; then
-                            # Install glibc on Alpine to ensure that docker-compose
-                            # works.
-                            if yush_glob 'alpine*' "$lsb_dist"; then
-                                _compose_glibc_install
-                            fi
-                            # Verify the binary actually works properly.
-                            yush_debug "Verifying binary at ${tmpdir}/docker-compose"
-                            chmod a+x "${tmpdir}/docker-compose"
-                            if ! "${tmpdir}/docker-compose" --version >/dev/null 2>&1; then
-                                yush_info "Downloaded binary at ${PRIMER_BINDIR%%/}/docker-compose probaby invalid, will not install"
-                                rm -f "${tmpdir}/docker-compose"
-                            else
-                                yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-compose"
-                                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
-                                $PRIMER_SUDO mv -f "${tmpdir}/docker-compose" "${PRIMER_BINDIR%%/}/docker-compose"
-                            fi
-                        fi
-                    else
-                        yush_warn "No binary at ${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"
-                    fi
-                    rm -rf "$tmpdir"
-                fi
+                case "$COMPOSE_PYTHON" in
+                    prefer)
+                        _compose_install_python
+                        ;;
 
-                # It failed, install the hard way through pip3. This has
-                # dependencies, so we need to be distro specific.
-                if ! [ -x "${PRIMER_BINDIR%%/}/docker-compose" ]; then
-                    yush_info "Direct installation from $COMPOSE_DOWNLOAD failed, installing through pip3"
-                    case "$lsb_dist" in
-                        ubuntu|*bian)
-                            primer_packages add python3 python3-pip libffi-dev libssl-dev build-essential
-                            ;;
-                        *)
-                            ;;
-                    esac
-                    $PRIMER_SUDO pip3 install docker-compose=="$COMPOSE_VERSION"
-                fi
+                    never)
+                        _compose_install_download
+                        ;;
 
+                    failure)
+                        _compose_install_download
+                        if ! [ -x "$(command -v "docker-compose")" ]; then
+                            _compose_install_python
+                        fi
+                        ;;
+                esac
                 # Check version
                 yush_debug "Verifying installed version against $COMPOSE_VERSION"
                 if ! docker-compose --version | grep -q "$COMPOSE_VERSION"; then
@@ -128,12 +89,12 @@ compose() {
             fi
 
             yush_debug "Installing bash completions"
-            _completion_dir=$(_compose_completion_dir)
+            _completion_dir=$(primer_bash_completion_dir)
             ! [ -d "$_completion_dir" ] && \
                     $PRIMER_SUDO mkdir -p "$_completion_dir"
             ! [ -f "${_completion_dir}/docker-compose" ] && \
                     curl -sSL https://raw.githubusercontent.com/docker/compose/v"$COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
-                        $PRIMER_SUDO tee ${_completion_dir}/docker-compose > /dev/null
+                        $PRIMER_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
             ;;
         "clean")
             yush_info "Removing Docker Compose and bash completion"
@@ -143,7 +104,7 @@ compose() {
                 $PRIMER_SUDO pip3 uninstall docker-compose
             fi
 
-            _completion_dir=$(_compose_completion_dir)
+            _completion_dir=$(primer_bash_completion_dir)
             if [ -f "${_completion_dir}/docker-compose" ]; then
                 yush_debug "Removing compose command completion"
                 $PRIMER_SUDO rm -f "${_completion_dir}/docker-compose"
@@ -152,10 +113,64 @@ compose() {
     esac
 }
 
+# Install using pip3. This will only work on debian-derivatives as we need to
+# figure out the list of dependent packages on the other distros.
+_compose_install_python() {
+    yush_info "Installing through pip3"
+    lsb_dist=$(primer_distribution)
+    case "$lsb_dist" in
+        ubuntu|*bian)
+            primer_packages add python3 python3-pip libffi-dev libssl-dev build-essential
+            ;;
+        *)
+            ;;
+    esac
+    $PRIMER_SUDO pip3 install docker-compose=="$COMPOSE_VERSION"
+}
+
+# Download from github, making sure we can actually execute the binary that we
+# downloaded. We download the first byte to check all the redirects, and on
+# success we will download everything and possibly check against the sha256 sum.
+_compose_install_download() {
+    lsb_dist=$(primer_distribution)
+    tmpdir=$(mktemp -d)
+    if curl --progress-bar -fSL "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-compose"; then
+        # Check against the sha256 sum if necessary.
+        if [ -n "$COMPOSE_SHA256" ]; then
+            yush_debug "Verifying sha256 sum"
+            if ! printf "%s  %s\n" "${COMPOSE_SHA256}" "${tmpdir}/docker-compose" | sha256sum -c -; then
+                yush_error "SHA256 sum mismatch, should have been $COMPOSE_SHA256"
+                rm -f "${tmpdir}/docker-compose"
+            fi
+        fi
+        if [ -f "${tmpdir}/docker-compose" ]; then
+            # Install glibc on Alpine to ensure that docker-compose
+            # works.
+            if yush_glob 'alpine*' "$lsb_dist"; then
+                _compose_install_glibc
+            fi
+            # Verify the binary actually works properly.
+            yush_debug "Verifying binary at ${tmpdir}/docker-compose"
+            chmod a+x "${tmpdir}/docker-compose"
+            if ! "${tmpdir}/docker-compose" --version >/dev/null 2>&1; then
+                yush_info "Downloaded binary at ${PRIMER_BINDIR%%/}/docker-compose probaby invalid, will not install"
+                rm -f "${tmpdir}/docker-compose"
+            else
+                yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-compose"
+                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
+                $PRIMER_SUDO mv -f "${tmpdir}/docker-compose" "${PRIMER_BINDIR%%/}/docker-compose"
+            fi
+        fi
+    else
+        yush_warn "No binary at ${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"
+    fi
+    rm -rf "$tmpdir"
+}
+
 # Automatically install glibc dependencies in order for docker compose to work
 # on Alpine. This looks up the latest version if none was specified at the
 # command line.
-_compose_glibc_install() {
+_compose_install_glibc() {
     # Detect latest version
     if [ -z "$GLIBC_VERSION" ]; then
         yush_info "Discovering latest glibc support release version"
@@ -173,15 +188,4 @@ _compose_glibc_install() {
     curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-bin-${GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
     $PRIMER_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
     rm -rf "$GLIBC_TMPDIR"
-}
-
-_compose_completion_dir() {
-    lsb_dist=$(primer_distribution)
-        case "$lsb_dist" in
-        clear*linux*)
-            _completion_dir=/usr/share/bash-completion/completions;;
-        *)
-            _completion_dir=/etc/bash_completion.d;;
-    esac
-    printf %s\\n "$_completion_dir"
 }

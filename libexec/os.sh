@@ -143,3 +143,14 @@ primer_service() {
         yush_warn "$1 is not a known command"
     fi
 }
+
+primer_bash_completion_dir() {
+    lsb_dist=$(primer_distribution)
+        case "$lsb_dist" in
+        clear*linux*)
+            _completion_dir=/usr/share/bash-completion/completions;;
+        *)
+            _completion_dir=/etc/bash_completion.d;;
+    esac
+    printf %s\\n "$_completion_dir"
+}
