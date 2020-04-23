@@ -45,6 +45,8 @@ PRIMER_SUBST=1
 # Where to install binaries and libraries
 PRIMER_LOCAL=${PRIMER_LOCAL:-/usr/local}
 PRIMER_BINDIR=${PRIMER_BINDIR:-${PRIMER_LOCAL%%/}/bin}
+PRIMER_OPTDIR=${PRIMER_OPTDIR:-${PRIMER_LOCAL%%/}/opt}
+PRIMER_LIBDIR=${PRIMER_LIBDIR:-${PRIMER_LOCAL%%/}/lib}
 
 # Source in all relevant modules. This is where most of the "stuff" will occur.
 for module in utils os; do
