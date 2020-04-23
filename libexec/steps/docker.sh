@@ -3,6 +3,9 @@
 # Short GPG signature for Docker Repo on debian derivatives
 DOCKER_APT_GPG=${DOCKER_APT_GPG:-0EBFCD88}
 
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-}
+
+# Where to get the docker installation script from
 DOCKER_GET_URL=https://get.docker.com/
 
 docker() {
@@ -11,6 +14,8 @@ docker() {
             shift;
             while [ $# -gt 0 ]; do
                 case "$1" in
+                    --registry)
+                        DOCKER_REGISTRY="$DOCKER_REGISTRY $2";;
                     -*)
                         yush_warn "Unknown option: $1 !";;
                     *)
@@ -67,6 +72,25 @@ docker() {
                 yush_info "Enabling docker daemon at start"
                 primer_service enable docker
             fi
+
+            # Create group and make sure user is part of the group
+            yush_info "Adding $(id -un) to group docker"
+            _docker_group_create docker
+            _docker_group_membership "$(id -un)" docker
+
+            # Arrange for access to docker registries
+            for _registry in $DOCKER_REGISTRY; do
+                _user=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\1/')
+                _pass=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\3/')
+                _host=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\4/')
+                if docker info 1>/dev/null; then
+                    yush_info "Logging in at $_host as $_user"
+                    printf %s\\n "$_pass" | docker login --password-stdin -u "$_user" "$_host"
+                else
+                    yush_warn "Cannot login at remote registry $_registry, you might have to logout and login before running again"
+                fi
+            done
+
             ;;
         "clean")
             # Stop docker and remove from autostart.
@@ -115,4 +139,30 @@ docker() {
             fi
             ;;
     esac
+}
+
+_docker_group_create() {
+    if ! getent group | grep -q "^$1:"; then
+        yush_info "Creating group: $1"
+        if [ -x "$(command -v "addgroup")" ]; then
+            $PRIMER_SUDO addgroup "$1"
+        elif [ -x "$(command -v "groupadd")" ]; then
+            $PRIMER_SUDO groupadd "$1"
+        fi
+    else
+        yush_debug "Group $1 already exists"
+    fi
+}
+
+_docker_group_membership() {
+    if id -Gn "$1" | grep -q "$2"; then
+        yush_debug "$1 already in group $2"
+    else
+        yush_info "Adding $1 to group $2"
+        if [ -x "$(command -v "adduser")" ]; then
+            $PRIMER_SUDO addgroup "$1" "$2"
+        elif [ -x "$(command -v "usermod")" ]; then
+            $PRIMER_SUDO usermod -a -G "$2" "$1"
+        fi
+    fi
 }
