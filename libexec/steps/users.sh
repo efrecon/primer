@@ -7,11 +7,12 @@
 # format.
 USERS_DB=${USERS_DB:-}
 
-# Additional groups the users should be part of.
+# Additional groups the users should be part of, including the user calling this
+# script!
 USERS_GROUPS=${USERS_GROUPS:-docker,sudo}
 
 # Save the generated passwords in file along side the main DB file, with the
-# extension below instead.
+# extension below instead?
 USERS_PWSAVE=${USERS_PWSAVE:-0}
 
 # Extension of the file containing (generated) cleartext passwords
@@ -77,20 +78,11 @@ users() {
                         else
                             yush_notice "Creating user $username with password from $USERS, this is insecure!"
                         fi
-                        printf %s\\n%s\\n "$password" "$password" |
-                            $PRIMER_SUDO adduser \
-                                                -G "$group" \
-                                                -g "$details" \
-                                                -s "$shell" \
-                                            "$username"
+                        _users_useradd "$username" "$group" "$details" "$shell" "$password"
                         _users_groups_membership "$username"
                     else
                         yush_debug "User $username already exists, modifying except password"
-                        $PRIMER_SUDO adduser \
-                                            -G "$group" \
-                                            -g "$details" \
-                                            -s "$shell" \
-                                        "$username"
+                        _users_usermod "$username" "$group" "$details" "$shell"
                     fi
                 fi
             done < "${USERS_DB}"
@@ -117,7 +109,7 @@ users() {
                     username=$(printf %s\\n "$line" | cut -d ":" -f "1")
                     if [ -n "$(getent passwd "$username")" ] && [ "$username" != "$REALUSER" ]; then
                         yush_debug "Removing user $username"
-                        $PRIMER_SUDO userdel "$username"
+                        $PRIMER_SUDO deluser "$username"
                     fi
                 fi
             done < "${USERS_DB}"
@@ -140,7 +132,11 @@ _users_groups_create() {
     while IFS= read -r grp; do
         if ! getent group | grep -q "^${grp}:"; then
             yush_info "Creating group: $grp"
-            $PRIMER_SUDO addgroup "$grp"
+            if [ -x "$(command -v "addgroup")" ]; then
+                $PRIMER_SUDO addgroup "$grp"
+            elif [ -x "$(command -v "groupadd")" ]; then
+                $PRIMER_SUDO groupadd "$grp"
+            fi
         else
             yush_debug "Group $grp already exists"
         fi
@@ -149,7 +145,85 @@ _users_groups_create() {
 
 _users_groups_membership() {
     for g in $(yush_split "$USERS_GROUPS" ","); do
-        yush_debug "Adding $1 to group $g"
-        $PRIMER_SUDO addgroup "$1" "$g"
+        if id -Gn "$1" | grep -q "$g"; then
+            yush_debug "$1 already in group $g"
+        else
+            yush_info "Adding $1 to group $g"
+            if [ -x "$(command -v "adduser")" ]; then
+                $PRIMER_SUDO addgroup "$1" "$g"
+            elif [ -x "$(command -v "usermod")" ]; then
+                $PRIMER_SUDO usermod -a -G "$g" "$1"
+            fi
+        fi
     done
+}
+
+_users_useradd() {
+    _username=$1
+    _group=$2
+    _details=$3
+    _shell=$4
+    _password=$5
+
+    if [ -x "$(command -v "adduser")" ]; then
+        if adduser -h 2>&1 | grep -iq busybox; then
+            if [ -z "$_password" ]; then
+                $PRIMER_SUDO adduser \
+                                -G "$_group" \
+                                -g "$_details" \
+                                -s "$_shell" \
+                                -D \
+                            "$_username"
+            else
+                printf %s\\n%s\\n "$_password" "$_password" |
+                    $PRIMER_SUDO adduser \
+                                -G "$_group" \
+                                -g "$_details" \
+                                -s "$_shell" \
+                            "$_username"
+            fi
+        else
+            if [ -z "$_password" ]; then
+                $PRIMER_SUDO adduser \
+                                --ingroup "$_group" \
+                                --gecos "$_details" \
+                                --shell "$_shell" \
+                                --disabled-password \
+                            "$_username"
+            else
+                printf %s\\n%s\\n "$_password" "$_password" |
+                    $PRIMER_SUDO adduser \
+                                --ingroup "$_group" \
+                                --gecos "$_details" \
+                                --shell "$_shell" \
+                            "$_username"
+            fi
+        fi
+    elif [ -x "$(command -v "useradd")" ]; then
+        $PRIMER_SUDO useradd \
+                        --gid "$_group" \
+                        --comment "$_details" \
+                        --shell "$_shell" \
+                    "$_username"
+        if [ -n "$_password" ]; then
+            printf %s\\n%s\\n "$_password" "$_password" | $PRIMER_SUDO passwd "$_username"
+        fi
+    fi
+}
+
+_users_usermod() {
+    _username=$1
+    _group=$2
+    _details=$3
+    _shell=$4
+
+    if [ -x "$(command -v "usermod")" ]; then
+        $PRIMER_SUDO usermod \
+                        --gid "$_group" \
+                        --comment "$_details" \
+                        --shell "$_shell" \
+                    "$_username"
+    else
+        yush_warn "Cannot modify user $_username on this system"
+    fi
 }

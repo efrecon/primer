@@ -12,7 +12,7 @@
 # - GECOS fields for user
 # - Login shell, ensure that the shell exists on the machine.
 
-emmanuel:x:primer:Emmanuel Frécon,Super Hero,+461456,:/bin/bash
+emmanuel:x:primer:Emmanuel Frecon,Super Hero,+461456,:/bin/bash
 manu:x:primer:Leunamme Nocerf,Super Vilain,+46457678,:/bin/sh
 
 # This file must end with an empty line or a comment.
