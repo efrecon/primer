@@ -4,8 +4,8 @@
 # empty, meaning the latest as per the variable below.
 LAZYDOCKER_VERSION=${LAZYDOCKER_VERSION:-}
 
-# URL to JSON file where to find the list of releases of Docker compose. The
-# code only supports github API.
+# URL to JSON file where to find the list of releases of lazydocker. The code
+# only supports github API.
 LAZYDOCKER_RELEASES=https://api.github.com/repos/jesseduffield/lazydocker/releases
 
 # Root URL to download location
