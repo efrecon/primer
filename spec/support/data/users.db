@@ -1,0 +1,18 @@
+# This file contains a "database" of the various users to be created on the #
+# system. It is loosely formatted similarily to /etc/passwd. It contains a series
+# of : delimited fields in the following order. Lines beginning with a # sign or
+# empty lines will be ignored.
+#
+# - Name of the user to create
+# - Password to use. When the letter x a password will be generated at user
+#   creation and printed in the log. There is no other way to get hold of the
+#   password.
+# - Main group for user. It is preferred to let all users to belong to the same
+#   group
+# - GECOS fields for user
+# - Login shell, ensure that the shell exists on the machine.
+
+emmanuel:x:primer:Emmanuel Frécon,Super Hero,+461456,:/bin/bash
+manu:x:primer:Leunamme Nocerf,Super Vilain,+46457678,:/bin/sh
+
+# This file must end with an empty line or a comment.
