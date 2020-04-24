@@ -17,7 +17,7 @@ main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
 
 Primer will prep your system automatically with configurations that can be put
 under revision control. But primer has no support for dependencies between the
-various steps, nor a DSL. It tries to fit the gap between home-made
+various steps, nor a DSL. It tries to fill the gap between home-made
 initialisation scripts and larger solutions such as [Ansible] or [puppet]
 
   [Ansible]: https://github.com/ansible/ansible
