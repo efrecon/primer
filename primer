@@ -14,7 +14,7 @@ done
 [ -z "$PRIMER_LIB_DIR" ] && echo "Cannot find library directory!" >&2 && exit 1
 # Top directory for yu.sh
 PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
-! [ -d "$PRIMER_LIB_DIR" ] && echo "Cannot find yu.sh directory!" >&2 && exit 1
+! [ -d "$PRIMER_YUSH_DIR" ] && echo "Cannot find yu.sh directory!" >&2 && exit 1
 
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/log.sh"
