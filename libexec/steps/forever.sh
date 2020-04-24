@@ -10,9 +10,9 @@ forever() {
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --sleep)
-                        FOREVER_SLEEP=$2;;
+                        FOREVER_SLEEP=$2; shift 2;;
                     -*)
-                        yush_warn "Unknown option: $1 !";;
+                        yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
                         break;;
                 esac
