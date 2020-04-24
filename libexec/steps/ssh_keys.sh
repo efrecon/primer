@@ -15,7 +15,7 @@ ssh_keys() {
                     --type)
                         SSH_KEYS_TYPE=$2; shift 2;;
                     -*)
-                        yush_warn "Unknown option: $1 !";;
+                        yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
                         break;;
                 esac
