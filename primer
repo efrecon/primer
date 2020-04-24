@@ -49,7 +49,7 @@ PRIMER_OPTDIR=${PRIMER_OPTDIR:-${PRIMER_LOCAL%%/}/opt}
 PRIMER_LIBDIR=${PRIMER_LIBDIR:-${PRIMER_LOCAL%%/}/lib}
 
 # Source in all relevant modules. This is where most of the "stuff" will occur.
-for module in utils os; do
+for module in utils os users; do
   module_path="${PRIMER_LIB_DIR}/${module}.sh"
   if [ -f "$module_path" ]; then
     # shellcheck disable=SC1090
@@ -64,12 +64,6 @@ done
 PRIMER_MODULE_OPTIONS= ; # --*:* options and their values will be saved here.
 while [ $# -gt 0 ]; do
     case "$1" in
-        -v | --verbose)
-            YUSH_LOG_LEVEL=$2; shift 2;;
-        --verbose=*)
-            # shellcheck disable=SC2034
-            YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
-
         -s | --steps)
             PRIMER_STEPS=$2; shift 2;;
         --steps=*)
@@ -116,6 +110,16 @@ $_step $_opt $_val"
 
         --no-subst)
             PRIMER_SUBST=0; shift 1;;
+
+        -v | --verbose)
+            YUSH_LOG_LEVEL=$2; shift 2;;
+        --verbose=*)
+            # shellcheck disable=SC2034
+            YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
+
+        --non-interactive | --no-colour | --no-color)
+            # shellcheck disable=SC2034
+            YUSH_LOG_COLOUR=0; shift 1;;
 
         -h | --help)
             usage 0;;
