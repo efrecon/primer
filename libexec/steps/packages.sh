@@ -19,7 +19,7 @@ packages() {
                     --fresh)
                         PACKAGES_FRESH=$2; shift 2;;
                     -*)
-                        yush_warn "Unknown option: $1 !";;
+                        yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
                         break;;
                 esac
@@ -32,22 +32,7 @@ packages() {
             # Freshen up system to latest
             if yush_is_true "$PACKAGES_FRESH"; then
                 yush_info "Upgrading and cleaning system"
-                lsb_dist=$(primer_distribution)
-                case "$lsb_dist" in
-                    ubuntu|*bian)
-                        yush_debug "Upgrading system"
-                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get upgrade -y -q
-                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get dist-upgrade -y -q
-                        yush_debug "Cleaning orphan packages"
-                        DEBIAN_FRONTEND=noninteractive $PRIMER_SUDO apt-get autoremove -y -q
-                        ;;
-                    alpine*)
-                        $PRIMER_SUDO apk upgrade;;
-                    clear*linux*)
-                        $PRIMER_SUDO swupd update;;
-                    *)
-                        yush_warn "System upgrade NYI for $lsb_dist";;
-                esac
+                primer_upgrade
             fi
 
             if [ -n "$PACKAGES_PACKAGES" ]; then

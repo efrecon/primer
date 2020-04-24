@@ -42,23 +42,41 @@ primer_load() {
     fi
 }
 
-# If two files are passed arrange for the rights on the first to be applied to
-# the first file. Otherwise fix ownership of file passed as argument so that:
-# - It is owned by root
-# - It is readable and writable by root
-# - It is readable (only) by all others
-primer_root_ownership() {
-    if [ "$#" -gt "1" ]; then
-        _ownership=$(stat -c "%U" "$2"):$(stat -c "%G" "$2")
-    else
-        _ownership="root:root"
-    fi
-    $PRIMER_SUDO chown $_ownership "$1"
 
-    if [ "$#" -gt "1" ]; then
-        _access=$(stat -c "%A" "$2")
-    else
-        _access="u+rw,go+r,go-w"
-    fi
-    $PRIMER_SUDO chmod "$_access" "$1"
+# Somewhat restrictive recursive file ownership changes. The default is to
+# arrange for the tree passed as first argument to be owned by the caller and
+# only readable and writable by that user. Options are as follows:
+# --user   Transfer ownership to that user (and his/her group)
+# --group  Specific group for ownership
+# --perm   chmod compatible access rights
+# --as     Take ownership and access rights from this file/dir instead
+primer_ownership() {
+    _path="$1"
+    shift
+    _username=$(id -un)
+    _group=$(id -gn)
+    _perms="u+rw,go-rw"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --user*)
+                _username=$2; _group=$(id -gn "$2");  shift 2;;
+            --group*)
+                _group=$2;  shift 2;;
+            --perm*)
+                _perms=$2; shift 2;;
+            --as*)
+                _username=$(stat -c "%U" "$2")
+                _group=$(stat -c "%G" "$2")
+                _perms=$(stat -c "%A" "$2")
+                shift 2
+                ;;
+            -*)
+                yush_warn "Unknown option: $1 !"; shift 2;;
+            *)
+                break;;
+        esac
+    done
+
+    $PRIMER_SUDO chown -R "${_username}:${_group}" "$_path"
+    $PRIMER_SUDO chmod -R "$_perms" "$_path"
 }
