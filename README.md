@@ -170,8 +170,8 @@ installations in a reproducible way.
 ## Steps
 
 At the time of writing, primer already have the following steps implemented.
-This list will grow with personal needs, or with the help of the community. PRs
-are welcome!
+This list will grow with personal needs, or with the help of the community.
+[PR]s are welcome!
 
 * `packages` upgrades the system to the latest and installs additional packages.
 * `users` takes a `/etc/passwd` inspired colon separated file to create a number
@@ -212,3 +212,9 @@ shellspec
 
   [shellspec]: https://shellspec.info/
   [docker]: https://docker.com/
+
+## Contributing
+
+You are more than welcome to contribute through [PR]s. New steps will not be
+accepted without minimal test rules or documentation. There are a few coding
+[conventions][./docs/CONVENTIONS.md] to follow for all contributors.
