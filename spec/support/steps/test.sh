@@ -30,7 +30,7 @@ test() {
                 sudo)
                     echo "$PRIMER_OS_SUDO";;
                 platform | distribution)
-                    "primer_$TEST_TEST";;
+                    "primer_os_$TEST_TEST";;
                 locate)
                     primer_utils_locate "test";;
                 *)
