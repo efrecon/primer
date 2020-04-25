@@ -21,11 +21,12 @@ or new installation steps:
 
 ## Core Development
 
-+ All exported functions should start with `primer_`
++ All exported functions should start with `primer_`, contain only lowercase and
+  underscores.
 + All internal functions should start with `_primer` (note the leading
-  underscore).
+  underscore), contain only lowercase and underscores.
 + Global variables that can be accessed from steps or internally in modules
-  shoud start with `PRIMER_`.
+  shoud start with `PRIMER_`, contain uppercase or underscores.
 + Internal modules should only container lowercase letters or underscores, no
   leading underscore.
 + Given a module named xxx
