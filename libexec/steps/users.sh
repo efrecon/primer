@@ -96,6 +96,8 @@ users() {
                 REALUSER=$(id -un)
                 yush_info "Give $(yush_green "$REALUSER") access to groups $USERS_GROUPS"
                 _users_groups_membership "$REALUSER"
+            else
+                yush_warn "No user database provided, or cannot access."
             fi
             ;;
         "clean")
@@ -112,10 +114,12 @@ users() {
                         username=$(printf %s\\n "$line" | cut -d ":" -f "1")
                         if [ -n "$(getent passwd "$username")" ] && [ "$username" != "$REALUSER" ]; then
                             yush_debug "Removing user $username"
-                            $PRIMER_SUDO deluser "$username"
+                            $PRIMER_OS_SUDO deluser "$username"
                         fi
                     fi
                 done < "${USERS_DB}"
+            else
+                yush_warn "No user database provided, or cannot access."
             fi
             ;;
     esac
@@ -134,13 +138,13 @@ _users_groups() {
 
 _users_groups_create() {
     while IFS= read -r grp; do
-        primer_group_create "$grp"
+        primer_auth_group_add "$grp"
     done
 }
 
 _users_groups_membership() {
     for g in $(yush_split "$USERS_GROUPS" ","); do
-        primer_group_membership "$1" "$g"
+        primer_auth_group_membership "$1" "$g"
     done
 }
 
@@ -154,7 +158,7 @@ _users_useradd() {
     if [ -x "$(command -v "adduser")" ]; then
         if adduser -h 2>&1 | grep -iq busybox; then
             if [ -z "$_password" ]; then
-                $PRIMER_SUDO adduser \
+                $PRIMER_OS_SUDO adduser \
                                 -G "$_group" \
                                 -g "$_details" \
                                 -s "$_shell" \
@@ -162,7 +166,7 @@ _users_useradd() {
                             "$_username"
             else
                 printf %s\\n%s\\n "$_password" "$_password" |
-                    $PRIMER_SUDO adduser \
+                    $PRIMER_OS_SUDO adduser \
                                 -G "$_group" \
                                 -g "$_details" \
                                 -s "$_shell" \
@@ -170,7 +174,7 @@ _users_useradd() {
             fi
         else
             if [ -z "$_password" ]; then
-                $PRIMER_SUDO adduser \
+                $PRIMER_OS_SUDO adduser \
                                 --ingroup "$_group" \
                                 --gecos "$_details" \
                                 --shell "$_shell" \
@@ -178,7 +182,7 @@ _users_useradd() {
                             "$_username"
             else
                 printf %s\\n%s\\n "$_password" "$_password" |
-                    $PRIMER_SUDO adduser \
+                    $PRIMER_OS_SUDO adduser \
                                 --ingroup "$_group" \
                                 --gecos "$_details" \
                                 --shell "$_shell" \
@@ -186,13 +190,13 @@ _users_useradd() {
             fi
         fi
     elif [ -x "$(command -v "useradd")" ]; then
-        $PRIMER_SUDO useradd \
+        $PRIMER_OS_SUDO useradd \
                         --gid "$_group" \
                         --comment "$_details" \
                         --shell "$_shell" \
                     "$_username"
         if [ -n "$_password" ]; then
-            printf %s\\n%s\\n "$_password" "$_password" | $PRIMER_SUDO passwd "$_username"
+            printf %s\\n%s\\n "$_password" "$_password" | $PRIMER_OS_SUDO passwd "$_username"
         fi
     fi
 }
@@ -204,7 +208,7 @@ _users_usermod() {
     _shell=$4
 
     if [ -x "$(command -v "usermod")" ]; then
-        $PRIMER_SUDO usermod \
+        $PRIMER_OS_SUDO usermod \
                         --gid "$_group" \
                         --comment "$_details" \
                         --shell "$_shell" \

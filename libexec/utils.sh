@@ -1,11 +1,6 @@
 #!/usr/bin/env sh
 
-primer_abort() {
-    yush_error "$1"
-    exit 1
-}
-
-primer_locate() {
+primer_utils_locate() {
     yush_debug "Locating $1 in $PRIMER_PATH"
     for _dir in $(yush_split "$PRIMER_PATH" ":"); do
         for _ext in $PRIMER_EXTS; do
@@ -19,19 +14,19 @@ primer_locate() {
     return 1;
 }
 
-_primer_exists() {
+_primer_utils_var_exists() {
     eval "[ ! -z \${$1:-} ]"
     return $?  # Pedantic.
 }
 
-_primer_value() { eval printf %s "\$$1"; }
+_primer_utils_var_value() { eval printf %s "\$$1"; }
 
-primer_load() {
+primer_utils_load() {
     _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-    if _primer_exists "$_varname"; then
-        yush_debug "$1 already loaded from $(_primer_value "$_varname")"
+    if _primer_utils_var_exists "$_varname"; then
+        yush_debug "$1 already loaded from $(_primer_utils_var_value "$_varname")"
     else
-        _impl=$(primer_locate "$1" || true)
+        _impl=$(primer_utils_locate "$1" || true)
         if [ -n "$_impl" ]; then
             yush_info "Loading $1 implementation from $_impl"
             # shellcheck disable=SC1090
@@ -50,7 +45,7 @@ primer_load() {
 # --group  Specific group for ownership
 # --perm   chmod compatible access rights
 # --as     Take ownership and access rights from this file/dir instead
-primer_ownership() {
+primer_utils_path_ownership() {
     _path="$1"
     shift
     _username=$(id -un)
@@ -77,6 +72,6 @@ primer_ownership() {
         esac
     done
 
-    $PRIMER_SUDO chown -R "${_username}:${_group}" "$_path"
-    $PRIMER_SUDO chmod -R "$_perms" "$_path"
+    $PRIMER_OS_SUDO chown -R "${_username}:${_group}" "$_path"
+    $PRIMER_OS_SUDO chmod -R "$_perms" "$_path"
 }

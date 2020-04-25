@@ -28,11 +28,11 @@ test() {
                 variable)
                     echo "$TEST_VARIABLE";;
                 sudo)
-                    echo "$PRIMER_SUDO";;
+                    echo "$PRIMER_OS_SUDO";;
                 platform | distribution)
                     "primer_$TEST_TEST";;
                 locate)
-                    primer_locate "test";;
+                    primer_utils_locate "test";;
                 *)
                     yush_warn "$TEST_TEST is an unknown test";;
             esac

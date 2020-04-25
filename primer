@@ -48,8 +48,13 @@ PRIMER_BINDIR=${PRIMER_BINDIR:-${PRIMER_LOCAL%%/}/bin}
 PRIMER_OPTDIR=${PRIMER_OPTDIR:-${PRIMER_LOCAL%%/}/opt}
 PRIMER_LIBDIR=${PRIMER_LIBDIR:-${PRIMER_LOCAL%%/}/lib}
 
+primer_abort() {
+    yush_error "$1"
+    exit 1
+}
+
 # Source in all relevant modules. This is where most of the "stuff" will occur.
-for module in utils os users; do
+for module in utils os auth; do
   module_path="${PRIMER_LIB_DIR}/${module}.sh"
   if [ -f "$module_path" ]; then
     # shellcheck disable=SC1090
@@ -158,7 +163,7 @@ while IFS= read -r line; do
         # Take everything for the value in case it contains spaces.
         _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
         yush_info "Passing option --$_opt to $_step"
-        if primer_load "$_step"; then
+        if primer_utils_load "$_step"; then
             $_step option "--$_opt" "$_val"
         fi
     fi
@@ -167,7 +172,7 @@ $(printf %s\\n "$PRIMER_MODULE_OPTIONS")
 EOF
 
 # Discover how and if to sudo
-primer_sudo
+primer_os_sudo
 
 # Default command is to install
 if [ "$#" -gt 0 ]; then
@@ -182,7 +187,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
         yush_notice "Installing $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
-            if primer_load "$_step"; then
+            if primer_utils_load "$_step"; then
                 yush_info "Installing $_step"
                 $_step install
             fi
@@ -191,7 +196,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     clean | remove | down)
         yush_notice "Removing $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
-            if primer_load "$_step"; then
+            if primer_utils_load "$_step"; then
                 yush_info "Cleaning $_step"
                 $_step clean
             fi

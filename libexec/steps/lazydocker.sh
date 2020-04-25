@@ -34,7 +34,7 @@ lazydocker() {
             done
             ;;
         "install")
-            primer_dependency curl
+            primer_os_dependency curl
             if ! [ -x "$(command -v "lazydocker")" ]; then
                 if [ -z "$LAZYDOCKER_VERSION" ]; then
                     # Following uses the github API
@@ -62,7 +62,7 @@ lazydocker() {
         "clean")
             yush_info "Removing lazydocker"
             if [ -f "${PRIMER_BINDIR%%/}/lazydocker" ]; then
-                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/lazydocker"
+                $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/lazydocker"
             fi
             ;;
     esac
@@ -84,7 +84,7 @@ _lazydocker_install_download() {
             tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
             if [ -f "$tmpdir/lazydocker" ]; then
                 chmod a+x "$tmpdir/lazydocker"
-                $PRIMER_SUDO mv -f "$tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
+                $PRIMER_OS_SUDO mv -f "$tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
             fi
         fi
     else
