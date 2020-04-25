@@ -27,23 +27,23 @@ packages() {
             ;;
         "install")
             # Update package index in system
-            primer_update
+            primer_os_update
 
             # Freshen up system to latest
             if yush_is_true "$PACKAGES_FRESH"; then
                 yush_info "Upgrading and cleaning system"
-                primer_upgrade
+                primer_os_upgrade
             fi
 
             if [ -n "$PACKAGES_PACKAGES" ]; then
                 # shellcheck disable=SC2086
-                primer_packages add $PACKAGES_PACKAGES
+                primer_os_packages add $PACKAGES_PACKAGES
             fi
             ;;
         "clean")
             if [ -n "$PACKAGES_PACKAGES" ]; then
                 # shellcheck disable=SC2086
-                primer_packages del $PACKAGES_PACKAGES
+                primer_os_packages del $PACKAGES_PACKAGES
             fi
             ;;
     esac

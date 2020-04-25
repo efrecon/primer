@@ -50,7 +50,7 @@ compose() {
             done
             ;;
         "install")
-            primer_dependency curl
+            primer_os_dependency curl
             if ! [ -x "$(command -v "docker-compose")" ]; then
                 if [ -z "$COMPOSE_VERSION" ]; then
                     # Following uses the github API
@@ -89,25 +89,25 @@ compose() {
             fi
 
             yush_debug "Installing bash completions"
-            _completion_dir=$(primer_bash_completion_dir)
+            _completion_dir=$(primer_os_bash_completion_dir)
             ! [ -d "$_completion_dir" ] && \
-                    $PRIMER_SUDO mkdir -p "$_completion_dir"
+                    $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
             ! [ -f "${_completion_dir}/docker-compose" ] && \
                     curl -sSL https://raw.githubusercontent.com/docker/compose/v"$COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
-                        $PRIMER_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
+                        $PRIMER_OS_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
             ;;
         "clean")
             yush_info "Removing Docker Compose and bash completion"
             if [ -f "${PRIMER_BINDIR%%/}/docker-compose" ]; then
-                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-compose"
+                $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-compose"
             else
-                $PRIMER_SUDO pip3 uninstall docker-compose
+                $PRIMER_OS_SUDO pip3 uninstall docker-compose
             fi
 
-            _completion_dir=$(primer_bash_completion_dir)
+            _completion_dir=$(primer_os_bash_completion_dir)
             if [ -f "${_completion_dir}/docker-compose" ]; then
                 yush_debug "Removing compose command completion"
-                $PRIMER_SUDO rm -f "${_completion_dir}/docker-compose"
+                $PRIMER_OS_SUDO rm -f "${_completion_dir}/docker-compose"
             fi
             ;;
     esac
@@ -117,22 +117,22 @@ compose() {
 # figure out the list of dependent packages on the other distros.
 _compose_install_python() {
     yush_info "Installing through pip3"
-    lsb_dist=$(primer_distribution)
+    lsb_dist=$(primer_os_distribution)
     case "$lsb_dist" in
         ubuntu|*bian)
-            primer_packages add python3 python3-pip libffi-dev libssl-dev build-essential
+            primer_os_packages add python3 python3-pip libffi-dev libssl-dev build-essential
             ;;
         *)
             ;;
     esac
-    $PRIMER_SUDO pip3 install docker-compose=="$COMPOSE_VERSION"
+    $PRIMER_OS_SUDO pip3 install docker-compose=="$COMPOSE_VERSION"
 }
 
 # Download from github, making sure we can actually execute the binary that we
 # downloaded. We download the first byte to check all the redirects, and on
 # success we will download everything and possibly check against the sha256 sum.
 _compose_install_download() {
-    lsb_dist=$(primer_distribution)
+    lsb_dist=$(primer_os_distribution)
     tmpdir=$(mktemp -d)
     if curl --progress-bar -fSL "${COMPOSE_DOWNLOAD%%/}/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-compose"; then
         # Check against the sha256 sum if necessary.
@@ -157,8 +157,8 @@ _compose_install_download() {
                 rm -f "${tmpdir}/docker-compose"
             else
                 yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-compose"
-                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
-                $PRIMER_SUDO mv -f "${tmpdir}/docker-compose" "${PRIMER_BINDIR%%/}/docker-compose"
+                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+                $PRIMER_OS_SUDO mv -f "${tmpdir}/docker-compose" "${PRIMER_BINDIR%%/}/docker-compose"
             fi
         fi
     else
@@ -182,10 +182,10 @@ _compose_install_glibc() {
 
     yush_info "Installing glibc support at version $GLIBC_VERSION"
     GLIBC_TMPDIR=$(mktemp -d)
-    $PRIMER_SUDO curl -fSL --progress-bar "$GLIBC_PUBKEY" -o /etc/apk/keys/sgerrand.rsa.pub
+    $PRIMER_OS_SUDO curl -fSL --progress-bar "$GLIBC_PUBKEY" -o /etc/apk/keys/sgerrand.rsa.pub
     curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-${GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-${GLIBC_VERSION}.apk"
-    $PRIMER_SUDO apk add "$GLIBC_TMPDIR/glibc-${GLIBC_VERSION}.apk"
+    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-${GLIBC_VERSION}.apk"
     curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-bin-${GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
-    $PRIMER_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
+    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
     rm -rf "$GLIBC_TMPDIR"
 }

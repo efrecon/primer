@@ -22,7 +22,7 @@ ssh_keys() {
             done
             ;;
         "install")
-            primer_dependency "" openssh
+            primer_os_dependency "" openssh
             yush_info "Creating password-less SSH $SSH_KEYS_TYPE key pairs"
             if ! [ -f "$HOME/.ssh/id_$SSH_KEYS_TYPE" ]; then
                 case "$SSH_KEYS_TYPE" in

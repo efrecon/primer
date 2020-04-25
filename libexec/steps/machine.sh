@@ -39,7 +39,7 @@ machine() {
             done
             ;;
         "install")
-            primer_dependency curl
+            primer_os_dependency curl
             if ! [ -x "$(command -v "docker-machine")" ]; then
                 if [ -z "$MACHINE_VERSION" ]; then
                     # Following uses the github API
@@ -63,23 +63,23 @@ machine() {
             fi
 
             yush_debug "Installing bash completions"
-            _completion_dir=$(primer_bash_completion_dir)
+            _completion_dir=$(primer_os_bash_completion_dir)
             ! [ -d "$_completion_dir" ] && \
-                    $PRIMER_SUDO mkdir -p "$_completion_dir"
+                    $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
             ! [ -f "${_completion_dir}/docker-machine" ] && \
                     curl $MACHINE_CURL_OPTS https://raw.githubusercontent.com/docker/machine/v"$MACHINE_VERSION"/contrib/completion/bash/docker-machine |
-                        $PRIMER_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
+                        $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
             ;;
         "clean")
             yush_info "Removing Docker Compose and bash completion"
             if [ -f "${PRIMER_BINDIR%%/}/docker-machine" ]; then
-                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-machine"
+                $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-machine"
             fi
 
-            _completion_dir=$(primer_bash_completion_dir)
+            _completion_dir=$(primer_os_bash_completion_dir)
             if [ -f "${_completion_dir}/docker-machine" ]; then
                 yush_debug "Removing machine command completion"
-                $PRIMER_SUDO rm -f "${_completion_dir}/docker-machine"
+                $PRIMER_OS_SUDO rm -f "${_completion_dir}/docker-machine"
             fi
             ;;
     esac
@@ -108,8 +108,8 @@ _machine_install_download() {
                 rm -f "${tmpdir}/docker-machine"
             else
                 yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-machine"
-                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_SUDO mkdir -p "$PRIMER_BINDIR"
-                $PRIMER_SUDO mv -f "${tmpdir}/docker-machine" "${PRIMER_BINDIR%%/}/docker-machine"
+                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+                $PRIMER_OS_SUDO mv -f "${tmpdir}/docker-machine" "${PRIMER_BINDIR%%/}/docker-machine"
             fi
         fi
     else

@@ -34,7 +34,7 @@ micro() {
             done
             ;;
         "install")
-            primer_dependency curl
+            primer_os_dependency curl
             if ! [ -x "$(command -v "micro")" ]; then
                 if [ -z "$MICRO_VERSION" ]; then
                     # Following uses the github API
@@ -63,7 +63,7 @@ micro() {
         "clean")
             yush_info "Removing micro"
             if [ -f "${PRIMER_BINDIR%%/}/micro" ]; then
-                $PRIMER_SUDO rm -f "${PRIMER_BINDIR%%/}/micro"
+                $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/micro"
             fi
             ;;
     esac
@@ -89,7 +89,7 @@ _micro_install_download() {
     if curl $MICRO_CURL_OPTS "${MICRO_DOWNLOAD%%/}/v$MICRO_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
         tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
         if [ -f "$tmpdir/micro-${MICRO_VERSION}/micro" ]; then
-            $PRIMER_SUDO mv -f "$tmpdir/micro-${MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"
+            $PRIMER_OS_SUDO mv -f "$tmpdir/micro-${MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"
         else
             yush_error "No micro binary found in tar file!"
         fi

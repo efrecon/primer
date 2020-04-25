@@ -37,17 +37,17 @@ docker() {
             ;;
         "install")
             if ! [ -x "$(command -v dockerd)" ]; then
-                lsb_dist=$(primer_distribution)
+                lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        primer_packages add docker
+                        primer_os_packages add docker
                         ;;
                     clear*linux*)
-                        primer_packages add containers-basic
+                        primer_os_packages add containers-basic
                         ;;
                     *)
                         # Ensure we have curl
-                        primer_dependency curl
+                        primer_os_dependency curl
 
                         # Download the installation script from getdocker
                         yush_info "Downloading and running Docker installation script from $(yush_yellow "$DOCKER_GET_URL")"
@@ -89,10 +89,10 @@ docker() {
             if [ -x "$(command -v dockerd)" ]; then
                 if ! docker info; then
                     yush_info "Starting Docker daemon"
-                    primer_service start docker
+                    primer_os_service start docker
                 fi
                 yush_info "Enabling docker daemon at start"
-                primer_service enable docker
+                primer_os_service enable docker
             fi
 
             # Perform user operations only if we have a docker client installed.
@@ -102,12 +102,12 @@ docker() {
             _docker_bin=$(which docker || true)
             if [ -n "$_docker_bin" ]; then
                 # Create group and make sure user is part of the group
-                primer_group_create docker
-                primer_group_membership "$(id -un)" docker
+                primer_auth_group_add docker
+                primer_auth_group_membership "$(id -un)" docker
                 if yush_is_true "$DOCKER_ACCESS_ALL_USERS"; then
                     yush_debug "Adding all regular users on system to group docker"
-                    primer_users | grep -v "$(id -un)" | while IFS= read -r _username; do
-                        primer_group_membership "$_username" docker
+                    primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
+                        primer_auth_group_membership "$_username" docker
                     done
                 else
                     yush_info "Only $(id -un) has access to Docker"
@@ -125,12 +125,12 @@ docker() {
                 done
 
                 if [ "$_prior_settings" = "0" ]; then
-                    primer_users | grep -v "$(id -un)" | while IFS= read -r _username; do
+                    primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
                         _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
                         if ! [ -f "$_home/.docker/config.json" ]; then
-                            $PRIMER_SUDO mkdir -p "$_home/.docker"
-                            $PRIMER_SUDO cp "$_config" "$_home/.docker/config.json"
-                            primer_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
+                            $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
+                            $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
+                            primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
                             yush_info "Local user $_username logged in at all Docker registries from above"
                         else
                             yush_warn "Skipped login for $_username, found existing settings at $_home/.docker/config.json"
@@ -149,39 +149,39 @@ docker() {
             if [ -x "$(command -v dockerd)" ]; then
                 if docker info; then
                     yush_info "Stopping Docker daemon"
-                    primer_service stop docker
+                    primer_os_service stop docker
                 fi
                 yush_info "Disabling docker daemon at start"
-                primer_service disable docker
+                primer_os_service disable docker
 
-                lsb_dist=$(primer_distribution)
+                lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        primer_packages del docker
+                        primer_os_packages del docker
                         ;;
                     clear*linux*)
-                        primer_packages del containers-basic
+                        primer_os_packages del containers-basic
                         ;;
                     ubuntu|*bian)
-                        primer_packages del docker-ce-cli docker-ce
+                        primer_os_packages del docker-ce-cli docker-ce
                         dkey_present=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1)
                         if [ -n "$dkey_present" ]; then
                             yush_info "Removing docker GPG key"
                             dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
-                            $PRIMER_SUDO apt-key del $dkey
+                            $PRIMER_OS_SUDO apt-key del $dkey
                         fi
 
                         if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
                             yush_info "Removing repo list /etc/apt/sources.list.d/docker.list"
-                            $PRIMER_SUDO rm -f /etc/apt/sources.list.d/docker.list
+                            $PRIMER_OS_SUDO rm -f /etc/apt/sources.list.d/docker.list
                         fi
 
                         if grep -q docker /etc/apt/sources.list; then
                             yush_info "Removing docker from main repo list at /etc/apt/sources.list"
                             listtemp=$(mktemp)
                             grep -v "docker" /etc/apt/sources.list > "$listtemp"
-                            primer_ownership "$listtemp" --as /etc/apt/sources.list
-                            $PRIMER_SUDO mv "$listtemp" /etc/apt/sources.list
+                            primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
+                            $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
                         fi
                         ;;
                     *)
