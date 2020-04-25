@@ -1,13 +1,13 @@
 # Primer
 
-Primer is a flexible POSIX shell OS initialisation automator. The main goal is
-to bring up barebone minimum OS installations to a minimal set of features for
-running containerised applications. Primer automates a number of installation
-steps, each of which aiming at the installation of an OS level feature with
-minimum dependencies. New steps can easily be written if necessary, as they
-interact with primer using a well-defined interface. As such, primer can also be
-used in other domains than cloud first applications. Being written in POSIX
-compatible shell makes it suitable within the embedded space, for example.
+Primer is a flexible OS initialisation automator in pure POSIX shell. The main
+goal is to bring up barebone minimum OS installations to a minimal set of
+features for running containerised applications. Primer automates a number of
+installation steps, each of which aiming at the installation of an OS level
+feature with minimum dependencies. New steps can easily be written if necessary,
+as they interact with primer using a well-defined interface. As such, primer can
+also be used in other domains than cloud first applications. Being written in
+POSIX compatible shell makes it suitable within the embedded space, for example.
 
 The main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
 Ubuntu [cloud] or [server] images or [Clear] Linux*. Primer is probably best
