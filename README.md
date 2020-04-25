@@ -7,18 +7,25 @@ steps, each of which aiming at the installation of an OS level feature with
 minimum dependencies. New steps can easily be written if necessary, as they
 interact with primer using a well-defined interface. As such, primer can also be
 used in other domains than cloud first applications. Being written in POSIX
-compatible shell makes it suitable within the embedded space, for example. The
-main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
-[Ubuntu] cloud images or [Clear] Linux*.
+compatible shell makes it suitable within the embedded space, for example.
+
+The main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
+Ubuntu [cloud] or [server] images or [Clear] Linux*. Primer is probably best
+fitted for initialising "on the metal", rather than VMs where [cloud-init] often
+fills such a role.
 
   [Alpine]: https://alpinelinux.org/
-  [Ubuntu]: http://cloud-images.ubuntu.com/
+  [cloud]: http://cloud-images.ubuntu.com/
+  [server]: https://ubuntu.com/download/server
   [Clear]: https://clearlinux.org/
+  [cloud-init]: https://cloudinit.readthedocs.io/en/latest/index.html
 
-Primer will prep your system automatically with configurations that can be put
-under revision control. But primer has no support for dependencies between the
-various steps, nor a DSL. It tries to fill the gap between home-made
-initialisation scripts and larger solutions such as [Ansible] or [puppet]
+Primer will prep your system automatically with configuration descriptions that
+can be put under revision control. However, primer has no support for
+dependencies between the various steps, nor has a DSL: it rather express machine
+configuration through a set of environment variables. Primer tries to fill the
+gap between home-made initialisation scripts and larger solutions such as
+[Ansible], [puppet] or [cloud-init].
 
   [Ansible]: https://github.com/ansible/ansible
   [puppet]: https://puppet.com/open-source/#osp
