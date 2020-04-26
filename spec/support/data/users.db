@@ -10,9 +10,10 @@
 # - Main group for user. It is preferred to let all users to belong to the same
 #   group
 # - GECOS fields for user
-# - Login shell, ensure that the shell exists on the machine.
+# - Login shell, ensure that the shell exists on the machine, empty for good
+#   default
 
-emmanuel:x:primer:Emmanuel Frecon,Super Hero,+461456,:/bin/bash
+emmanuel:x:primer:Emmanuel Frecon,Super Hero,+461456,:
 manu:x:primer:Leunamme Nocerf,Super Vilain,+46457678,:/bin/sh
 
 # This file must end with an empty line or a comment.

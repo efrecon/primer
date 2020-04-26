@@ -164,7 +164,7 @@ while IFS= read -r line; do
         _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
         yush_info "Passing option --$_opt to $_step"
         if primer_utils_load "$_step"; then
-            $_step option "--$_opt" "$_val"
+            "primer_step_$_step" option "--$_opt" "$_val"
         fi
     fi
 done <<EOF
@@ -189,7 +189,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
         for _step in $PRIMER_STEPS; do
             if primer_utils_load "$_step"; then
                 yush_info "Installing $_step"
-                $_step install
+                "primer_step_$_step" install
             fi
         done
         ;;
@@ -198,7 +198,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
         for _step in $PRIMER_STEPS; do
             if primer_utils_load "$_step"; then
                 yush_info "Cleaning $_step"
-                $_step clean
+                "primer_step_$_step" clean
             fi
         done
         ;;
