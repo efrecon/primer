@@ -1,16 +1,16 @@
 #!/usr/bin/env sh
 
 # The location to place the system at, e.g. Europe/Stockholm.
-TIMEZONE_LOCATION=${TIMEZONE_LOCATION:-}
+PRIMER_STEP_TIMEZONE_LOCATION=${PRIMER_STEP_TIMEZONE_LOCATION:-}
 
-timezone() {
+primer_step_timezone() {
     case "$1" in
         "option")
             shift;
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --location)
-                        TIMEZONE_LOCATION=$2; shift 2;;
+                        PRIMER_STEP_TIMEZONE_LOCATION=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -19,11 +19,11 @@ timezone() {
             done
             ;;
         "install")
-            if [ -n "$TIMEZONE_LOCATION" ]; then
+            if [ -n "$PRIMER_STEP_TIMEZONE_LOCATION" ]; then
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     ubuntu|*bian)
-                        $PRIMER_OS_SUDO ln -fs "/usr/share/zoneinfo/$TIMEZONE_LOCATION" /etc/localtime
+                        $PRIMER_OS_SUDO ln -fs "/usr/share/zoneinfo/$PRIMER_STEP_TIMEZONE_LOCATION" /etc/localtime
                         primer_os_dependency "" "tzdata"
                         $PRIMER_OS_SUDO dpkg-reconfigure --frontend noninteractive tzdata
                         ;;
