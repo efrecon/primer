@@ -29,6 +29,7 @@ or new installation steps:
   shoud start with `PRIMER_`, contain uppercase or underscores.
 + Internal modules should only container lowercase letters or underscores, no
   leading underscore.
++ No module should be called `step`.
 + Given a module named xxx
   + Its implementation should be placed directly in the directory `libexec` and
     named with the same name, followed by `.sh`, e.g. `xxx.sh`.
@@ -37,5 +38,18 @@ or new installation steps:
     underscore).
   + All exported variables should start with `PRIMER_XXX_`. The `XXX` is the
     same as the name of the module, though in uppercase.
-  + There should be as little as exported variables as possible, preferably
-    none.
+  + There should be as little exported variables as possible, preferably none.
+
+## Developing Installation Steps
+
++ The name of a step can only contain lower case alphanumeric characters and
+  underscores.
++ Given a step named xxx:
+  + Its implementation should be named with the same name, followed by `.sh`,
+    e.g. `xxx.sh`.
+  + All exported functions should start with `primer_step_xxx_`.
+  + All internal functions should start with `_primer_step_xxx_` (note the
+    leading underscore).
+  + All exported variables should start with `PRIMER_STEP_XXX_`. The `XXX` is
+    the same as the name of the module, though in uppercase.
+  + There should be as little exported variables as possible, preferably none.
