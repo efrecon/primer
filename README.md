@@ -237,4 +237,4 @@ shellspec
 
 You are more than welcome to contribute through [PR]s. New steps will not be
 accepted without minimal test rules or documentation. There are a few coding
-[conventions][./docs/CONVENTIONS.md] to follow for all contributors.
+[conventions](./docs/CONVENTIONS.md) to follow for all contributors.
