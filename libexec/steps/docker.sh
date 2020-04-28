@@ -53,7 +53,7 @@ primer_step_docker() {
                         yush_info "Downloading and running Docker installation script from $(yush_yellow "$PRIMER_STEP_DOCKER_GET_URL")"
                         _get=$(mktemp)
                         curl -fsSL "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
-                        if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA" ]; then
+                        if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
                             if grep 'SCRIPT_COMMIT_SHA=' "$_get" | grep -q "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
                                 yush_info "Verified Docker installation script, running it now"
                                 sh "$_get"
@@ -87,7 +87,7 @@ primer_step_docker() {
 
             # Start docker and make sure it will always start
             if [ -x "$(command -v dockerd)" ]; then
-                if ! docker info; then
+                if ! docker info 2>/dev/null; then
                     yush_info "Starting Docker daemon"
                     primer_os_service start docker
                 fi
@@ -103,7 +103,7 @@ primer_step_docker() {
             if [ -n "$_docker_bin" ]; then
                 # Create group and make sure user is part of the group
                 primer_auth_group_add docker
-                primer_auth_group_membership "$(id -un)" docker
+                [ "$(id -u)" != "0" ] && primer_auth_group_membership "$(id -un)" docker
                 if yush_is_true "$PRIMER_STEP_DOCKER_ACCESS_ALL_USERS"; then
                     yush_debug "Adding all regular users on system to group docker"
                     primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
@@ -124,20 +124,22 @@ primer_step_docker() {
                     printf %s\\n "$_pass" | "$_docker_bin" login --password-stdin -u "$_user" "$_host"
                 done
 
-                if [ "$_prior_settings" = "0" ]; then
-                    primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
-                        _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
-                        if ! [ -f "$_home/.docker/config.json" ]; then
-                            $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
-                            $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
-                            primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
-                            yush_info "Local user $_username logged in at all Docker registries from above"
-                        else
-                            yush_warn "Skipped login for $_username, found existing settings at $_home/.docker/config.json"
-                        fi
-                    done
-                else
-                    yush_warn "Will not copy private Docker settings information to other users"
+                if [ -n "$PRIMER_STEP_DOCKER_REGISTRY" ]; then
+                    if [ "$_prior_settings" = "0" ]; then
+                        primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
+                            _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
+                            if ! [ -f "$_home/.docker/config.json" ]; then
+                                $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
+                                $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
+                                primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
+                                yush_info "Local user $_username logged in at all Docker registries from above"
+                            else
+                                yush_warn "Skipped login for $_username, found existing settings at $_home/.docker/config.json"
+                            fi
+                        done
+                    else
+                        yush_warn "Will not copy private Docker settings information to other users"
+                    fi
                 fi
             else
                 yush_warn "No docker client installed!"
