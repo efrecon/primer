@@ -54,15 +54,12 @@ primer_abort() {
 }
 
 # Source in all relevant modules. This is where most of the "stuff" will occur.
-for module in utils os auth; do
-  module_path="${PRIMER_LIB_DIR}/${module}.sh"
-  if [ -f "$module_path" ]; then
+_modules=$(find "${PRIMER_LIB_DIR}" -maxdepth 1 -mindepth 1 \( -name '*.sh' -a ! -name 'x-*.sh' \) -exec basename '{}' \; | sed -e 's/\.sh$//g' | tr '\n' ' ')
+for module in $_modules; do
+    module_path="${PRIMER_LIB_DIR}/${module}.sh"
+    yush_trace "Loading $module from $module_path"
     # shellcheck disable=SC1090
     . "$module_path"
-  else
-    echo "Cannot find module $module at $module_path !" >& 2
-    exit 1
-  fi
 done
 
 # Parse options
