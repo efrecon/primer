@@ -154,10 +154,10 @@ primer_os_service() {
         if primer_os_in_container; then
             yush_notice "Service $2 $1 is not relevant in a container"
         else
-            if [ -x "$(command -v service)" ]; then
-                $PRIMER_OS_SUDO service "$1" "$2"
-            elif [ -x "$(command -v systemctl)" ]; then
+            if [ -x "$(command -v systemctl)" ]; then
                 $PRIMER_OS_SUDO systemctl "$1" "$2"
+            elif [ -x "$(command -v service)" ]; then
+                $PRIMER_OS_SUDO service "$1" "$2"
             elif [ -x "$(command -v rc-service)" ]; then
                 case "$1" in
                     start|stop|restart)
