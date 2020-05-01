@@ -73,7 +73,12 @@ primer_step_lazydocker() {
 # success we will download everything and possibly check against the sha256 sum.
 _primer_step_lazydocker_install_download() {
     tmpdir=$(mktemp -d)
-    tar_file="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_$(uname -m).tar.gz"
+    _arch=$(uname -m)
+    case "$_arch" in
+        armv7*) _arch=armv7;;
+        armv6*) _arch=armv6;;
+    esac
+    tar_file="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_${_arch}.tar.gz"
     if curl $PRIMER_STEP_LAZYDOCKER_CURL_OPTS "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
         curl $PRIMER_STEP_LAZYDOCKER_CURL_OPTS "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/checksums.txt" > "${tmpdir}/checksums.txt"
         local_sum=$(sha256sum "${tmpdir}/$tar_file" | awk '{print $1};')
