@@ -37,6 +37,19 @@ primer_utils_load() {
     fi
 }
 
+# Append what comes in from stdin to a system file
+primer_utils_sysfile_append() {
+    $PRIMER_OS_SUDO tee -a "$1" > /dev/null
+}
+
+# Remove all lines matching $2 from (not only system) file at $1
+primer_utils_sysfile_clip() {
+    _tmp=$(mktemp)
+    grep -v "$2" "$1" > $_tmp
+    primer_utils_path_ownership "$_tmp" --as "$1"
+    $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
+}
+
 
 # Somewhat restrictive recursive file ownership changes. The default is to
 # arrange for the tree passed as first argument to be owned by the caller and
