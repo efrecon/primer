@@ -150,14 +150,33 @@ primer_os_packages() {
 primer_os_in_container() { grep -q -E '(docker|lxc)' /proc/1/cgroup; }
 
 primer_os_service() {
-    if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart)'; then
+    if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart|list)'; then
         if primer_os_in_container; then
             yush_notice "Service $2 $1 is not relevant in a container"
         else
             if [ -x "$(command -v systemctl)" ]; then
-                $PRIMER_OS_SUDO systemctl "$1" "$2"
+                if [ "$1" = "list" ]; then
+                    $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units ${2:-*}.service | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
+                else
+                    # We also (un)mask when enabling/disabling. See:
+                    # https://stackoverflow.com/a/39109593
+                    case "$1" in
+                        disable)
+                            $PRIMER_OS_SUDO systemctl "$1" "$2"
+                            $PRIMER_OS_SUDO systemctl mask "$2"
+                        enable)
+                            $PRIMER_OS_SUDO systemctl unmask "$2"
+                            $PRIMER_OS_SUDO systemctl "$1" "$2"
+                        *)
+                            $PRIMER_OS_SUDO systemctl "$1" "$2"
+                    esac
+                fi
             elif [ -x "$(command -v service)" ]; then
-                $PRIMER_OS_SUDO service "$1" "$2"
+                if [ "$1" = "list" ]; then
+                    $PRIMER_OS_SUDO service --status-all | sed -E 's/^\s*\[\s*.\s*\]\s*(.*)/\1/'
+                else
+                    $PRIMER_OS_SUDO service "$1" "$2"
+                fi
             elif [ -x "$(command -v rc-service)" ]; then
                 case "$1" in
                     start|stop|restart)
@@ -166,6 +185,8 @@ primer_os_service() {
                         $PRIMER_OS_SUDO rc-update add "$2";;
                     disable)
                         $PRIMER_OS_SUDO rc-update del "$2";;
+                    list)
+                        $PRIMER_OS_SUDO rc-service -l;;
                 esac
             else
                 yush_error "Only service, systemctl (systemd) or alpine are supported for daemons"
