@@ -7,8 +7,7 @@ PRIMER_STEP_WIFI_ESSID=${PRIMER_STEP_WIFI_ESSID:-}
 
 PRIMER_STEP_WIFI_PSK=${PRIMER_STEP_WIFI_PSK:-}
 
-PRIMER_STEP_WIFI_PIDFILE=/run/wpa_supplicant.pid
-PRIMER_STEP_WIFI_CFDIR=/etc/wpa_supplicant
+PRIMER_STEP_WIFI_IFLIST=/etc/network/interfaces
 
 primer_step_wifi() {
     case "$1" in
@@ -32,6 +31,10 @@ primer_step_wifi() {
         "install")
             [ -z "$PRIMER_STEP_WIFI_INTERFACE" ] && _primer_step_wifi_interface
             if [ -n "$PRIMER_STEP_WIFI_ESSID" ]; then
+                primer_os_packages add wpa_supplicant
+                # Bring up the link and scan for networks to check if the
+                # network is in range. This more for information than anything
+                # else...
                 $PRIMER_OS_SUDO ip link set "$PRIMER_STEP_WIFI_INTERFACE" up
                 if command -v iwlist >/dev/null; then
                     if $PRIMER_OS_SUDO iwlist "$PRIMER_STEP_WIFI_INTERFACE" scan | grep "ESSID:" | grep -q "$PRIMER_STEP_WIFI_ESSID"; then
@@ -40,37 +43,48 @@ primer_step_wifi() {
                         yush_warn "$PRIMER_STEP_WIFI_ESSID seems not in range"
                     fi
                 fi
+                # Check that we don't already have an IP for that interface. If
+                # we don't make settings directly in /etc/network/interfaces
                 if ip address show dev "$PRIMER_STEP_WIFI_INTERFACE" | grep "inet" | grep "$PRIMER_STEP_WIFI_INTERFACE" | grep -q "scope global"; then
                     yush_debug "$PRIMER_STEP_WIFI_INTERFACE already connected"
                 else
-                    _cf_path=${PRIMER_STEP_WIFI_CFDIR%/}/wpa_supplicant-${PRIMER_STEP_WIFI_INTERFACE}.conf
-                    if [ -f "$_cf_path" ] && grep ssid "$_cf_path" | grep -q "$PRIMER_STEP_WIFI_ESSID"; then
-                        yush_debug "Information for $PRIMER_STEP_WIFI_ESSID already present at $_cf_path"
-                    else
-                        yush_info "Remembering $PRIMER_STEP_WIFI_ESSID in $_cf_path"
-                        wpa_passphrase "$PRIMER_STEP_WIFI_ESSID" "$PRIMER_STEP_WIFI_PSK" | primer_utils_sysfile_append "$_cf_path"
+                    # Bring down the link, we brought it up to scan
+                    $PRIMER_OS_SUDO ip link set "$PRIMER_STEP_WIFI_INTERFACE" down
+                    
+                    # Disable wpa_supplicant (DBus) service
+                    if primer_os_service list | grep -q wpa_supplicant; then
+                        yush_notice "Disabling wpa_supplicant service"
+                        primer_os_service stop wpa_supplicant
+                        primer_os_service disable wpa_supplicant
                     fi
-                    if ps -e -o comm,pid | grep -q wpa_supplicant; then
-                        _pid=$(ps -e -o comm,pid | grep wpa_supplicant | awk '{print $2}')
-                        yush_notice "Killing existing wpa_supplicant at $_pid"
-                        $PRIMER_OS_SUDO kill "$_pid"
-                    fi
-                    $PRIMER_OS_SUDO wpa_supplicant \
-                                        -B \
-                                        -i "$PRIMER_STEP_WIFI_INTERFACE" \
-                                        -c "$_cf_path" \
-                                        -P "$PRIMER_STEP_WIFI_PIDFILE" \
-                                        -D "nl80211,wext"
-                    yush_info "Acquiring IP address"
-                    $PRIMER_OS_SUDO dhclient "$PRIMER_STEP_WIFI_INTERFACE"
 
-                    # HOWTO remember at reboot: beginning of ? https://unix.stackexchange.com/a/92810
-                    if ! grep -q "$_cf_path" /etc/network/interfaces; then
-                        printf "auto %s\n" "$PRIMER_STEP_WIFI_INTERFACE" | primer_utils_sysfile_append /etc/network/interfaces
-                        printf "iface %s inet dhcp\n" "$PRIMER_STEP_WIFI_INTERFACE" | primer_utils_sysfile_append /etc/network/interfaces
-                        printf "    pre-up wpa_supplicant -B -i %s -c \"%s\" -P \"%s\" -D nl80211,wext\n" "$PRIMER_STEP_WIFI_INTERFACE" "$_cf_path" "$PRIMER_STEP_WIFI_PIDFILE" | primer_utils_sysfile_append /etc/network/interfaces
-                        printf "    post-down kill \$(cat \"%s\")\n" "$PRIMER_STEP_WIFI_PIDFILE" | primer_utils_sysfile_append /etc/network/interfaces
+                    # Insert settings if we don't yet have them
+                    if grep "wpa-ssid" "$PRIMER_STEP_WIFI_IFLIST" | grep -q "$PRIMER_STEP_WIFI_ESSID"; then
+                        yush_debug "Information for $PRIMER_STEP_WIFI_ESSID already present at $PRIMER_STEP_WIFI_IFLIST"
+                    else
+                        # We insert an interface block. The wpa- are parsed and
+                        # understood by the wpa_supplicant package for its
+                        # configuration. 
+                        {
+                            echo "";
+                            echo "# wifi settings from primer";
+                            printf "auto %s\n" "$PRIMER_STEP_WIFI_INTERFACE";
+                            printf "allow-hotplug %s\n" "$PRIMER_STEP_WIFI_INTERFACE";
+                            printf "iface %s inet dhcp\n" "$PRIMER_STEP_WIFI_INTERFACE";
+                            printf "    wpa-ssid \"%s\"\n" "$PRIMER_STEP_WIFI_ESSID";
+                            if [ -z "$PRIMER_STEP_WIFI_PSK" ]; then
+                                echo "    wpa-key-mgmt NONE";
+                            else
+                                printf "    wpa-psk %s\n" "$(_primer_step_wifi_psk_hex)";
+                            fi
+                        } | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
                     fi
+
+                    # Bring up the interface (down first, as a security
+                    # measure). This tests the block declared above, meaning
+                    # that we know it will work at next boot as well.
+                    $PRIMER_OS_SUDO ifdown "$PRIMER_STEP_WIFI_INTERFACE"
+                    $PRIMER_OS_SUDO ifup "$PRIMER_STEP_WIFI_INTERFACE"
                 fi
             fi
             ;;
@@ -79,7 +93,16 @@ primer_step_wifi() {
     esac
 }
 
+# Use wpa_passphrase to get the hex encoded value for the passphrase.
+_primer_step_wifi_psk_hex() {
+    wpa_passphrase "$PRIMER_STEP_WIFI_ESSID" "$PRIMER_STEP_WIFI_PSK" |
+        grep 'psk=' |
+        grep -vE '^\s*#psk' |
+        sed -E 's/^\s*psk=([0-9a-f]+)/\1/'
+}
 
+# Guess first wifi interface. Old style wlan0 new style wlxxxx, they all start
+# by wl and end with a number.
 _primer_step_wifi_interface() {
     yush_debug "Discovering wifi interface"
     PRIMER_STEP_WIFI_INTERFACE=$(
