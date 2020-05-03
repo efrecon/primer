@@ -43,12 +43,12 @@ primer_os_update() {
         yush_info "Updating OS package indices (if relevant)"
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
-            ubuntu|*bian)
-                _primer_os_apt update
-                ;;
+            *buntu)
+                _primer_os_apt update;;
+            *bian)
+                _primer_os_apt update;;
             alpine*)
-                _primer_os_apk update
-                ;;
+                _primer_os_apk update;;
             clear*linux*)
                 # Clear linux has no index
                 ;;
@@ -67,7 +67,11 @@ primer_os_upgrade() {
         yush_info "Unattended upgrade of the OS (this might take time!)"
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
-            ubuntu|*bian)
+            *buntu)
+                _primer_os_apt upgrade
+                _primer_os_apt autoremove
+                ;;
+            *bian)
                 _primer_os_apt upgrade
                 _primer_os_apt autoremove
                 ;;
@@ -103,29 +107,47 @@ primer_os_packages() {
         add|install)
             shift
             yush_info "Installing packages: $*"
-            primer_os_update
-            case "$lsb_dist" in
-                ubuntu|*bian)
-                    # shellcheck disable=SC2086
-                    _primer_os_apt install "$@"
-                    ;;
-                alpine*)
-                    # shellcheck disable=SC2086
-                    _primer_os_apk add "$@"
-                    ;;
-                clear*linux*)
-                    # shellcheck source=yu.sh/log.sh disable=SC2086
-                    _primer_os_swupd bundle-add "$@"
-                    ;;
-                *)
-                    yush_warn "Dependency resolution NYI for $lsb_dist";;
-            esac
+            # Construct a list of packages that haven't been installed yet.
+            _install=
+            for pkg in "$@"; do
+                if primer_os_packages installed "$pkg"; then
+                    yush_debug "Package: $pkg already installed"
+                else
+                    _install="$_install $pkg"
+                fi
+            done
+            # Install packages that are not yet present
+            if [ -n "$_install" ]; then
+                primer_os_update
+                case "$lsb_dist" in
+                    *bian)
+                        # shellcheck disable=SC2086
+                        _primer_os_apt install $_install;;
+                    *buntu)
+                        # shellcheck disable=SC2086
+                        _primer_os_apt install $_install;;
+                    alpine*)
+                        # shellcheck disable=SC2086
+                        _primer_os_apk add $_install;;
+                    clear*linux*)
+                        # shellcheck source=yu.sh/log.sh disable=SC2086
+                        _primer_os_swupd bundle-add $_install;;
+                    *)
+                        yush_warn "Dependency resolution NYI for $lsb_dist";;
+                esac
+            fi
             ;;
         del*|remove|uninstall)
             shift
             yush_info "Removing packages: $*"
             case "$lsb_dist" in
-                ubuntu|*bian)
+                *buntu)
+                    # shellcheck disable=SC2086
+                    _primer_os_apt remove "$@"
+                    yush_debug "Cleaning orphan packages"
+                    _primer_os_apt autoremove
+                    ;;
+                *bian)
                     # shellcheck disable=SC2086
                     _primer_os_apt remove "$@"
                     yush_debug "Cleaning orphan packages"
@@ -142,6 +164,29 @@ primer_os_packages() {
                 *)
                     yush_warn "Package removal NYI for $lsb_dist";;
             esac
+            ;;
+        list)
+            case "$lsb_dist" in
+                *buntu)
+                    $PRIMER_OS_SUDO dpkg --get-selections | grep -v deinstall | awk '{print $1}'
+                    ;;
+                *bian)
+                    $PRIMER_OS_SUDO dpkg --get-selections | grep -v deinstall | awk '{print $1}'
+                    ;;
+                alpine*)
+                    # shellcheck disable=SC2086
+                    _primer_os_apk list -I 2>/dev/null | awk '{print $1}'
+                    ;;
+                clear*linux*)
+                    $PRIMER_OS_SUDO swupd bundle-list --status | grep installed | awk '{print $2}'
+                    ;;
+                *)
+                    yush_warn "Package removal NYI for $lsb_dist";;
+            esac
+            ;;
+        installed)
+            shift
+            primer_os_packages list | grep -q "$1"
             ;;
     esac
 }
@@ -164,11 +209,14 @@ primer_os_service() {
                         disable)
                             $PRIMER_OS_SUDO systemctl "$1" "$2"
                             $PRIMER_OS_SUDO systemctl mask "$2"
+                            ;;
                         enable)
                             $PRIMER_OS_SUDO systemctl unmask "$2"
                             $PRIMER_OS_SUDO systemctl "$1" "$2"
+                            ;;
                         *)
                             $PRIMER_OS_SUDO systemctl "$1" "$2"
+                            ;;
                     esac
                 fi
             elif [ -x "$(command -v service)" ]; then
