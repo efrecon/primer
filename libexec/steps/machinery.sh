@@ -27,14 +27,13 @@ primer_step_machinery() {
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        primer_os_packages add tcl tclx tcl-tls tcllib
-                        ;;
+                        primer_os_packages add tcl tclx tcl-tls tcllib;;
                     clear*linux*)
-                        primer_os_packages add tcl-basic
-                        ;;
-                    ubuntu|*bian)
-                        primer_os_packages add tcl tclx tcl-tls tcllib tcllib-critcl tcl-vfs
-                        ;;
+                        primer_os_packages add tcl-basic;;
+                    *buntu)
+                        primer_os_packages add tcl tclx tcl-tls tcllib tcllib-critcl tcl-vfs;;
+                    *bian)
+                        primer_os_packages add tcl tclx tcl-tls tcllib tcllib-critcl tcl-vfs;;
                     *)
                         ;;
                 esac
