@@ -3,10 +3,13 @@
 # Locale on system
 PRIMER_STEP_WIFI_INTERFACE=${PRIMER_STEP_WIFI_INTERFACE:-}
 
+# Name of wifi network to connect to
 PRIMER_STEP_WIFI_ESSID=${PRIMER_STEP_WIFI_ESSID:-}
 
+# Pre-share key (passphrase) to access network.
 PRIMER_STEP_WIFI_PSK=${PRIMER_STEP_WIFI_PSK:-}
 
+# List of interfaces known to the OS.
 PRIMER_STEP_WIFI_IFLIST=/etc/network/interfaces
 
 primer_step_wifi() {
