@@ -119,9 +119,10 @@ _primer_step_compose_install_python() {
     yush_info "Installing through pip3"
     lsb_dist=$(primer_os_distribution)
     case "$lsb_dist" in
-        ubuntu|*bian)
-            primer_os_packages add python3 python3-pip libffi-dev libssl-dev build-essential
-            ;;
+        *bian)
+            primer_os_packages add python3 python3-pip libffi-dev libssl-dev build-essential;;
+        *buntu)
+            primer_os_packages add python3 python3-pip libffi-dev libssl-dev build-essential;;
         *)
             ;;
     esac

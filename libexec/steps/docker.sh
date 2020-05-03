@@ -68,7 +68,7 @@ primer_step_docker() {
                         # repository so we have some additional degree of
                         # security.
                         case "$lsb_dist" in
-                            ubuntu|*bian)
+                            *buntu|*bian)
                                 yush_info "Verifying Docker GPG short key against: $(yush_green $PRIMER_STEP_DOCKER_APT_GPG)"
                                 dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
                                 if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
@@ -159,33 +159,13 @@ primer_step_docker() {
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        primer_os_packages del docker
-                        ;;
+                        primer_os_packages del docker;;
                     clear*linux*)
-                        primer_os_packages del containers-basic
-                        ;;
-                    ubuntu|*bian)
-                        primer_os_packages del docker-ce-cli docker-ce
-                        dkey_present=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1)
-                        if [ -n "$dkey_present" ]; then
-                            yush_info "Removing docker GPG key"
-                            dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
-                            $PRIMER_OS_SUDO apt-key del $dkey
-                        fi
-
-                        if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
-                            yush_info "Removing repo list /etc/apt/sources.list.d/docker.list"
-                            $PRIMER_OS_SUDO rm -f /etc/apt/sources.list.d/docker.list
-                        fi
-
-                        if grep -q docker /etc/apt/sources.list; then
-                            yush_info "Removing docker from main repo list at /etc/apt/sources.list"
-                            listtemp=$(mktemp)
-                            grep -v "docker" /etc/apt/sources.list > "$listtemp"
-                            primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
-                            $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
-                        fi
-                        ;;
+                        primer_os_packages del containers-basic;;
+                    *buntu)
+                        _primer_step_docker_uninstall_debian;;
+                    *bian)
+                        _primer_step_docker_uninstall_debian;;
                     *)
                         yush_warn "Cannot remove docker on $lsb_dist"
                         ;;
@@ -193,4 +173,27 @@ primer_step_docker() {
             fi
             ;;
     esac
+}
+
+_primer_step_docker_uninstall_debian() {
+    primer_os_packages del docker-ce-cli docker-ce
+    dkey_present=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1)
+    if [ -n "$dkey_present" ]; then
+        yush_info "Removing docker GPG key"
+        dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
+        $PRIMER_OS_SUDO apt-key del $dkey
+    fi
+
+    if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
+        yush_info "Removing repo list /etc/apt/sources.list.d/docker.list"
+        $PRIMER_OS_SUDO rm -f /etc/apt/sources.list.d/docker.list
+    fi
+
+    if grep -q docker /etc/apt/sources.list; then
+        yush_info "Removing docker from main repo list at /etc/apt/sources.list"
+        listtemp=$(mktemp)
+        grep -v "docker" /etc/apt/sources.list > "$listtemp"
+        primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
+        $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
+    fi
 }
