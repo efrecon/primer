@@ -22,6 +22,8 @@ PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 . "$PRIMER_YUSH_DIR/text.sh"
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/multi-arch.sh"
+# shellcheck disable=SC1090
+. "$PRIMER_YUSH_DIR/net.sh"
 
 
 # This is the colon separated path where to find priming steps
