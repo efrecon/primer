@@ -65,7 +65,7 @@ for module in $_modules; do
 done
 
 # Parse options
-PRIMER_MODULE_OPTIONS= ; # --*:* options and their values will be saved here.
+PRIMER_STEP_OPTIONS= ; # --*:* options and their values will be saved here.
 while [ $# -gt 0 ]; do
     case "$1" in
         -s | --steps)
@@ -91,7 +91,7 @@ while [ $# -gt 0 ]; do
                 _opt=${1#*:};  # Option is everything after the :
                 _tmp=${1%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                PRIMER_MODULE_OPTIONS="$PRIMER_MODULE_OPTIONS
+                PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
 $_step $_opt $2"
                 shift 2
             else
@@ -101,7 +101,7 @@ $_step $_opt $2"
                 _opt=${_key#*:};  # Option is everything after the :
                 _tmp=${_key%:*};  # Module is everything before the : sans -
                 _step=${_tmp##*-}
-                PRIMER_MODULE_OPTIONS="$PRIMER_MODULE_OPTIONS
+                PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
 $_step $_opt $_val"
                 shift 1
             fi
@@ -152,7 +152,7 @@ if [ -n "$PRIMER_CONFIG" ] && [ -f "$PRIMER_CONFIG" ]; then
     done < "$PRIMER_CONFIG"
 fi
 
-# Pass command-line options that were saved in PRIMER_MODULE_OPTIONS to their
+# Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
 # respective modules. This is because command-line options should have
 # precedence over environment variables (even if read from file).
 while IFS= read -r line; do
@@ -167,7 +167,7 @@ while IFS= read -r line; do
         fi
     fi
 done <<EOF
-$(printf %s\\n "$PRIMER_MODULE_OPTIONS")
+$(printf %s\\n "$PRIMER_STEP_OPTIONS")
 EOF
 
 # Discover how and if to sudo
