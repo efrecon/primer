@@ -30,6 +30,10 @@ primer_step_dynufw() {
                 case "$1" in
                     --static)
                         PRIMER_STEP_DYNUFW_STATIC="$PRIMER_STEP_DYNUFW_STATIC $2"; shift 2;;
+                    --rules)
+                        PRIMER_STEP_DYNUFW_RULES=$2; shift 2;;
+                    --dns)
+                        PRIMER_STEP_DYNUFW_DNS=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -40,9 +44,16 @@ primer_step_dynufw() {
         "install")
             _primer_step_dynufw_install_ufw
             _primer_step_dynufw_install_dynufw
+            if [ -n "$PRIMER_STEP_DYNUFW_RULES" ]; then
+                yush_info "Installing dynamic rules from $PRIMER_STEP_DYNUFW_RULES"
+                $PRIMER_OS_SUDO cp -f "$PRIMER_STEP_DYNUFW_RULES" "$PRIMER_STEP_DYNUFW_DYNPATH"
+            else
+                touch "$PRIMER_STEP_DYNUFW_DYNPATH"
+            fi
             _primer_step_dynufw_install_static
             # Run once to open all ports
             if [ -x "${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh" ]; then
+                yush_info "Initialising dynamic rules"
                 "${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh"
             fi
             _primer_step_dynufw_install_cron
@@ -57,11 +68,14 @@ primer_step_dynufw() {
 }
 
 
+# Install ufw, with additional necessary extra packages. We treat containers a
+# little bit different (which is mostly usefull for testing)
 _primer_step_dynufw_install_ufw() {
     if [ -z "$(command -v ufw)" ]; then
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
             alpine)
+                # This only works if testing exists on the system.
                 primer_os_packages add ip6tables ufw@testing
                 ;;
             *)
@@ -69,25 +83,47 @@ _primer_step_dynufw_install_ufw() {
                 ;;
         esac
     fi
+
+    # In containers, we turn off IPv6 as a work around for the "can't initialize
+    # ip6tables table `filter': Table does not exist (do you need to insmod?)"
+    # message when enabling ufw.
+    if primer_os_in_container && [ -f "/etc/default/ufw" ]; then
+        yush_debug "Turning off IPv6 in containers"
+        sed -E -i.bak \
+            's/#?[[:space:]]*IPV6=[[:space:]]*[[:alnum:]]*[[:space:]]*$/IPV6=no/g' \
+            /etc/default/ufw
+    fi
 }
 
+# Install the dynufw package directly out of its git repository. We will need
+# the two main scripts. However, the installation script is re-implemented
+# (better) within this step.
 _primer_step_dynufw_install_dynufw() {
     primer_os_dependency git
     yush_info "Installing dynufw from $PRIMER_STEP_DYNUFW_REPO (branch: $PRIMER_STEP_DYNUFW_BRANCH)"
-    $PRIMER_OS_SUDO mkdir -p "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
-    $PRIMER_OS_SUDO git clone "$PRIMER_STEP_DYNUFW_REPO" \
-                    --recurse \
-                    --branch "$PRIMER_STEP_DYNUFW_BRANCH" \
-                    --depth 1 \
-                    "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
+    if [ -d "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" ]; then
+        ( cd "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" && git pull )
+    else
+        $PRIMER_OS_SUDO mkdir -p "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
+        $PRIMER_OS_SUDO git clone "$PRIMER_STEP_DYNUFW_REPO" \
+                        --recurse \
+                        --branch "$PRIMER_STEP_DYNUFW_BRANCH" \
+                        --depth 1 \
+                        "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
+    fi
     yush_debug "Installing as ${PRIMER_BINDIR%%/}/dynufw"
     for _script in ufw-clean ufw-dynamic-host-update; do
         $PRIMER_OS_SUDO chmod a+x "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/${_script}.sh"
-        $PRIMER_OS_SUDO ln -s "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/${_script}.sh" "${PRIMER_BINDIR%%/}/${_script}.sh"
+        $PRIMER_OS_SUDO ln -sf "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/${_script}.sh" "${PRIMER_BINDIR%%/}/${_script}.sh"
     done
 }
 
-_primer_step_dynufw_static() {
+# Install static rules. This is for opening the firewall for hostnames that will
+# never change. rules are yourhost.tld:22/tcp/d (where the port can be a range
+# instead, e.g. 8080-8090) tcp is default, when d is present, an extra entry
+# will be added to the dynamic rules files. This makes it easier to express the
+# rules without a rules configuration files when you only have a few rules.
+_primer_step_dynufw_install_static() {
     for opening in $PRIMER_STEP_DYNUFW_STATIC; do
         # Opening are in the form host.tld:80/tcp (where host.tld and tcp can be
         # omitted)
@@ -107,6 +143,7 @@ _primer_step_dynufw_static() {
                 $PRIMER_OS_SUDO ufw allow "${port}/${proto}"
             else
                 if [ -n "$dyn" ]; then
+                    # Add an entry to the main dynamic rules file.
                     if [ -x "${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh" ]; then
                         if ! grep -q "${proto}:${port}:${host}" "$PRIMER_STEP_DYNUFW_DYNPATH"; then
                             yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${host} (dynamic)"
@@ -124,7 +161,7 @@ _primer_step_dynufw_static() {
                     # (which is the format supported by UFW) and & sign to / for
                     # CIDR notation support.
                     port=$(printf %s\\n "$port" | sed 's/-/:/g')
-                    host=$(printf %s\\n "$port" | sed 's/~/\//g')
+                    host=$(printf %s\\n "$host" | sed 's/~/\//g')
                     if printf %s\\n "$host" | grep -qE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'; then
                         ip=${host}
                     else
@@ -144,9 +181,12 @@ _primer_step_dynufw_static() {
     done
 }
 
-_primer_step_dynufw_cron() {
+# Install a cron rule
+_primer_step_dynufw_install_cron() {
+    # install cron, for the time being. We might move to systemd timer soon?
+    primer_os_packages add cron
     # Schedule to run this often via crontab.
-    if crontab -l | grep -q "${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh"; then
+    if ! crontab -l | grep -q "${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh"; then
         yush_info "Arranging for ${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh to keep port openings at regular intervals"
         if [ -n "$PRIMER_STEP_DYNUFW_DNS" ]; then
             line="${PRIMER_STEP_DYNUFW_SCHEDULE} ${PRIMER_BINDIR%%/}/ufw-dynamic-host-update.sh -q -s $PRIMER_STEP_DYNUFW_DNS"
@@ -155,6 +195,6 @@ _primer_step_dynufw_cron() {
         fi
         # echo the extra line after the current crontab and give it back to
         # crontab. This is to make sure we can properly make use of sudo.
-        ($PRIMER_OS_SUDO crontab -l; echo "$line") | $PRIMER_OS_SUDO crontab -
+        ($PRIMER_OS_SUDO crontab -l || true; echo "$line") | $PRIMER_OS_SUDO crontab -
     fi
 }
