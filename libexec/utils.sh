@@ -37,6 +37,19 @@ primer_utils_load() {
     fi
 }
 
+_primer_utils_is_function() {
+    LC_ALL=C type "$1" | head -n 1 | grep -q "function"
+}
+
+primer_utils_loadif() {
+    if ! _primer_utils_is_function "primer_step_$1"; then
+        primer_utils_load "$1"
+        if ! _primer_utils_is_function "primer_step_$1"; then
+            abort "primer_step_$1 not implemented !"
+        fi
+    fi
+}
+
 # Append what comes in from stdin to a system file
 primer_utils_sysfile_append() {
     $PRIMER_OS_SUDO tee -a "$1" > /dev/null

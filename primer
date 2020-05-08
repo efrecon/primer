@@ -162,7 +162,7 @@ while IFS= read -r line; do
         # Take everything for the value in case it contains spaces.
         _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
         yush_info "Passing option --$_opt to $_step"
-        if primer_utils_load "$_step"; then
+        if primer_utils_loadif "$_step"; then
             "primer_step_$_step" option "--$_opt" "$_val"
         fi
     fi
@@ -186,7 +186,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
         yush_notice "Installing steps: $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
-            if primer_utils_load "$_step"; then
+            if primer_utils_loadif "$_step"; then
                 yush_info "Primer step install>>> $(yush_green "$_step")"
                 "primer_step_$_step" install
             fi
@@ -195,7 +195,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     clean | remove | down)
         yush_notice "Cleaning steps: $PRIMER_STEPS"
         for _step in $PRIMER_STEPS; do
-            if primer_utils_load "$_step"; then
+            if primer_utils_loadif "$_step"; then
                 yush_info "Primer step <<<clean $(yush_red "$_step")"
                 "primer_step_$_step" clean
             fi
