@@ -231,6 +231,7 @@ chmod a+x ./primer.sh
 ```
 
   [amalgamation]: https://www.sqlite.org/amalgamation.html
+  [yu.sh]: https://github.com/YanziNetworks/yu.sh
 
 ## Testing
 
