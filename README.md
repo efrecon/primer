@@ -216,6 +216,22 @@ This list will grow with personal needs, or with the help of the community.
 * `micro` installs lazydocker at the latest or a specific version. micro is a
   modern editor for the terminal.
 
+## Packaging
+
+The current implementation depends on a number of internal modules, on the
+utility library [yu.sh] and a predefined set of [steps](#steps), even though it
+is possible to create and integrate more steps. To make it easier to ship the
+script to "raw" servers, primer supports [amalgamation]. To create a single
+binary that can easily be copied to a target machine, run the following commands
+from the root directory of the project:
+
+```shell
+./libexec/yu.sh/bin/amalgamation.sh primer > primer.sh
+chmod a+x ./primer.sh
+```
+
+  [amalgamation]: https://www.sqlite.org/amalgamation.html
+
 ## Testing
 
 Primer comes with a test suite, based on [shellspec]. Provided you have
