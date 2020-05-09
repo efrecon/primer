@@ -5,6 +5,7 @@ set -eu
 
 # Root directory of the script
 PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
+### AMLG_START
 # Our library for scripts and dependencies.
 PRIMER_LIB_DIR=
 for _lib in libexec lib share/primer; do
@@ -15,7 +16,9 @@ done
 # Top directory for yu.sh
 PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 ! [ -d "$PRIMER_YUSH_DIR" ] && echo "Cannot find yu.sh directory!" >&2 && exit 1
+### AMLG_END
 
+### AMLG_START ./libexec/yu.sh/log.sh ./libexec/yu.sh/text.sh ./libexec/yu.sh/multi-arch.sh ./libexec/yu.sh/net.sh
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/log.sh"
 # shellcheck disable=SC1090
@@ -24,11 +27,13 @@ PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 . "$PRIMER_YUSH_DIR/multi-arch.sh"
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/net.sh"
-
+### AMLG_END
 
 # This is the colon separated path where to find priming steps
 PRIMER_PATH=${PRIMER_PATH:-}
+### AMLG_START
 [ -z "$PRIMER_PATH" ] && PRIMER_PATH=${PRIMER_LIB_DIR}/steps
+### AMLG_END
 
 # Space separated list of extensions for the steps
 PRIMER_EXTS=${PRIMER_EXTS:-".sh"}
@@ -55,14 +60,49 @@ primer_abort() {
     exit 1
 }
 
+### AMLG_START ./libexec/*.sh
 # Source in all relevant modules. This is where most of the "stuff" will occur.
 _modules=$(find "${PRIMER_LIB_DIR}" -maxdepth 1 -mindepth 1 \( -name '*.sh' -a ! -name 'x-*.sh' \) -exec basename '{}' \; | sed -e 's/\.sh$//g' | tr '\n' ' ')
 for module in $_modules; do
     module_path="${PRIMER_LIB_DIR}/${module}.sh"
-    yush_trace "Loading $module from $module_path"
-    # shellcheck disable=SC1090
-    . "$module_path"
+    if [ -f "$module_path" ]; then
+        yush_trace "Loading $module from $module_path"
+        # shellcheck disable=SC1090
+        . "$module_path"
+    fi
 done
+### AMLG_END
+
+### AMLG_START ./libexec/steps/*.sh
+### AMLG_END
+
+# Print usage on stderr and exit
+usage() {
+    [ -n "$1" ] && echo "$1" >&2
+    exitcode="${2:-1}"
+    cat <<USAGE >&2
+
+Description:
+
+  $YUSH_APPNAME will execute a number of steps to initialise a pristine
+  machine in a deterministic way.
+
+Usage:
+  $(basename "$0") [-option arg --long-option(=)arg] ...
+
+  where all dash-led options are as follows (long options can be followed by
+  an equal sign):
+    -s | --steps     List of steps to perform
+    -p | --path      Colon separated path to search for steps.
+    -c | --config    .env config file to read, defaults to primer.env in cwd
+    --no-subst       Do not substitute env variables in config files.
+    -xx:yy           Provided xx is a step, pass the option --yy to its function
+    -h | --help      Print this help and exit
+    -v | --verbose   Verbosity level
+
+USAGE
+    exit "$exitcode"
+}
 
 # Parse options
 PRIMER_STEP_OPTIONS= ; # --*:* options and their values will be saved here.
@@ -126,11 +166,11 @@ $_step $_opt $_val"
             YUSH_LOG_COLOUR=0; shift 1;;
 
         -h | --help)
-            usage 0;;
+            usage "" 0;;
         --)
             shift; break;;
         -*)
-            echo "Unknown option: $1 !" >&2 ; usage 1;;
+            usage "Unknown option: $1 !" 1;;
         *)
             break;;
     esac
