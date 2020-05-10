@@ -23,12 +23,14 @@ primer_step_timezone() {
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     *buntu)
-                        $PRIMER_OS_SUDO ln -fs "/usr/share/zoneinfo/$PRIMER_STEP_TIMEZONE_LOCATION" /etc/localtime
+                        [ -f /etc/localtime ] && $PRIMER_OS_SUDO rm /etc/localtime
+                        $PRIMER_OS_SUDO ln -s "/usr/share/zoneinfo/$PRIMER_STEP_TIMEZONE_LOCATION" /etc/localtime
                         primer_os_dependency "" "tzdata"
                         $PRIMER_OS_SUDO dpkg-reconfigure --frontend noninteractive tzdata
                         ;;
                     *bian)
-                        $PRIMER_OS_SUDO ln -fs "/usr/share/zoneinfo/$PRIMER_STEP_TIMEZONE_LOCATION" /etc/localtime
+                        [ -f /etc/localtime ] && $PRIMER_OS_SUDO rm /etc/localtime
+                        $PRIMER_OS_SUDO ln -s "/usr/share/zoneinfo/$PRIMER_STEP_TIMEZONE_LOCATION" /etc/localtime
                         primer_os_dependency "" "tzdata"
                         $PRIMER_OS_SUDO dpkg-reconfigure --frontend noninteractive tzdata
                         ;;
