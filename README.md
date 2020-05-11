@@ -255,3 +255,15 @@ shellspec
 You are more than welcome to contribute through [PR]s. New steps will not be
 accepted without minimal test rules or documentation. There are a few coding
 [conventions](./docs/CONVENTIONS.md) to follow for all contributors.
+
+## Credits
+
+The original idea for this utility comes from a number of projects at [Yanzi],
+including some of the code. The code has since then, undergone large
+modifications up to a point where little of the original is left.
+
+Most of the design, refactoring and rewriting has been done on my free-time. A
+few enhancements have been sponsored by [Lindborg Systems AB][lsys].
+
+  [Yanzi]: https://github.com/YanziNetworks
+  [lsys]: https://lsys.se/
