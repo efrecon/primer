@@ -58,12 +58,13 @@ primer_step_users() {
                     yush_notice "Removing existing password storage at $(yush_green "$_pwstore")"
                     rm -f "$_pwstore"
                 fi
-                while IFS= read -r line; do
+                while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
                     if [ -n "${line}" ]; then
                         username=$(printf %s\\n "$line" | cut -d ":" -f "1")
                         password=$(printf %s\\n "$line" | cut -d ":" -f "2")
-                        group=$(printf %s\\n "$line" | cut -d ":" -f "3")
+                        groups=$(printf %s\\n "$line" | cut -d ":" -f "3")
+                        group=$(yush_split "$groups" "," | head -n 1); # Primary group is first
                         details=$(printf %s\\n "$line" | cut -d ":" -f "4")
                         shell=$(printf %s\\n "$line" | cut -d ":" -f "5")
                         _caller=$(id -un)
@@ -86,6 +87,11 @@ primer_step_users() {
                                                     --gecos "$details" \
                                                     --shell "$shell" \
                                                     --password "$password"
+                            # Make user member of all other groups as of file,
+                            # and as of general settings.
+                            for g in $(yush_split "$groups" "," | tail -n +2); do
+                                primer_auth_group_membership "$username" "$g"
+                            done
                             _primer_step_users_groups_membership "$username"
                         else
                             yush_debug "User $username already exists, modifying except password"
@@ -119,7 +125,7 @@ primer_step_users() {
                     rm -f "$_pwstore"
                 fi
                 REALUSER=$(id -un)
-                while IFS= read -r line; do
+                while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
                     if [ -n "${line}" ]; then
                         username=$(printf %s\\n "$line" | cut -d ":" -f "1")
@@ -139,10 +145,10 @@ primer_step_users() {
 _primer_step_users_groups() {
     yush_debug "Collecting groups from DB at $(yush_green "$PRIMER_STEP_USERS_DB")..."
     # Collect groups
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
         if [ -n "${line}" ]; then
-            printf %s\\n "$line" | cut -d ":" -f 3
+            yush_split "$(printf %s\\n "$line" | cut -d ":" -f 3)" ","
         fi
     done < "${PRIMER_STEP_USERS_DB}" | sort -u
 }
