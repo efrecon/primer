@@ -18,10 +18,9 @@ PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-1b02882d6
 # packages) or auto (as in: pick the best one of both worlds)
 PRIMER_STEP_DOCKER_PACKAGING=${PRIMER_STEP_DOCKER_PACKAGING:-auto}
 
-# Will make all regular users of the system members of the Docker group. Doing
-# so gives all users root access, so this is perhaps safe when targeting
-# servers, but definitely not when initialising desktops machines.
-PRIMER_STEP_DOCKER_ACCESS_ALL_USERS=${PRIMER_STEP_DOCKER_ACCESS_ALL_USERS:-1}
+# All regular users matching this regular expression will be made member of the
+# docker group. In practice these users will be given root access!
+PRIMER_STEP_DOCKER_ACCESS=${PRIMER_STEP_DOCKER_ACCESS:-}
 
 # Where to get the docker installation script from
 PRIMER_STEP_DOCKER_GET_URL=https://get.docker.com/
@@ -37,7 +36,7 @@ primer_step_docker() {
                     --sha256)
                         PRIMER_STEP_DOCKER_INSTALL_SHA256="$2"; shift 2;;
                     --access)
-                        PRIMER_STEP_DOCKER_ACCESS_ALL_USERS="$2"; shift 2;;
+                        PRIMER_STEP_DOCKER_ACCESS="$2"; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -50,14 +49,16 @@ primer_step_docker() {
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
+                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] \
+                                || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
                             primer_os_packages add docker
                         else
                             yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on Alpine"
                         fi
                         ;;
                     clear*linux*)
-                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
+                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] \
+                                || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
                             primer_os_packages add containers-basic
                         else
                             yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on ClearLinux"
@@ -101,18 +102,21 @@ primer_step_docker() {
             # Note that we cannot detect, nor call the docker client with the
             # single string "docker" since it is the name of the function
             # implemented by this module.
-            _docker_bin=$(which docker || true)
-            if [ -n "$_docker_bin" ]; then
-                # Create group and make sure user is part of the group
+            if command -v docker; then
+                # Create group and make sure relevant users are part of the
+                # group
                 primer_auth_group_add docker
-                [ "$(id -u)" != "0" ] && primer_auth_group_membership "$(id -un)" docker
-                if yush_is_true "$PRIMER_STEP_DOCKER_ACCESS_ALL_USERS"; then
-                    yush_debug "Adding all regular users on system to group docker"
-                    primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
-                        primer_auth_group_membership "$_username" docker
+                if [ -n "$PRIMER_STEP_DOCKER_ACCESS" ]; then
+                    yush_info "Adding all users on system matching $PRIMER_STEP_DOCKER_ACCESS to group docker"
+                    primer_auth_user_list | while IFS= read -r _username || [ -n "$_username" ]; do
+                        if printf %s\\n "$_username" | grep -qE "$PRIMER_STEP_DOCKER_ACCESS" \
+                                && [ "$(id -u "$_username")" != "0" ]; then
+                            yush_debug "Making $_username a member of the docker group"
+                            primer_auth_group_membership "$_username" docker
+                        fi
                     done
                 else
-                    yush_info "Only $(id -un) has access to Docker"
+                    yush_info "Only root has access to Docker"
                 fi
 
                 # Arrange for access to docker registries
@@ -123,20 +127,22 @@ primer_step_docker() {
                     _pass=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\3/')
                     _host=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\4/')
                     yush_info "Logging in at $_host as $_user"
-                    printf %s\\n "$_pass" | "$_docker_bin" login --password-stdin -u "$_user" "$_host"
+                    printf %s\\n "$_pass" | docker login --password-stdin -u "$_user" "$_host"
                 done
 
                 if [ -n "$PRIMER_STEP_DOCKER_REGISTRY" ]; then
                     if [ "$_prior_settings" = "0" ]; then
-                        primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username; do
-                            _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
-                            if ! [ -f "$_home/.docker/config.json" ]; then
-                                $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
-                                $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
-                                primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
-                                yush_info "Local user $_username logged in at all Docker registries from above"
-                            else
-                                yush_warn "Skipped login for $_username, found existing settings at $_home/.docker/config.json"
+                        primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username || [ -n "$_username" ]; do
+                            if printf %s\\n "$_username" | grep -qE "$PRIMER_STEP_DOCKER_ACCESS"; then
+                                _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
+                                if ! [ -f "$_home/.docker/config.json" ]; then
+                                    $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
+                                    $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
+                                    primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
+                                    yush_info "Local user $_username logged in at all Docker registries from above"
+                                else
+                                    yush_warn "Skipped login for $_username, found existing settings at $_home/.docker/config.json"
+                                fi
                             fi
                         done
                     else
