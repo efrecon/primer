@@ -37,6 +37,16 @@ primer_os_distribution() {
 	printf %s\\n "$lsb_dist" | tr '[:upper:]' '[:lower:]'
 }
 
+primer_os_version() {
+	_version=""
+	# Every system that we officially support has /etc/os-release
+	if [ -r /etc/os-release ]; then
+        # shellcheck disable=SC1091
+		_version="$(. /etc/os-release && echo "$VERSION_ID")"
+	fi
+	printf %s\\n "$_version" | tr '[:upper:]' '[:lower:]'
+}
+
 PRIMER_PKGIDX_UPDATED=${PRIMER_PKGIDX_UPDATED:-"0"}
 primer_os_update() {
     if [ "$PRIMER_PKGIDX_UPDATED" = "0" ]; then
@@ -105,6 +115,7 @@ primer_os_packages() {
     lsb_dist=$(primer_os_distribution)
     case "$1" in
         add|install)
+            # Add one or more packages
             shift
             yush_info "Installing packages: $*"
             # Construct a list of packages that haven't been installed yet.
@@ -138,6 +149,7 @@ primer_os_packages() {
             fi
             ;;
         del*|remove|uninstall)
+            # Remove one or more packages
             shift
             yush_info "Removing packages: $*"
             case "$lsb_dist" in
@@ -166,6 +178,7 @@ primer_os_packages() {
             esac
             ;;
         list)
+            # List installed packages
             case "$lsb_dist" in
                 *buntu)
                     $PRIMER_OS_SUDO dpkg --get-selections | grep -v deinstall | awk '{print $1}'
@@ -185,8 +198,33 @@ primer_os_packages() {
             esac
             ;;
         installed)
+            # Is package passed as argument installed
             shift
             primer_os_packages list | grep -q "$1"
+            ;;
+        search)
+            case "$lsb_dist" in
+                *buntu)
+                    $PRIMER_OS_SUDO apt-cache search "$1" |
+                        sed -E 's/([[:alnum:]\-_]+)\s+-\s*.*/\1/' |
+                        grep "^$1\$"
+                    ;;
+                *bian)
+                    $PRIMER_OS_SUDO apt-cache search "$1" |
+                        sed -E 's/([[:alnum:]\-_]+)\s+-\s*.*/\1/' |
+                        grep "^$1\$"
+                    ;;
+                alpine*)
+                    _primer_os_apk search -x "$1"
+                    ;;
+                clear*linux*)
+                    _primer_os_swupd search "$1" |
+                        grep -E '\s+\-\s+' |
+                        awk '{print $1}'
+                    ;;
+                *)
+                    yush_warn "Package search for $lsb_dist";;
+            esac
             ;;
     esac
 }

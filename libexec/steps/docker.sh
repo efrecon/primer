@@ -8,9 +8,19 @@ PRIMER_STEP_DOCKER_APT_GPG=${PRIMER_STEP_DOCKER_APT_GPG:-0EBFCD88}
 PRIMER_STEP_DOCKER_REGISTRY=${PRIMER_STEP_DOCKER_REGISTRY:-}
 
 # Commit SHA sum contained in script, so we do not run something that has not
-# been verified.
+# been verified. Every time the installation script is changed, the commit
+# sha256 will change, meaning that this variable has to change. Setting it to
+# empty will disable the check, which is a security risk as this means executing
+# a script downloaded from the Internet...
 PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-1b02882d63b9cfc484ad6b0180171c679cfe0f3a}
 
+# Can be native (as in: OS native packaging), docker (as in: docker.com provided
+# packages) or auto (as in: pick the best one of both worlds)
+PRIMER_STEP_DOCKER_PACKAGING=${PRIMER_STEP_DOCKER_PACKAGING:-auto}
+
+# Will make all regular users of the system members of the Docker group. Doing
+# so gives all users root access, so this is perhaps safe when targeting
+# servers, but definitely not when initialising desktops machines.
 PRIMER_STEP_DOCKER_ACCESS_ALL_USERS=${PRIMER_STEP_DOCKER_ACCESS_ALL_USERS:-1}
 
 # Where to get the docker installation script from
@@ -40,47 +50,39 @@ primer_step_docker() {
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
-                        primer_os_packages add docker
+                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
+                            primer_os_packages add docker
+                        else
+                            yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on Alpine"
+                        fi
                         ;;
                     clear*linux*)
-                        primer_os_packages add containers-basic
-                        ;;
-                    *)
-                        # Ensure we have curl
-                        primer_os_dependency curl
-
-                        # Download the installation script from getdocker
-                        yush_info "Downloading and running Docker installation script from $(yush_yellow "$PRIMER_STEP_DOCKER_GET_URL")"
-                        _get=$(mktemp)
-                        curl -fsSL "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
-                        if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
-                            if grep 'SCRIPT_COMMIT_SHA=' "$_get" | grep -q "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
-                                yush_info "Verified Docker installation script, running it now"
-                                sh "$_get"
-                            else
-                                yush_warn "Commit SHA in script diffs from $PRIMER_STEP_DOCKER_INSTALL_SHA256. Maybe a new version? Verify the script and run again with --docker:sha256"
-                                yush_error "Unable to verify Docker installation script!!"
-                                return 1
-                            fi
+                        if [ "$PRIMER_STEP_DOCKER_PACKAGING" = "auto" ] || [ "$PRIMER_STEP_DOCKER_PACKAGING" = "native" ]; then
+                            primer_os_packages add containers-basic
+                        else
+                            yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on ClearLinux"
                         fi
-
-                        # On debian we try to ensure that we have the proper
-                        # repository so we have some additional degree of
-                        # security.
-                        case "$lsb_dist" in
-                            *buntu|*bian)
-                                yush_info "Verifying Docker GPG short key against: $(yush_green $PRIMER_STEP_DOCKER_APT_GPG)"
-                                dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
-                                if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
-                                    abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
+                        ;;
+                    *buntu)
+                        _primer_step_docker_install_debian;;
+                    *bian)
+                        _primer_step_docker_install_debian;;
+                    *)
+                        # Prefer the docker installation whenever possible, do
+                        # some guesswork otherwise. This is likely to fail...
+                        case "$PRIMER_STEP_DOCKER_PACKAGING" in
+                            "docker")
+                                _primer_step_docker_install_getdocker
+                                ;;
+                            "native")
+                                _primer_step_docker_install_guess
+                                ;;
+                            "auto")
+                                if ! _primer_step_docker_install_getdocker; then
+                                    _primer_step_docker_install_guess
                                 fi
-                                ;;
-                            *)
-                                yush_warn "Cannot verify proper package provider on $lsb_dist"
-                                ;;
+                               ;;
                         esac
-
-                        rm -f "$_get"
                         ;;
                 esac
             fi
@@ -176,7 +178,7 @@ primer_step_docker() {
 }
 
 _primer_step_docker_uninstall_debian() {
-    primer_os_packages del docker-ce-cli docker-ce
+    primer_os_packages del docker-ce-cli docker-ce docker.io
     dkey_present=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1)
     if [ -n "$dkey_present" ]; then
         yush_info "Removing docker GPG key"
@@ -196,4 +198,98 @@ _primer_step_docker_uninstall_debian() {
         primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
         $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
     fi
+}
+
+_primer_step_docker_install_debian() {
+    method=${1:-$PRIMER_STEP_DOCKER_PACKAGING}
+    case "$method" in
+        "docker")
+            _primer_step_docker_install_getdocker
+            # On debian we try to ensure that we have the proper
+            # repository so we have some additional degree of
+            # security.
+            lsb_dist=$(primer_os_distribution)
+            case "$lsb_dist" in
+                *buntu)
+                    _primer_step_docker_install_apt_verify;;
+                *bian)
+                    _primer_step_docker_install_apt_verify;;
+                *)
+                    yush_warn "Cannot verify proper package provider on $lsb_dist"
+                    ;;
+            esac
+            ;;
+        "native")
+            primer_os_packages add docker.io
+            ;;
+        "auto")
+            lsb_dist=$(primer_os_distribution)
+            case "$lsb_dist" in
+                *buntu)
+                    modern=$(primer_os_version | LC_ALL=c awk '{if ($1 > 19) print $1}')
+                    if [ -n "$modern" ]; then
+                        _primer_step_docker_install_debian "native"
+                    else
+                        _primer_step_docker_install_debian "docker"
+                    fi
+                    ;;
+                *bian)
+                    modern=$(primer_os_version | LC_ALL=c awk '{if ($1 > 9) print $1}')
+                    if [ -n "$modern" ]; then
+                        _primer_step_docker_install_debian "native"
+                    else
+                        _primer_step_docker_install_debian "docker"
+                    fi
+                    ;;
+                *)
+                    if ! _primer_step_docker_install_getdocker; then
+                        _primer_step_docker_install_guess
+                    fi
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_primer_step_docker_install_apt_verify() {
+    yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
+    dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
+    if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
+        abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
+    fi
+}
+
+_primer_step_docker_install_getdocker() {
+    # Ensure we have curl
+    primer_os_dependency curl
+
+    # Download the installation script from getdocker
+    yush_info "Downloading and running Docker installation script from $(yush_yellow "$PRIMER_STEP_DOCKER_GET_URL")"
+    _get=$(mktemp)
+    curl -fsSL "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
+    if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
+        if grep 'SCRIPT_COMMIT_SHA=' "$_get" | grep -q "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
+            yush_info "Verified Docker installation script, running it now"
+            sh "$_get"
+        else
+            yush_warn "Commit SHA in script diffs from $PRIMER_STEP_DOCKER_INSTALL_SHA256. Maybe a new version? Verify the script and run again with --docker:sha256"
+            yush_error "Unable to verify Docker installation script!!"
+            rm -f "$_get"
+            return 1
+        fi
+    fi
+
+    # Cleanup
+    rm -f "$_get"
+}
+
+_primer_step_docker_install_guess() {
+    for pkg in docker.io docker-ce docker-engine docker; do
+        candidate=$(primer_os_packages search "$pkg"|head -1)
+        if [ -n "$candidate" ]; then
+            yush_notice "Picked package $candidate for Docker installation"
+            primer_os_packages install "$candidate"
+            break
+        fi
+    done
 }
