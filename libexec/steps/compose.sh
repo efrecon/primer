@@ -34,6 +34,7 @@ primer_step_compose() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--python --version --sha256"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --python)

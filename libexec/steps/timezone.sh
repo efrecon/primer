@@ -7,6 +7,7 @@ primer_step_timezone() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--location"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --location)

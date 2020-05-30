@@ -7,6 +7,7 @@ primer_step_forever() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--sleep"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --sleep)

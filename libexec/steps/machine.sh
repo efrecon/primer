@@ -25,6 +25,7 @@ primer_step_machine() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--version --sha256"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --version)

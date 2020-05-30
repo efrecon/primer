@@ -12,6 +12,7 @@ primer_step_packages() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--packages --fresh"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --packages)

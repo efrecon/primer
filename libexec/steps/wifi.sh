@@ -16,6 +16,7 @@ primer_step_wifi() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--interface --essid|--network|--ssid --psk|--password|--key|--passphrase"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --interface)

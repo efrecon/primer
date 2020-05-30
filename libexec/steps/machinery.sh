@@ -10,6 +10,7 @@ primer_step_machinery() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--branch"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --branch)

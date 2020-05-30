@@ -9,6 +9,7 @@ primer_step_sshkeys() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--type"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --type)
