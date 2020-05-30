@@ -38,12 +38,6 @@ primer_utils_load() {
     fi
 }
 
-primer_utils_loaded() {
-    set | grep ' ()'
-    exit
-    set | grep -oE "^primer_step_([a-z0-9_]+)\s+\(\)" | sed -E 's/primer_step_([a-z0-9_]+)\s+\(\)/\1/'
-}
-
 _primer_utils_is_function() {
     LC_ALL=C type "$1" | head -n 1 | grep -q "function"
 }
