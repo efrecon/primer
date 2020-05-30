@@ -1,17 +1,18 @@
 #!/usr/bin/env sh
 
-primer_utils_locate() {
-    yush_debug "Locating $1 in $PRIMER_PATH"
+primer_utils_find() {
+    yush_debug "Finding $1 in $PRIMER_PATH"
     for _dir in $(yush_split "$PRIMER_PATH" ":"); do
         for _ext in $PRIMER_EXTS; do
-            _fpath="${_dir%%/}/${1}.${_ext##*.}"
-            if [ -f "$_fpath" ]; then
-                printf %s\\n "$_fpath"
-                return 0;
-            fi
+            find "${_dir%%/}" -mindepth 1 -maxdepth 1 -type f -name "${1}.${_ext##*.}"
         done
     done
-    return 1;
+}
+
+primer_utils_locate() {
+    _fpath=$(primer_utils_find "$1" | head -n 1)
+    [ -z "$_fpath" ] && return 1
+    printf %s\\n "$_fpath"
 }
 
 _primer_utils_var_exists() {
@@ -35,6 +36,12 @@ primer_utils_load() {
             export "${_varname}=${_impl}"
         fi
     fi
+}
+
+primer_utils_loaded() {
+    set | grep ' ()'
+    exit
+    set | grep -oE "^primer_step_([a-z0-9_]+)\s+\(\)" | sed -E 's/primer_step_([a-z0-9_]+)\s+\(\)/\1/'
 }
 
 _primer_utils_is_function() {
