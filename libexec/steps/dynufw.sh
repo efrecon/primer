@@ -13,7 +13,7 @@ PRIMER_STEP_DYNUFW_BRANCH=${PRIMER_STEP_DYNUFW_BRANCH:-master}
 # DNS server to use, empty for host default
 PRIMER_STEP_DYNUFW_DNS=${PRIMER_STEP_DYNUFW_DNS:-}
 
-PRIMER_STEP_DYNUFW_SCHEDULE=${PRIMER_STEP_DYNUFW_SCHEDULE:-"* * * * *"}
+PRIMER_STEP_DYNUFW_SCHEDULE=${PRIMER_STEP_DYNUFW_SCHEDULE:-'* * * * *'}
 
 # Repo for dynufw scripts
 PRIMER_STEP_DYNUFW_REPO=https://github.com/efrecon/dynufw.git
