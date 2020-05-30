@@ -245,10 +245,13 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
         ;;
     env*)
         yush_info "Getting known accessible steps"
-        # This does not work when amalgamated
+### AMLG_START
         for _fpath in $(primer_utils_find '*'); do
             _step=$(yush_basename "$_fpath")
             echo "${_step%.*}"
-        done        
+        done
+### AMLG_END
+        grep -oE "^primer_step_([a-z0-9_]+)\s*\(\)" "$0" |
+            sed -E 's/primer_step_([a-z0-9_]+)\s*\(\)/\1/'
         ;;
 esac
