@@ -23,7 +23,7 @@ _primer_utils_var_exists() {
 _primer_utils_var_value() { eval printf %s "\$$1"; }
 
 primer_utils_load() {
-    _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
+    _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
     if _primer_utils_var_exists "$_varname"; then
         yush_debug "$1 already loaded from $(_primer_utils_var_value "$_varname")"
     else
@@ -32,8 +32,19 @@ primer_utils_load() {
             yush_info "Loading $1 implementation from $_impl"
             # shellcheck disable=SC1090
             . "$_impl"
-            _varname=PRIMER_STEP_$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
+            _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
             export "${_varname}=${_impl}"
+        fi
+    fi
+}
+
+primer_utils_origin() {
+    _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
+    if _primer_utils_var_exists "$_varname"; then
+        _primer_utils_var_value "$_varname"
+    elif _primer_utils_is_function "primer_step_$1"; then
+        if grep -oEq "^primer_step_${1}\s*\(\)" "$0"; then
+            printf %s\\n "$0"
         fi
     fi
 }
