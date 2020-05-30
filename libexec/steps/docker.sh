@@ -29,6 +29,7 @@ primer_step_docker() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--registry --sha256 --access"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --registry)

@@ -22,6 +22,7 @@ primer_step_micro() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--version"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --version)

@@ -7,6 +7,7 @@ primer_step_locale() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--locale"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --locale)

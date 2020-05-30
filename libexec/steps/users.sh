@@ -25,6 +25,7 @@ primer_step_users() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--db --save --ext"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --db)

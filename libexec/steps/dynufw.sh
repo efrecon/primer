@@ -26,6 +26,7 @@ primer_step_dynufw() {
     case "$1" in
         "option")
             shift;
+            [ "$#" = "0" ] && echo "--static --rules --dns"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --static)
