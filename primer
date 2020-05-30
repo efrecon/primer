@@ -18,11 +18,13 @@ PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 ! [ -d "$PRIMER_YUSH_DIR" ] && echo "Cannot find yu.sh directory!" >&2 && exit 1
 ### AMLG_END
 
-### AMLG_START ./libexec/yu.sh/log.sh ./libexec/yu.sh/text.sh ./libexec/yu.sh/multi-arch.sh ./libexec/yu.sh/net.sh
+### AMLG_START ./libexec/yu.sh/log.sh ./libexec/yu.sh/text.sh ./libexec/yu.sh/file.sh ./libexec/yu.sh/multi-arch.sh ./libexec/yu.sh/net.sh
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/log.sh"
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/text.sh"
+# shellcheck disable=SC1090
+. "$PRIMER_YUSH_DIR/file.sh"
 # shellcheck disable=SC1090
 . "$PRIMER_YUSH_DIR/multi-arch.sh"
 # shellcheck disable=SC1090
@@ -240,5 +242,13 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
                 "primer_step_$_step" clean
             fi
         done
+        ;;
+    env*)
+        yush_info "Getting known accessible steps"
+        # This does not work when amalgamated
+        for _fpath in $(primer_utils_find '*'); do
+            _step=$(yush_basename "$_fpath")
+            echo "${_step%.*}"
+        done        
         ;;
 esac
