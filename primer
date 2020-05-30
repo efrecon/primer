@@ -108,12 +108,13 @@ USAGE
 
 # Parse options
 PRIMER_STEP_OPTIONS= ; # --*:* options and their values will be saved here.
+OPT_STEPS=
 while [ $# -gt 0 ]; do
     case "$1" in
         -s | --steps)
-            PRIMER_STEPS=$2; shift 2;;
+            OPT_STEPS=$2; shift 2;;
         --steps=*)
-            PRIMER_STEPS="${1#*=}"; shift 1;;
+            OPT_STEPS="${1#*=}"; shift 1;;
 
         -p | --path)
             PRIMER_PATH=$2; shift 2;;
@@ -197,6 +198,7 @@ fi
 # Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
 # respective modules. This is because command-line options should have
 # precedence over environment variables (even if read from file).
+[ -n "$OPT_STEPS" ] && PRIMER_STEPS=$OPT_STEPS
 while IFS= read -r line; do
     if [ -n "$line" ]; then
         _step=$(printf %s\\n "$line" | cut -d " " -f 1)
@@ -223,6 +225,8 @@ else
     cmd=install
 fi
 
+# Return the list of known steps. Due to amalgamation, there is a possibility
+# that steps are printed out twice.
 primer_steps() {
 ### AMLG_START
     for _fpath in $(primer_utils_find '*'); do
@@ -237,6 +241,37 @@ primer_steps() {
     # shells. So we grep inside our own code.
     grep -oE "^primer_step_([a-z0-9_]+)\s*\(\)" "$0" |
         sed -E 's/primer_step_([a-z0-9_]+)\s*\(\)/\1/'
+}
+
+# Print out information about a given step: the command line options and flags
+# that it takes, and the external variables that can be set to change it
+# behaviour.
+primer_info() {
+    _oldstate=$(set +o); set -f
+    if primer_utils_loadif "$1"; then
+        # Print out the step and the options that it accepts through
+        # asking for its options.
+        printf "%s: %s\n" "$1" "$("primer_step_$1" option)"
+        # Now, for all known variables starting with the PRIMER_STEP
+        # followed by the name of the step in uppercase, look for the
+        # ones that can be set from the outside and print out their
+        # current value.
+        _vars=PRIMER_STEP_$(printf %s\\n "$1" | tr '[:lower:]' '[:upper:]')
+        for _varset in $(set|grep "^$_vars"|grep "="); do
+            # The variable name is everything before the equal sign.
+            _var=$(printf %s\\n "$_varset" | sed -E 's/^(PRIMER_STEP_[A-Z0-9_]+)=.*/\1/')
+            # Ask where the step was loaded from
+            _origin=$(primer_utils_origin "$1")
+            # If we found an origin and the variable is set from itself
+            # as a default, then it is an external variable. Print out
+            # the original set line.
+            if [ -n "$_origin" ] && grep -Eq "^${_var}\s*=\s*\\\${${_var}:" "$_origin"; then
+                printf \\t%s\\n "$_varset"
+            fi
+        done
+    fi
+    set +vx; eval "$_oldstate"
+
 }
 
 # Pass the command to all relevant steps, in order.
@@ -262,9 +297,13 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     env*)
         yush_info "Getting known accessible steps"
         for _step in $(primer_steps | sort -u); do
-            if primer_utils_loadif "$_step"; then
-                printf "%s: %s\n" "$_step" "$("primer_step_$_step" option)"
-            fi
+            primer_info "$_step"
+        done
+        ;;
+    info*)
+        yush_info "Getting info for steps to run"
+        for _step in $PRIMER_STEPS; do
+            primer_info "$_step"
         done
         ;;
 esac
