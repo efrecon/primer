@@ -191,7 +191,8 @@ operate on existing OS installations in a reproducible way.
 
 At the time of writing, primer already have the following steps implemented.
 This list will grow with personal needs, or with the help of the community.
-[PR]s are welcome!
+[PR]s are welcome! Some inspiration can be taken from the [config][cc]
+implementation in [cloud-init].
 
 * `packages` upgrades the system to the latest and installs additional packages.
 * `users` takes a `/etc/passwd` inspired colon separated file to create a number
@@ -215,6 +216,8 @@ This list will grow with personal needs, or with the help of the community.
   installation.
 * `micro` installs lazydocker at the latest or a specific version. micro is a
   modern editor for the terminal.
+
+  [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
 
 ## Packaging
 
