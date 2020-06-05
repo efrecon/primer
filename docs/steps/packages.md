@@ -4,13 +4,13 @@
 
 ## Description
 
-The `packages` step will install a number of packages for the underlying OS.
-Portability across distriburions is impaired by the fact that similar packages
-are not called the same in all distributions. By default, the list of packages
-currently installed on the operating system is both updated and upgraded to
-their latest versions. This means, that specifying this step will automatically
-upgrade your system to the latest versions of all packages, thus providing for
-security patches.
+The `packages` step will install/remove a number of packages for the underlying
+OS. Portability across distriburions is impaired by the fact that similar
+packages are not called the same in all distributions. By default and when
+installing, the list of packages currently installed on the operating system is
+both updated and upgraded to their latest versions. This means, that specifying
+this step will automatically upgrade your system to the latest versions of all
+packages, thus providing for security patches.
 
 ## Options
 
@@ -30,7 +30,7 @@ the system will be updated and all packages will be upgraded.
 ### `PRIMER_STEP_PACKAGES_PACKAGES`
 
 This environment variable is the same as the [`--packages`](#--packages) option.
-It contains twice the `PACKAGES` word in order to respect the naming
+It contains twice the word `PACKAGES` in order to respect the naming
 conventions, i.e. once for the name of the step itself, and once for what it
 targets, i.e. the list of packages.
 

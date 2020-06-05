@@ -98,14 +98,16 @@ on unmanned servers.
 
 As the container automatically dies and disappear once `primer` has finished, it
 is hard to verify what happened. You can however start the installation of
-another step called `forever` after the step called `docker`. `forever` is a
-dummy step that will sleep forever when requested to be installed. It is
-implemented [here](./libexec/steps/forever.sh). Modify the command example above
-by giving the following option to `primer`:
+another step called `forever` after the step called `docker`.
+[`forever`][forever] is a dummy step that will sleep forever when requested to
+be installed. It is implemented [here](./libexec/steps/forever.sh). Modify the
+command example above by giving the following option to `primer`:
 
 ```shell
 -s "docker forever"
 ```
+
+  [forever]: ./docs/steps/forever.md
 
 `primer` will executes both steps in sequence and `forever` will have the side
 effect that the container remains up and running, doing mostly nothing. You
@@ -201,9 +203,9 @@ implementation in [cloud-init].
   be made members of additional groups (e.g. `sudo`?). The module is able to
   generate strong passwords for all these users if necessary.
 * `timezone` places the host at a given location.
-* `sshkeys` automatically generates strong SSH keys for the calling user. The
-  target of this module are deploy keys when interacting with automated CI
-  systems.
+* [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
+  user. The target of this module are deploy keys when interacting with
+  automated CI systems.
 * `docker` installs the Docker daemon and client, it has been described above.
 * `compose` installs Docker compose at the latest or a specific version,
   together with bash completion. The binary integrity can be verified before
@@ -220,6 +222,7 @@ implementation in [cloud-init].
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
+  [sshkeys]: ./docs/steps/sshkeys.md
 
 ## Packaging
 
