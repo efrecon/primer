@@ -194,7 +194,8 @@ This list will grow with personal needs, or with the help of the community.
 [PR]s are welcome! Some inspiration can be taken from the [config][cc]
 implementation in [cloud-init].
 
-* `packages` upgrades the system to the latest and installs additional packages.
+* [`packages`][packages] upgrades the system to the latest and installs
+  additional packages.
 * `users` takes a `/etc/passwd` inspired colon separated file to create a number
   of users on the host system. Relevant groups will be created and all users can
   be made members of additional groups (e.g. `sudo`?). The module is able to
@@ -218,6 +219,7 @@ implementation in [cloud-init].
   modern editor for the terminal.
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
+  [packages]: ./docs/steps/packages.md
 
 ## Packaging
 
