@@ -1,6 +1,6 @@
 # packages
 
-`packages` freshens the OS installation and install additional packages.
+`packages` freshens the OS installation and installs additional packages.
 
 ## Description
 
@@ -29,11 +29,11 @@ the system will be updated and all packages will be upgraded.
 
 ### `PRIMER_STEP_PACKAGES_PACKAGES`
 
-This environment variable is the same as the [`--packages`][#--packages] option.
+This environment variable is the same as the [`--packages`](#--packages) option.
 It contains twice the `PACKAGES` word in order to respect the naming
 conventions, i.e. once for the name of the step itself, and once for what it
 targets, i.e. the list of packages.
 
 ### `PRIMER_STEP_PACKAGES_FRESH`
 
-This environment variable is the same as the [`--fresh`][#--fresh] option.
+This environment variable is the same as the [`--fresh`](#--fresh) option.
