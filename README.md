@@ -208,9 +208,9 @@ implementation in [cloud-init].
   user. The target of this module are deploy keys when interacting with
   automated CI systems.
 * [`docker`][docker] installs the Docker daemon and client, it has been described above.
-* `compose` installs Docker compose at the latest or a specific version,
-  together with bash completion. The binary integrity can be verified before
-  installation.
+* [`compose`][compose] installs Docker compose at the latest or a specific
+  version, together with bash completion. The binary integrity can be verified
+  before installation.
 * `machine` installs Docker machine at the latest or a specific version,
   together with bash completion. The binary integrity can be verified before
   installation.
@@ -226,6 +226,7 @@ implementation in [cloud-init].
   [users]: ./docs/steps/users.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
+  [compose]: ./docs/steps/compose.md
 
 ## Packaging
 
