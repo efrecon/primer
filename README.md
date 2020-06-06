@@ -206,7 +206,7 @@ implementation in [cloud-init].
 * [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
   user. The target of this module are deploy keys when interacting with
   automated CI systems.
-* `docker` installs the Docker daemon and client, it has been described above.
+* [`docker`][docker] installs the Docker daemon and client, it has been described above.
 * `compose` installs Docker compose at the latest or a specific version,
   together with bash completion. The binary integrity can be verified before
   installation.
@@ -224,6 +224,7 @@ implementation in [cloud-init].
   [packages]: ./docs/steps/packages.md
   [users]: ./docs/steps/users.md
   [sshkeys]: ./docs/steps/sshkeys.md
+  [docker]: ./docs/steps/docker.md
 
 ## Packaging
 
