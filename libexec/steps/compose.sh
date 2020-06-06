@@ -20,14 +20,14 @@ PRIMER_STEP_COMPOSE_PYTHON=${PRIMER_STEP_COMPOSE_PYTHON:-failure}
 
 # glibc for Alpine package version to use. Can be set from the outside, defaults
 # to empty, meaning the latest as per the variable below.
-GLIBC_VERSION=${GLIBC_VERSION:-}
+PRIMER_STEP_COMPOSE_GLIBC_VERSION=${PRIMER_STEP_COMPOSE_GLIBC_VERSION:-}
 
 # URL to JSON file where to find the list of releases of the glibc for Alpine
 # packages. The code only supports github API.
-GLIBC_RELEASES=https://api.github.com/repos/sgerrand/alpine-pkg-glibc/tags
+PRIMER_STEP_COMPOSE_GLIBC_RELEASES=https://api.github.com/repos/sgerrand/alpine-pkg-glibc/tags
 
 # URL to the public key that has signed the glibc Alpine packages.
-GLIBC_PUBKEY=https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
+PRIMER_STEP_COMPOSE_GLIBC_PUBKEY=https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub
 
 
 primer_step_compose() {
@@ -174,20 +174,20 @@ _primer_step_compose_install_download() {
 # command line.
 _primer_step_compose_install_glibc() {
     # Detect latest version
-    if [ -z "$GLIBC_VERSION" ]; then
+    if [ -z "$PRIMER_STEP_COMPOSE_GLIBC_VERSION" ]; then
         yush_info "Discovering latest glibc support release version"
-        GLIBC_VERSION=$(    curl -fSL --progress-bar "$GLIBC_RELEASES" |
+        PRIMER_STEP_COMPOSE_GLIBC_VERSION=$(    curl -fSL --progress-bar "$PRIMER_STEP_COMPOSE_GLIBC_RELEASES" |
                             grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*(-r[0-9])"' |
                             sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*(-r[0-9]))",/\1/g' |
                             head -1)
     fi
 
-    yush_info "Installing glibc support at version $GLIBC_VERSION"
+    yush_info "Installing glibc support at version $PRIMER_STEP_COMPOSE_GLIBC_VERSION"
     GLIBC_TMPDIR=$(mktemp -d)
-    $PRIMER_OS_SUDO curl -fSL --progress-bar "$GLIBC_PUBKEY" -o /etc/apk/keys/sgerrand.rsa.pub
-    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-${GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-${GLIBC_VERSION}.apk"
-    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-${GLIBC_VERSION}.apk"
-    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VERSION}/glibc-bin-${GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
-    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${GLIBC_VERSION}.apk"
+    $PRIMER_OS_SUDO curl -fSL --progress-bar "$PRIMER_STEP_COMPOSE_GLIBC_PUBKEY" -o /etc/apk/keys/sgerrand.rsa.pub
+    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
+    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
+    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
+    $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
     rm -rf "$GLIBC_TMPDIR"
 }
