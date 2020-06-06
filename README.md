@@ -81,9 +81,9 @@ this is most likely going to be pretty printed with a few colours instead:
 [20200428-200354] [primer] [notice] Service docker enable is not relevant in a container
 ```
 
-Primer finds out the implementation of the step called `docker` at
+Primer finds out the implementation of the step called [`docker`][docker] at
 `/primer/libexec/steps/docker.sh` and start requesting the implementation to
-install. The implemenation at `docker.sh` is loaded into the main process on
+install. The implementation at `docker.sh` is loaded into the main process on
 demand. It needs to have a function called with the same name, prefixed with
 `primer_step_`, i.e. `primer_step_docker`. The function might be called a few
 times under the installation procedure. By default, the current implementation
@@ -115,10 +115,10 @@ should then be able to `docker exec -it` into it from another terminal and poke
 around.
 
 The `docker` installation step can do much more. It is for example able to
-register at a Docker registry for one (the caller) or all users, and would
-install Docker directly using the official installation [script][install] on
-other distrbutions. The script, as it is downloaded from the Internet, will be
-checked for integrity and on Debian derivatives the GPG signature of the
+register at a Docker registry for one (the caller) or some seleted users, and
+would install Docker directly using the official installation [script][install]
+on other distributions. The script, as it is downloaded from the Internet, will
+be checked for integrity and on Debian derivatives the GPG signature of the
 official Docker repository that it adds to the system will be validated.
 Provided you have an account at gitlab.com, the following would install Docker
 in an ubuntu container instead, and login the main user (again `root` in the
@@ -174,7 +174,8 @@ docker run \
   -v $(pwd):/primer:ro \
   --entrypoint /primer/primer \
   ubuntu \
-  --users:db /primer/spec/support/data/users.db
+  --users:db /primer/spec/support/data/users.db \
+  --docker:access ".*"
 ```
 
 Primer sports a number of options to control its behaviour, but also recognises
