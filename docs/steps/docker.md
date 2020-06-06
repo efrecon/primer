@@ -7,7 +7,7 @@ able to access the locally installed and running Docker daemon.
 
 The `docker` step arranges for the Docker [daemon] and CLI [client] to be
 installed on the host. The daemon will be started and scheduled for start at
-every boot, and a list of users can be arranged for access to the daemon. The
+every boot, and some users can be arranged for access to the daemon. The
 `docker` step can arrange for those users to automatically be able to access a
 number of remote [registries][registry].
 
@@ -38,8 +38,9 @@ the convenience [script] used whenever necessary.
 
 ### `--access`
 
-List of users already present on the host that should be given access to the
-Docker [daemon].
+All regular (non-system) users already present on the host that have a name
+matching this extended regular expression should be given access to the Docker
+[daemon].
 
 ## Environment Variables
 
