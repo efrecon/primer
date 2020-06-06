@@ -198,10 +198,10 @@ implementation in [cloud-init].
 
 * [`packages`][packages] upgrades the system to the latest and installs
   additional packages.
-* `users` takes a `/etc/passwd` inspired colon separated file to create a number
-  of users on the host system. Relevant groups will be created and all users can
-  be made members of additional groups (e.g. `sudo`?). The module is able to
-  generate strong passwords for all these users if necessary.
+* [`users`][users] takes a `/etc/passwd` inspired colon separated file to create
+  a number of users on the host system. Relevant groups will be created and all
+  users can be made members of additional groups (e.g. `sudo`?). The module is
+  able to generate strong passwords for all these users if necessary.
 * `timezone` places the host at a given location.
 * [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
   user. The target of this module are deploy keys when interacting with
@@ -222,6 +222,7 @@ implementation in [cloud-init].
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
+  [users]: ./docs/steps/users.md
   [sshkeys]: ./docs/steps/sshkeys.md
 
 ## Packaging
