@@ -7,7 +7,7 @@ PRIMER_STEP_MACHINE_VERSION=${PRIMER_STEP_MACHINE_VERSION:-}
 # SHA256 of the machine binary when downloading from the release repository
 PRIMER_STEP_MACHINE_SHA256=${PRIMER_STEP_MACHINE_SHA256:-}
 
-# URL to JSON file where to find the list of releases of Docker compose. The
+# URL to JSON file where to find the list of releases of Docker machine. The
 # code only supports github API.
 PRIMER_STEP_MACHINE_RELEASES=https://api.github.com/repos/docker/machine/releases
 
