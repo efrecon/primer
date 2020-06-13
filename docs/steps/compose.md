@@ -8,7 +8,8 @@ The `compose` step arranges for the Docker [compose] CLI to be present at the
 host. The step is able to pinpoint a given version and to verify the
 installation download against its sha256 sum if necessary. The step prefers to
 install from the official binary releases at [github], but is also able to
-install through Python packaging.
+install through Python packaging. In addition, bash completion is made available
+to all users of the system.
 
   [compose]: https://docs.docker.com/compose/
   [github]: https://github.com/docker/compose/releases
