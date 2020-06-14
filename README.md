@@ -203,30 +203,41 @@ implementation in [cloud-init].
   a number of users on the host system. Relevant groups will be created and all
   users can be made members of additional groups (e.g. `sudo`?). The module is
   able to generate strong passwords for all these users if necessary.
+* [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
+  The wrapper is able to track host names that would change their pointed IP
+  with time (dynamic DNS).
 * `timezone` places the host at a given location.
 * [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
   user. The target of this module are deploy keys when interacting with
   automated CI systems.
-* [`docker`][docker] installs the Docker daemon and client, it has been described above.
+* [`docker`][docker] installs the Docker daemon and client, it has been
+  described above.
 * [`compose`][compose] installs Docker compose at the latest or a specific
   version, together with bash completion. The binary integrity can be verified
   before installation.
-* `machine` installs Docker machine at the latest or a specific version,
-  together with bash completion. The binary integrity can be verified before
+* [`machine`][machine] installs Docker machine at the latest or a specific
+  version, together with bash completion. The binary integrity can be verified
+  before installation.
+* [`machinery`][machinery] installs machinery from a given branch (defaults to
+  `master`).
+* [`lazydocker`][lazydocker] installs lazydocker at the latest or a specific
+  version. Lazydocker is a CUI for Docker. Binary integrity is verified before
   installation.
-* `machinery` installs machinery from a given branch (defaults to `master`).
-* `lazydocker` installs lazydocker at the latest or a specific version.
-  Lazydocker is a CUI for Docker. Binary integrity is verified before
-  installation.
-* `micro` installs lazydocker at the latest or a specific version. micro is a
-  modern editor for the terminal.
+* [`micro`][micro] installs micro at the latest or a specific version. micro is
+  a modern editor for the terminal.
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
   [users]: ./docs/steps/users.md
+  [dynufw]: ./docs/steps/dynufw.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
   [compose]: ./docs/steps/compose.md
+  [machine]: ./docs/steps/machine.md
+  [machinery]: ./docs/steps/machinery.md
+  [lazydocker]: ./docs/steps/lazydocker.md
+  [micro]: ./docs/steps/micro.md
+  [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
 ## Packaging
 
