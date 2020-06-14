@@ -55,10 +55,6 @@ primer_step_users() {
                     _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
                     yush_notice "Will store cleartext passwords in $_pwstore"
                 fi
-                if yush_is_true "$PRIMER_STEP_USERS_PWSAVE" && [ -f "$_pwstore" ]; then
-                    yush_notice "Removing existing password storage at $(yush_green "$_pwstore")"
-                    rm -f "$_pwstore"
-                fi
                 while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
                     if [ -n "${line}" ]; then
@@ -100,6 +96,11 @@ primer_step_users() {
                                                     --group "$group" \
                                                     --gecos "$details" \
                                                     --shell "$shell"
+                            if [ -f "$_pwstore" ] && grep -Eq "^${username}:" "$_pwstore"; then
+                                password=$(grep -E "^${username}:" "$_pwstore" | head -n 1 | cut -d ":" -f "2")
+                                sed -Ei "/^${username}:.*/d" "$_pwstore"
+                                echo "${username}:${password}:${group}:${details}:${shell}" >> "$_pwstore"
+                            fi
                         fi
                     fi
                 done < "${PRIMER_STEP_USERS_DB}"
