@@ -15,17 +15,17 @@ primer_utils_locate() {
     printf %s\\n "$_fpath"
 }
 
-_primer_utils_var_exists() {
-    eval "[ ! -z \${$1:-} ]"
+primer_utils_var_exists() {
+    eval "[ ! -z \"\${$1:-}\" ]"
     return $?  # Pedantic.
 }
 
-_primer_utils_var_value() { eval printf %s "\$$1"; }
+primer_utils_var_value() { eval printf %s "\"\$$1\""; }
 
 primer_utils_load() {
     _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-    if _primer_utils_var_exists "$_varname"; then
-        yush_debug "$1 already loaded from $(_primer_utils_var_value "$_varname")"
+    if primer_utils_var_exists "$_varname"; then
+        yush_debug "$1 already loaded from $(primer_utils_var_value "$_varname")"
     else
         _impl=$(primer_utils_locate "$1" || true)
         if [ -n "$_impl" ]; then
@@ -40,8 +40,8 @@ primer_utils_load() {
 
 primer_utils_origin() {
     _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
-    if _primer_utils_var_exists "$_varname"; then
-        _primer_utils_var_value "$_varname"
+    if primer_utils_var_exists "$_varname"; then
+        primer_utils_var_value "$_varname"
     elif _primer_utils_is_function "primer_step_$1"; then
         if grep -oEq "^primer_step_${1}\s*\(\)" "$0"; then
             printf %s\\n "$0"
