@@ -225,6 +225,7 @@ implementation in [cloud-init].
   installation.
 * [`micro`][micro] installs micro at the latest or a specific version. micro is
   a modern editor for the terminal.
+* [`disk`][disk] formats and mounts attached disks.
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
@@ -237,6 +238,7 @@ implementation in [cloud-init].
   [machinery]: ./docs/steps/machinery.md
   [lazydocker]: ./docs/steps/lazydocker.md
   [micro]: ./docs/steps/micro.md
+  [disk]: ./docs/steps/disk.md
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
 ## Packaging
