@@ -90,7 +90,7 @@ Description:
   machine in a deterministic way.
 
 Usage:
-  $(basename "$0") [-option arg --long-option(=)arg] ...
+  $(basename "$0") [-option arg --long-option(=)arg] cmd
 
   where all dash-led options are as follows (long options can be followed by
   an equal sign):
@@ -101,6 +101,23 @@ Usage:
     -xx:yy           Provided xx is a step, pass the option --yy to its function
     -h | --help      Print this help and exit
     -v | --verbose   Verbosity level
+
+  Accepted commands are the following (there are aliases):
+    install | up
+        This is the default command, it will perform all the installation steps
+        specified through the PRIMER_STEPS environment variable or the --steps
+        option
+    clean | remove | down
+        Uninstall the steps specified as for the install command
+    env | environment
+        List all known and accessible steps, together with the options and
+        environment variables that can be used to modify their behaviour
+    info
+        List all options and environmnet variables that can be used to modify
+        the behaviour of the steps to be run. The list of steps can be specified
+        as for the install command
+    help
+        Print this help and exit.
 
 USAGE
     exit "$exitcode"
@@ -306,4 +323,6 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
             primer_info "$_step"
         done
         ;;
+    help)
+        usage "" 0;;
 esac
