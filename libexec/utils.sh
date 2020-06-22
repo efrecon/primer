@@ -57,7 +57,7 @@ primer_utils_loadif() {
     if ! _primer_utils_is_function "primer_step_$1"; then
         primer_utils_load "$1"
         if ! _primer_utils_is_function "primer_step_$1"; then
-            abort "primer_step_$1 not implemented !"
+            primer_abort "primer_step_$1 not implemented !"
         fi
     fi
 }
