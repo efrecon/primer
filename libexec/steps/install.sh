@@ -11,7 +11,7 @@ PRIMER_STEP_INSTALL_TARGETS=${PRIMER_STEP_INSTALL_TARGETS:-}
 # Additional options to give to curl command when downloading remote resources.
 PRIMER_STEP_INSTALL_CURLOPTS=${PRIMER_STEP_INSTALL_CURLOPTS:-}
 
-primer_step_disk() {
+primer_step_install() {
     case "$1" in
         "option")
             shift;
@@ -38,6 +38,7 @@ primer_step_disk() {
                         line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
                         if [ -n "${line}" ]; then
                             _primer_step_install "$1" "$line"
+                        fi
                     done < "${PRIMER_STEP_INSTALL_BUNDLE}"
                 else
                     yush_warn "Cannot access file at $PRIMER_STEP_INSTALL_BUNDLE"
@@ -45,14 +46,9 @@ primer_step_disk() {
             fi
             for spec in $PRIMER_STEP_INSTALL_TARGETS; do
                 _primer_step_install "$1" "$spec"
-            fi
+            done
             ;;
     esac
-}
-
-# Modified from 
-_primer_step_urldec() {
-    printf '%b\n' $(sed -E -e 's/\+/ /g' -e 's/%([0-9a-fA-F]{2})/\\x\1/g')
 }
 
 _primer_step_install() {
@@ -71,10 +67,10 @@ _primer_step_install() {
     src=$(printf %s\\n "$2" | cut -d ":" -f "1")
     src=$(printf %s\\n "$src" |
                 sed -E  -e "s/%mac%/${mac}/g" \
-                        -e "s/%host%/${hst}/g \
-                        -e "s/%hostname%/${hst}/g |
-                _primer_step_urldec)
-    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | _primer_step_urldec)
+                        -e "s/%host%/${hst}/g" \
+                        -e "s/%hostname%/${hst}/g" |
+                primer_net_urldec)
+    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | primer_net_urldec)
     user=$(printf %s\\n "$2" | cut -d ":" -f "3")
     if [ -z "$user" ]; then
         user=$(id -un)
@@ -123,9 +119,18 @@ _primer_step_install() {
                 fi
             fi
             if [ -d "$tgt" ]; then
-                yush_info "Recursively removing $tgt"
-                $PRIMER_OS_SUDO rm -rf "$tgt"
+                # If the source was a directory, remove the entire directory
+                # destination. Otherwise, only remove the file that it created.
+                if [ -d "$src" ]; then
+                    yush_info "Recursively removing $tgt"
+                    $PRIMER_OS_SUDO rm -rf "$tgt"
+                else
+                    tgt=${tgt%/}/$(yush_basename "$src")
+                    yush_info "Removing $tgt"
+                    $PRIMER_OS_SUDO rm -f "$tgt"
+                fi
             else
+                yush_info "Removing $tgt"
                 $PRIMER_OS_SUDO rm -f "$tgt"
             fi
             ;;
