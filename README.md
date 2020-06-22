@@ -241,6 +241,27 @@ implementation in [cloud-init].
   [disk]: ./docs/steps/disk.md
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
+## Commands
+
+Apart from the options, Primer takes a trailing command. The trailing command
+blindly defaults to `install`, meaning that the default behaviour will be to
+install as specified per the `--steps` command-line option or `PRIMER_STEPS`
+environment variable. Primer accepts a number of aliases to those commands:
+
+* `install`, `up`: This is the default command, it will perform all the
+  installation steps specified through the `PRIMER_STEPS` environment variable
+  or the `--steps` option.
+* `clean`, `remove`, `down`: Uninstall the steps specified as for the `install`
+  command.
+* `env`, `environment`: List all known and accessible steps, together with the
+  options and environment variables that can be used to modify their behaviour.
+  This also prints out host information, e.g. hostname, MAC address (of the
+  primary ethernet interface), name of distribution, version, etc.
+* `info`: List all options and environment variables that can be used to modify
+  the behaviour of the steps to be run. The list of steps can be specified as
+  for the `install` command
+* `help`: Print help and exit.
+
 ## Packaging
 
 The current implementation depends on a number of internal modules, on the
