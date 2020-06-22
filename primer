@@ -111,7 +111,9 @@ Usage:
         Uninstall the steps specified as for the install command
     env | environment
         List all known and accessible steps, together with the options and
-        environment variables that can be used to modify their behaviour
+        environment variables that can be used to modify their behaviour. This
+        also prints out host information, e.g. hostname, MAC address, distro,
+        version, etc.
     info
         List all options and environmnet variables that can be used to modify
         the behaviour of the steps to be run. The list of steps can be specified
