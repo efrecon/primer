@@ -293,6 +293,22 @@ EOF
 
 }
 
+primer_hostinfo() {
+    yush_info "Getting Host information"
+    if=$(primer_net_interfaces| grep -E '^(en.*|eth[[:digit:]]{1,})' | head -n 1)
+    if [ -z "$if" ]; then
+        yush_warn "Cannot find a fast ethernet interface"
+    else
+        mac=$(primer_net_macaddr "$if")
+    fi
+
+    printf "_hostinfo:\n"
+    printf '\tdistribution: %s\n' "$(primer_os_distribution)"
+    printf '\tversion: %s\n' "$(primer_os_version)"
+    printf '\thostname: %s\n' "$(hostname)"
+    printf '\tmac: %s\n' "$mac"
+}
+
 # Pass the command to all relevant steps, in order.
 case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
     install | up)
@@ -314,6 +330,7 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
         done
         ;;
     env*)
+        primer_hostinfo
         yush_info "Getting known accessible steps"
         for _step in $(primer_steps | sort -u); do
             primer_info "$_step"
