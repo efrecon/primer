@@ -50,6 +50,11 @@ primer_step_disk() {
     esac
 }
 
+# Modified from 
+_primer_step_urldec() {
+    printf '%b\n' $(sed -E -e 's/\+/ /g' -e 's/%([0-9a-fA-F]{2})/\\x\1/g')
+}
+
 _primer_step_install() {
     # Prepare source templating. We capture the MAC address from the first
     # available ethernet interface (in lowercase) so it can be used in the
@@ -67,8 +72,9 @@ _primer_step_install() {
     src=$(printf %s\\n "$src" |
                 sed -E  -e "s/%mac%/${mac}/g" \
                         -e "s/%host%/${hst}/g \
-                        -e "s/%hostname%/${hst}/g)
-    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2")
+                        -e "s/%hostname%/${hst}/g |
+                _primer_step_urldec)
+    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | _primer_step_urldec)
     user=$(printf %s\\n "$2" | cut -d ":" -f "3")
     if [ -z "$user" ]; then
         user=$(id -un)
