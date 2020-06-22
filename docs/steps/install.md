@@ -14,8 +14,10 @@ are ignored. Otherwise, each line should contain a number of fields separated by
 the `:` (colon) sign. These fields are, in order:
 
 - The source of the resource to install. The source can contain some templating
-  references (see below)
-- The destination where to install on the host.
+  references (see below). To escape special characters, e.g. `:`, use URL
+  encoding, as the source will be URL decoded.
+- The destination where to install on the host. The destination will also be URL
+  decoded.
 - Name of user owning the destination, defaults to the same user as the one
   running the script.
 - Group owning the destination, defaults to the same group as the one of the
