@@ -14,3 +14,7 @@ primer_net_macaddr() {
         head -n 1 |
         tr '[:upper:]' '[:lower:]'
 }
+
+primer_net_urldec() {
+    printf '%b\n' "$(sed -E -e 's/\+/ /g' -e 's/%([0-9a-fA-F]{2})/\\x\1/g')"
+}
