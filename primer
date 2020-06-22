@@ -274,7 +274,7 @@ primer_info() {
         # ones that can be set from the outside and print out their
         # current value.
         _vars=PRIMER_STEP_$(printf %s\\n "$1" | tr '[:lower:]' '[:upper:]')
-        for _varset in $(set|grep "^$_vars"|grep "="); do
+        while IFS= read -r _varset; do
             # The variable name is everything before the equal sign.
             _var=$(printf %s\\n "$_varset" | sed -E 's/^(PRIMER_STEP_[A-Z0-9_]+)=.*/\1/')
             # Ask where the step was loaded from
@@ -282,10 +282,12 @@ primer_info() {
             # If we found an origin and the variable is set from itself
             # as a default, then it is an external variable. Print out
             # the original set line.
-            if [ -n "$_origin" ] && grep -Eq "^${_var}\s*=\s*\\\${${_var}:" "$_origin"; then
+            if [ -n "$_origin" ] && grep -Eq "^${_var}\s*=\s*\\\$\{${_var}:" "$_origin"; then
                 printf \\t%s\\n "$_varset"
             fi
-        done
+        done <<EOF
+$(set|grep "^$_vars"|grep "=")
+EOF
     fi
     set +vx; eval "$_oldstate"
 
