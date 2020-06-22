@@ -262,7 +262,7 @@ _primer_step_docker_install_apt_verify() {
     yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
     dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
     if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
-        abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
+        primer_abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
     fi
 }
 
