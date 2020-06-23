@@ -203,6 +203,7 @@ implementation in [cloud-init].
   a number of users on the host system. Relevant groups will be created and all
   users can be made members of additional groups (e.g. `sudo`?). The module is
   able to generate strong passwords for all these users if necessary.
+* [`git`][git] installs git on the system, with [LFS] support. 
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
   The wrapper is able to track host names that would change their pointed IP
   with time (dynamic DNS).
@@ -230,6 +231,8 @@ implementation in [cloud-init].
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
   [users]: ./docs/steps/users.md
+  [git]: ./docs/steps/git.md
+  [LFS]: https://git-lfs.github.com/
   [dynufw]: ./docs/steps/dynufw.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
