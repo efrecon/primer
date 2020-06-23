@@ -117,7 +117,7 @@ primer_step_git() {
                 primer_auth_user_list | while IFS= read -r _username || [ -n "$_username" ]; do
                     if printf %s\\n "$_username" | grep -qE "$PRIMER_STEP_GIT_LFS_INSTALL"; then
                         yush_debug "Installing git LFS for $_username"
-                        $PRIMER_OS_SUDO su "${_username}" -c "git lfs install"
+                        $PRIMER_OS_SUDO su -l "${_username}" -c "git lfs install"
                     fi
                 done
             else
