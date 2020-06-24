@@ -388,12 +388,12 @@ its command-line [options](#options). Command-line options always have
 precedence over the value coming from environment variables. All variables start
 with `PRIMER_`. They are:
 
-* `PRIMER_PATH` is the same as the [`--path`](#p-or---path) option.
+* `PRIMER_PATH` is the same as the [`--path`](#-p-or---path) option.
 * `PRIMER_EXTS` is a space-separated list of dot-led extensions to add to the
   name of the step when looking for their implementations within `PRIMER_PATH`.
   It defaults to `.sh`.
-* `PRIMER_STEPS` is the same as the [`--steps`](#s-or---steps) option.
-* `PRIMER_CONFIG` is the same as the [`--config`](#c-or---config) option.
+* `PRIMER_STEPS` is the same as the [`--steps`](#-s-or---steps) option.
+* `PRIMER_CONFIG` is the same as the [`--config`](#-c-or---config) option.
 * `PRIMER_LOCAL` is the root directory to use as `/usr/local` when manuall
   installing contrib packages of various sorts. It defaults to `/usr/local`.
 * `PRIMER_BINDIR` is the `bin` directory under `PRIMER_LOCAL`.
