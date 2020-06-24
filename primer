@@ -44,15 +44,15 @@ PRIMER_EXTS=${PRIMER_EXTS:-".sh"}
 # the PRIMER_PATH will be used.
 PRIMER_STEPS=${PRIMER_STEPS:-}
 
-# Configuration file to read, this will be a .env like file that can be used to
-# pass options to the various implementations steps. When empty, the default,
-# the file called primer.env in the current working directory will be read. On
-# top of that file, if a file called primer_<mac>.env exists (<mac> being
-# replaced by the MAC address of the primary ethernet interface, in lowercase,
-# with colon as separators), it will also be read. This allows generic data to
-# be kept in the main primer.env and host specific to be hold in the file with
-# the mac address.
-PRIMER_CONFIG=${PRIMER_CONFIG:-}
+# Space separated list of configuration files to read, these will a .env like
+# files that can be used to pass options to the various implementations steps.
+# The default, the file called primer.env in the current working directory will
+# be read. On top of that file, if a file called primer_<mac>.env exists (<mac>
+# being replaced by the MAC address of the primary ethernet interface, in
+# lowercase, with colon as separators), it will also be read. This allows
+# generic data to be kept in the main primer.env and host specific to be hold in
+# the file with the mac address.
+PRIMER_CONFIG=${PRIMER_CONFIG:-"./primer.env ./primer_%mac%.env"}
 
 # Should we allow substitution in configuration file.
 PRIMER_SUBST=1
@@ -216,10 +216,14 @@ $_step $_opt $_val"
     esac
 done
 
-# Read configuration (as in .env terminated) file passed as a parameter.
+# Read configuration (as in .env terminated) file passed as a parameter. The
+# second parameter, if present, is the source of the file, i.e. typically a
+# remote resource.
 primer_config() {
     if [ -f "$1" ]; then
-        yush_info "Reading installation configuration from $1"
+        _src=$1
+        [ $# -ge 2 ] && _src=$2
+        yush_info "Reading installation configuration from $_src"
         while IFS='=' read -r key val || [ -n "$key" ]; do
             # Skip over lines containing comments.
             # (Lines starting with '#').
@@ -299,16 +303,28 @@ primer_hostinfo() {
 # Discover OS type and how to run sudo.
 primer_os_init
 
-# Read configuration from .env formatted file(s)
-if [ -n "$PRIMER_CONFIG" ]; then
-    primer_config "$PRIMER_CONFIG"
-else
-    primer_config "./primer.env"
-    # Note that this automagically installs the iproute2 package in a Ubuntu
-    # Docker container, as the ip command does not exists there...
-    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
-    [ -n "$_mac" ] && primer_config "./primer_${_mac}.env"
-fi
+# Read configuration from .env formatted file(s), local or remote
+for _cfg in $PRIMER_CONFIG; do
+    # Replace tokens if we have some
+    if printf %s\\n "$_cfg" | grep -Eq '%[[:alnum:]]+%'; then
+        # Note that this automagically installs the iproute2 package in a Ubuntu
+        # Docker container, as the ip command does not exists there...
+        _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
+        _hst=$(hostname)
+        _cfg=$( printf %s\\n "$_cfg" |
+                sed -E  -e "s/%mac%/${_mac}/g" \
+                        -e "s/%host%/${_hst}/g" \
+                        -e "s/%hostname%/${_hst}/g" )
+    fi
+    if printf %s\\n "$_cfg" | grep -Eq '^https?://'; then
+        _tmp=$(mktemp)
+        primer_net_curl "$_cfg" > "$_tmp"
+        primer_config "$_tmp" "$_cfg"
+        rm -f "$_tmp"
+    else
+        primer_config "$_cfg"
+    fi
+done
 
 # Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
 # respective modules. This is because command-line options should have

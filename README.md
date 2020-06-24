@@ -277,30 +277,40 @@ are already part of the amalgamation.
 
 #### `-c` or `--config`
 
-Path to a configuration file to read, in `.env` format. This file should contain
-a number of environment variables to specify the steps (and their order) that
-primer will perform, together with variables to change the options of these
-steps. In that file, all empty lines or lines starting with a `#` (hash mark)
-will be ignored. Variables should be separated from their values by an equal
-sign `=` and values should not be quoted. The default is to
-[substitute](#no-subst) the value of existing (or set through the file)
-variables by their value. Substitution uses an almost eval-safe
+Space separated list of paths to configuration files to read in order, in `.env`
+format. These files should contain a number of environment variables to specify
+the steps (and their order) that primer will perform, together with variables to
+change the options of these steps. In those files, all empty lines or lines
+starting with a `#` (hash mark) will be ignored. Variables should be separated
+from their values by an equal sign `=` and values should not be quoted. The
+default is to [substitute](#no-subst) the value of existing (or set through the
+file) variables by their value. Substitution uses an almost eval-safe
 [implementation][subst] for security and supports all POSIX [expansion] formats.
 
-The default for this option is an empty value in which case:
+The default for this option is to read:
 
-* The file `primer.env` in the current working directory, if present will be
-  first read.
-* The file `primer_<mac>.env` in the current working directory, if present will
-  be read (on "top" of the previous file). In that filename, at run time,
+* The file `primer.env` in the current working directory, if present.
+* The file `primer_<mac>.env` in the current working directory, if present. It
+  will be read on "top" of the previous file. In that filename, at run time,
   `<mac>` will be the MAC address of the main Ethernet interface of the host, in
   lower-case and without any field separators.
 
-These defaults allow to use common primer settings across several (similar) host
-installations. Generic options for all hosts would be placed in the main
-`primer.env` file, while host-specific options would be present in the file
-containing the MAC address. To discover the MAC address that primer believes is
-the one of the main Ethernet interface, you can run the following command:
+Primer is not only able to read files, but also remote resources. To access
+protected resources, you can combine with using the [`--curl`](#--curl) option.
+In path or resource specifications passed to `--config`, a number of tokens will
+automatically be replaced by their value at run time. These are:
+
+* `%mac%` will be replaced with the MAC address of the host, in lower case,
+  without any separator signs.
+* `%host%` and `%hostname%` will be replaced with the hostname of the host, as
+  reported by the command `hostname`.
+
+These defaults and tokens allow to use common primer settings across several
+(similar) host installations and in networked settings. Generic options for all
+hosts would be placed in the main `primer.env` file, while host-specific options
+would be present in the resources using the `%mac%` token. To discover the MAC
+address that primer believes is the one of the main Ethernet interface, you can
+run the following command:
 
 ```shell
 ./primer -v notice env|grep -E '\s+mac:'|awk '{print $2}'|tr -d ':'
