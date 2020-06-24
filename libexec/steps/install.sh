@@ -52,24 +52,7 @@ primer_step_install() {
 }
 
 _primer_step_install() {
-    # Prepare source templating. We capture the MAC address from the first
-    # available ethernet interface (in lowercase) so it can be used in the
-    # source specification.
-    mac=
-    if=$(primer_net_interfaces| grep -E '^(en.*|eth[[:digit:]]{1,})' | head -n 1)
-    if [ -z "$if" ]; then
-        yush_warn "Cannot find a fast ethernet interface"
-    else
-        mac=$(primer_net_macaddr "$if")
-    fi
-    hst=$(hostname)
-
-    src=$(printf %s\\n "$2" | cut -d ":" -f "1")
-    src=$(printf %s\\n "$src" |
-                sed -E  -e "s/%mac%/${mac}/g" \
-                        -e "s/%host%/${hst}/g" \
-                        -e "s/%hostname%/${hst}/g" |
-                primer_net_urldec)
+    src=$(printf %s\\n "$2" | cut -d ":" -f "1" | primer_net_urldec)
     tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | primer_net_urldec)
     user=$(printf %s\\n "$2" | cut -d ":" -f "3")
     if [ -z "$user" ]; then
@@ -96,6 +79,7 @@ _primer_step_install() {
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
                 yush_info "Downloading $src into $tgt"
+                # shellcheck disable=SC2086
                 curl -sSL $PRIMER_STEP_INSTALL_CURLOPTS "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
             else
                 if [ -d "$tgt" ]; then
