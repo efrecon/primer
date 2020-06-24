@@ -35,6 +35,12 @@ Having a specific order permits to copy directories, but overwrite a specific
 file using host-specific information. Or to have generic file installation
 specification that will be overwritten for a given host.
 
+The `install` step uses `curl` when downloading remote resources. To access
+protected resources, you can match these to the relevant curl [options] using
+the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`)
+
+  [options]: https://curl.haxx.se/docs/manpage.html#OPTIONS
+
 ## Options
 
 ### `--bundle`
@@ -48,12 +54,6 @@ This option can be repeated as many times as needed. Each value to this option
 should be formatted as the active lines of the specification file described
 above.
 
-### `--curl`
-
-Options to give to `curl` when downloading remote resources. This can be used to
-provide authentication details, for example. The default option used internally
-is `-sSL`, which follows redirects and performs silent downloads.
-
 ## Environment Variables
 
 ### `PRIMER_STEP_INSTALL_BUNDLE`
@@ -65,10 +65,6 @@ This environment variable is the same as the [`--bundle`](#--bundle) option.
 This environment variable is almost the same as the [`--target`](#--target)
 option. However, it should contain a space separated list of installation
 specifications.
-
-### `PRIMER_STEP_INSTALL_CURLOPTS`
-
-This environment variable is the same as the [`--curl`](#--curl) option.
 
 ## See Also
 

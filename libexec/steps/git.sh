@@ -33,22 +33,20 @@ primer_step_git() {
             done
             ;;
         "install")
-            # Make sure we have curl
-            primer_os_dependency curl
             # Install git, if not already present
-            if ! [ -x "$(command -v "git")" ]; then
+            if ! command -v git >/dev/null 2>&1; then
                 primer_os_dependency git
             fi
             # Install git-lfs directly from source. This is a go binary, so it
             # will work on all distributions, independently of their libc
             # implementation.
-            if ! [ -x "$(command -v "git-lfs")" ]; then
+            if ! command -v "git-lfs" >/dev/null 2>&1; then
                 if [ -z "$PRIMER_STEP_GIT_LFS_VERSION" ]; then
                     # Following uses the github API
                     # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
                     # for getting the list of latest releases.
                     yush_notice "Discovering latest git LFS version from $PRIMER_STEP_GIT_LFS_RELEASES"
-                    PRIMER_STEP_GIT_LFS_VERSION=$(  curl -sSL "$PRIMER_STEP_GIT_LFS_RELEASES" |
+                    PRIMER_STEP_GIT_LFS_VERSION=$(  primer_net_curl "$PRIMER_STEP_GIT_LFS_RELEASES" |
                                         grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
                                         sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
                                         head -1)
@@ -68,15 +66,15 @@ primer_step_git() {
                     _tar=git-lfs-${_os}-${_platform}-v${PRIMER_STEP_GIT_LFS_VERSION}.tar.gz
                     # Get the published sum
                     yush_debug "Downloading sha256 sums from ${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}/sha256sums.asc"
-                    sum256=$(   curl -sSL "${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}/sha256sums.asc" |
+                    sum256=$(   primer_net_curl "${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}/sha256sums.asc" |
                                 grep "$_tar" |
                                 awk '{print $1}')
-                    if curl --progress-bar -fSL "${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}/${_tar}" > "${tmpdir}/${_tar}"; then
+                    if primer_net_curl "${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}/${_tar}" --progress-bar > "${tmpdir}/${_tar}"; then
                         # Check against the sha256 sum if necessary.
                         if [ -n "$sum256" ]; then
                             yush_debug "Verifying sha256 sum"
                             if ! printf "%s  %s\n" "$sum256" "${tmpdir}/${_tar}" | sha256sum -c - >/dev/null 2>&1; then
-                                yush_error "SHA256 sum mismatch, should have been $sha256"
+                                yush_error "SHA256 sum mismatch, should have been $sum256"
                                 rm -f "${tmpdir}/${_tar}"
                             fi
                         else
@@ -85,7 +83,7 @@ primer_step_git() {
                         # Extract from the tarpack and verify we can run the
                         # binary in the first place. If that works, install it.
                         if [ -f "${tmpdir}/${_tar}" ]; then
-                            tar -C "${tmpdir}" -zxf "${tmpdir}/$_tar" git-lfs 
+                            tar -C "${tmpdir}" -zxf "${tmpdir}/$_tar" git-lfs
                             # Verify the binary actually works properly.
                             yush_debug "Verifying binary at ${tmpdir}/git-lfs"
                             chmod a+x "${tmpdir}/git-lfs"

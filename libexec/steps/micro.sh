@@ -11,13 +11,6 @@ PRIMER_STEP_MICRO_RELEASES=https://api.github.com/repos/zyedidia/micro/releases
 # Root URL to download location
 PRIMER_STEP_MICRO_DOWNLOAD=https://github.com/zyedidia/micro/releases/download
 
-# Decide curl options depending on log-level
-if yush_loglevel_le verbose; then
-    PRIMER_STEP_MICRO_CURL_OPTS="-fSL --progress-bar"
-else
-    PRIMER_STEP_MICRO_CURL_OPTS=-sSL
-fi
-
 primer_step_micro() {
     case "$1" in
         "option")
@@ -35,7 +28,6 @@ primer_step_micro() {
             done
             ;;
         "install")
-            primer_os_dependency curl
             if ! [ -x "$(command -v "micro")" ]; then
                 if [ -z "$PRIMER_STEP_MICRO_VERSION" ]; then
                     # Following uses the github API
@@ -44,7 +36,7 @@ primer_step_micro() {
                     # "full" releases. Release candidates have -rcXXX in their version
                     # number, these are set away by the grep/sed combo.
                     yush_notice "Discovering latest Docker Micro version from $PRIMER_STEP_MICRO_RELEASES"
-                    PRIMER_STEP_MICRO_VERSION=$(   curl $PRIMER_STEP_MICRO_CURL_OPTS "$PRIMER_STEP_MICRO_RELEASES" |
+                    PRIMER_STEP_MICRO_VERSION=$(   primer_net_curl "$PRIMER_STEP_MICRO_RELEASES" |
                                     grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*"' |
                                     sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*)",/\1/g' |
                                     head -1)
@@ -87,7 +79,7 @@ _primer_step_micro_install_download() {
             yush_error "No known binaries on this platform"; return;;
     esac
 
-    if curl $PRIMER_STEP_MICRO_CURL_OPTS "${PRIMER_STEP_MICRO_DOWNLOAD%%/}/v$PRIMER_STEP_MICRO_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
+    if primer_net_curl "${PRIMER_STEP_MICRO_DOWNLOAD%%/}/v$PRIMER_STEP_MICRO_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
         tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
         if [ -f "$tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" ]; then
             $PRIMER_OS_SUDO mv -f "$tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"

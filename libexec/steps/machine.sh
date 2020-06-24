@@ -14,13 +14,6 @@ PRIMER_STEP_MACHINE_RELEASES=https://api.github.com/repos/docker/machine/release
 # Root URL to download location
 PRIMER_STEP_MACHINE_DOWNLOAD=https://github.com/docker/machine/releases/download
 
-# Decide curl options depending on log-level
-if yush_loglevel_le verbose; then
-    PRIMER_STEP_MACHINE_CURL_OPTS="-fSL --progress-bar"
-else
-    PRIMER_STEP_MACHINE_CURL_OPTS=-sSL
-fi
-
 primer_step_machine() {
     case "$1" in
         "option")
@@ -40,7 +33,6 @@ primer_step_machine() {
             done
             ;;
         "install")
-            primer_os_dependency curl
             if ! [ -x "$(command -v "docker-machine")" ]; then
                 if [ -z "$PRIMER_STEP_MACHINE_VERSION" ]; then
                     # Following uses the github API
@@ -49,7 +41,7 @@ primer_step_machine() {
                     # "full" releases. Release candidates have -rcXXX in their version
                     # number, these are set away by the grep/sed combo.
                     yush_notice "Discovering latest Docker Machine version from $PRIMER_STEP_MACHINE_RELEASES"
-                    PRIMER_STEP_MACHINE_VERSION=$(  curl $PRIMER_STEP_MACHINE_CURL_OPTS "$PRIMER_STEP_MACHINE_RELEASES" |
+                    PRIMER_STEP_MACHINE_VERSION=$(  primer_net_curl "$PRIMER_STEP_MACHINE_RELEASES" |
                                         grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
                                         sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
                                         head -1)
@@ -68,7 +60,7 @@ primer_step_machine() {
             ! [ -d "$_completion_dir" ] && \
                     $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
             ! [ -f "${_completion_dir}/docker-machine" ] && \
-                    curl $PRIMER_STEP_MACHINE_CURL_OPTS https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine |
+                    primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
                         $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
             ;;
         "clean")
@@ -91,7 +83,7 @@ primer_step_machine() {
 # success we will download everything and possibly check against the sha256 sum.
 _primer_step_machine_install_download() {
     tmpdir=$(mktemp -d)
-    if curl $PRIMER_STEP_MACHINE_CURL_OPTS "${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/docker-machine-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-machine"; then
+    if primer_net_curl "${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/docker-machine-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-machine"; then
         # Check against the sha256 sum if necessary.
         if [ -n "$PRIMER_STEP_MACHINE_SHA256" ]; then
             yush_debug "Verifying sha256 sum"

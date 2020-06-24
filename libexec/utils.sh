@@ -50,7 +50,7 @@ primer_utils_origin() {
 }
 
 _primer_utils_is_function() {
-    LC_ALL=C type "$1" | head -n 1 | grep -q "function"
+    LC_ALL=C type "$1" 2>/dev/null | head -n 1 | grep -q "function"
 }
 
 primer_utils_loadif() {

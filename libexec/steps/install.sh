@@ -8,22 +8,17 @@ PRIMER_STEP_INSTALL_BUNDLE=${PRIMER_STEP_INSTALL_BUNDLE:-}
 # Same as above, but a space separated of such-formatted specifications
 PRIMER_STEP_INSTALL_TARGETS=${PRIMER_STEP_INSTALL_TARGETS:-}
 
-# Additional options to give to curl command when downloading remote resources.
-PRIMER_STEP_INSTALL_CURLOPTS=${PRIMER_STEP_INSTALL_CURLOPTS:-}
-
 primer_step_install() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--bundle --target --curl"
+            [ "$#" = "0" ] && echo "--bundle --target"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --bundle)
                         PRIMER_STEP_INSTALL_BUNDLE=$2; shift 2;;
                     --target)
                         PRIMER_STEP_INSTALL_TARGETS="$PRIMER_STEP_INSTALL_TARGETS $2"; shift 2;;
-                    --curl)
-                        PRIMER_STEP_INSTALL_CURLOPTS=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -73,14 +68,12 @@ _primer_step_install() {
     case "$1" in
         "install")
             if printf %s\\n "$src" | grep -Eq '^https?://'; then
-                primer_os_dependency curl
-
                 if [ -d "$tgt" ]; then
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
                 yush_info "Downloading $src into $tgt"
                 # shellcheck disable=SC2086
-                curl -sSL $PRIMER_STEP_INSTALL_CURLOPTS "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
+                primer_net_curl "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
             else
                 if [ -d "$tgt" ]; then
                     yush_info "Recursively copying $src into $tgt"
