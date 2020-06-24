@@ -267,13 +267,10 @@ _primer_step_docker_install_apt_verify() {
 }
 
 _primer_step_docker_install_getdocker() {
-    # Ensure we have curl
-    primer_os_dependency curl
-
     # Download the installation script from getdocker
     yush_info "Downloading and running Docker installation script from $(yush_yellow "$PRIMER_STEP_DOCKER_GET_URL")"
     _get=$(mktemp)
-    curl -fsSL "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
+    primer_net_curl "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
     if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
         if grep 'SCRIPT_COMMIT_SHA=' "$_get" | grep -q "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
             yush_info "Verified Docker installation script, running it now"

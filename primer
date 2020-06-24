@@ -63,6 +63,9 @@ PRIMER_BINDIR=${PRIMER_BINDIR:-${PRIMER_LOCAL%%/}/bin}
 PRIMER_OPTDIR=${PRIMER_OPTDIR:-${PRIMER_LOCAL%%/}/opt}
 PRIMER_LIBDIR=${PRIMER_LIBDIR:-${PRIMER_LOCAL%%/}/lib}
 
+# Matching file for curl options
+PRIMER_CURL_OPTIONS=${PRIMER_CURL_OPTIONS:-}
+
 primer_abort() {
     yush_error "$1"
     exit 1
@@ -107,7 +110,8 @@ Usage:
                      replaced with the MAC address of the primary Ethernet
                      interface, in lower-case without separators)
     --no-subst       Do not substitute env variables in config files.
-    -xx:yy           Provided xx is a step, pass the option --yy to its function
+    --xx:yy          Provided xx is a step, pass the option --yy to its function
+    --curl           Path to curl options matching DB
     -h | --help      Print this help and exit
     -v | --verbose   Verbosity level
 
@@ -182,6 +186,11 @@ $_step $_opt $_val"
             PRIMER_CONFIG=$2; shift 2;;
         --config=*)
             PRIMER_CONFIG="${1#*=}"; shift 1;;
+
+        --curl)
+            PRIMER_CURL_OPTIONS=$2; shift 2;;
+        --curl=*)
+            PRIMER_CURL_OPTIONS="${1#*=}"; shift 1;;
 
         --no-subst)
             PRIMER_SUBST=0; shift 1;;
@@ -287,11 +296,16 @@ primer_hostinfo() {
     printf '\tmac: %s\n' "$_mac"
 }
 
+# Discover OS type and how to run sudo.
+primer_os_init
+
 # Read configuration from .env formatted file(s)
 if [ -n "$PRIMER_CONFIG" ]; then
     primer_config "$PRIMER_CONFIG"
 else
     primer_config "./primer.env"
+    # Note that this automagically installs the iproute2 package in a Ubuntu
+    # Docker container, as the ip command does not exists there...
     _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
     [ -n "$_mac" ] && primer_config "./primer_${_mac}.env"
 fi
@@ -315,8 +329,6 @@ done <<EOF
 $(printf %s\\n "$PRIMER_STEP_OPTIONS")
 EOF
 
-# Discover how and if to sudo
-primer_os_sudo
 
 # Default command is to install
 if [ "$#" -gt 0 ]; then

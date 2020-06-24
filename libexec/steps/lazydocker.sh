@@ -11,13 +11,6 @@ PRIMER_STEP_LAZYDOCKER_RELEASES=https://api.github.com/repos/jesseduffield/lazyd
 # Root URL to download location
 PRIMER_STEP_LAZYDOCKER_DOWNLOAD=https://github.com/jesseduffield/lazydocker/releases/download
 
-# Decide curl options depending on log-level
-if yush_loglevel_le verbose; then
-    PRIMER_STEP_LAZYDOCKER_CURL_OPTS="-fSL --progress-bar"
-else
-    PRIMER_STEP_LAZYDOCKER_CURL_OPTS=-sSL
-fi
-
 primer_step_lazydocker() {
     case "$1" in
         "option")
@@ -35,7 +28,6 @@ primer_step_lazydocker() {
             done
             ;;
         "install")
-            primer_os_dependency curl
             if ! [ -x "$(command -v "lazydocker")" ]; then
                 if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
                     # Following uses the github API
@@ -44,7 +36,7 @@ primer_step_lazydocker() {
                     # "full" releases. Release candidates have -rcXXX in their version
                     # number, these are set away by the grep/sed combo.
                     yush_notice "Discovering latest Docker Lazydocker version from $PRIMER_STEP_LAZYDOCKER_RELEASES"
-                    PRIMER_STEP_LAZYDOCKER_VERSION=$(  curl $PRIMER_STEP_LAZYDOCKER_CURL_OPTS "$PRIMER_STEP_LAZYDOCKER_RELEASES" |
+                    PRIMER_STEP_LAZYDOCKER_VERSION=$(  primer_net_curl "$PRIMER_STEP_LAZYDOCKER_RELEASES" |
                                         grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
                                         sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
                                         head -1)
@@ -80,8 +72,8 @@ _primer_step_lazydocker_install_download() {
         armv6*) _arch=armv6;;
     esac
     tar_file="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_${_arch}.tar.gz"
-    if curl $PRIMER_STEP_LAZYDOCKER_CURL_OPTS "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
-        curl $PRIMER_STEP_LAZYDOCKER_CURL_OPTS "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/checksums.txt" > "${tmpdir}/checksums.txt"
+    if primer_net_curl "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
+        primer_net_curl "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/checksums.txt" > "${tmpdir}/checksums.txt"
         local_sum=$(sha256sum "${tmpdir}/$tar_file" | awk '{print $1};')
         remote_sum=$(grep "$tar_file" "${tmpdir}/checksums.txt"|awk '{print $1};')
         if [ "$local_sum" != "$remote_sum" ]; then

@@ -25,31 +25,47 @@ primer_os_platform() {
     fi
 }
 
+PRIMER_OS_DISTRO=""
 primer_os_distribution() {
-	lsb_dist=""
-	# Every system that we officially support has /etc/os-release
-	if [ -r /etc/os-release ]; then
-        # shellcheck disable=SC1091
-		lsb_dist="$(. /etc/os-release && echo "$ID")"
-	fi
-	# Returning an empty string here should be alright since the
-	# case statements don't act unless you provide an actual value
-	printf %s\\n "$lsb_dist" | tr '[:upper:]' '[:lower:]'
+    if [ -z "$PRIMER_OS_DISTRO" ]; then
+        lsb_dist=""
+        # Every system that we officially support has /etc/os-release
+        if [ -r /etc/os-release ]; then
+            # shellcheck disable=SC1091
+            lsb_dist="$(. /etc/os-release && echo "$ID")"
+        fi
+        # Returning an empty string here should be alright since the
+        # case statements don't act unless you provide an actual value
+        PRIMER_OS_DISTRO=$(printf %s\\n "$lsb_dist" | tr '[:upper:]' '[:lower:]')
+    fi
+    printf %s\\n "$PRIMER_OS_DISTRO"
 }
 
+PRIMER_OS_VERSION=""
 primer_os_version() {
-	_version=""
-	# Every system that we officially support has /etc/os-release
-	if [ -r /etc/os-release ]; then
-        # shellcheck disable=SC1091
-		_version="$(. /etc/os-release && echo "$VERSION_ID")"
-	fi
-	printf %s\\n "$_version" | tr '[:upper:]' '[:lower:]'
+    if [ -z "$PRIMER_OS_VERSION" ]; then
+        _version=""
+        # Every system that we officially support has /etc/os-release
+        if [ -r /etc/os-release ]; then
+            # shellcheck disable=SC1091
+            _version="$(. /etc/os-release && echo "$VERSION_ID")"
+        fi
+        PRIMER_OS_VERSION=$(printf %s\\n "$_version" | tr '[:upper:]' '[:lower:]')
+    fi
+    printf %s\\n "$PRIMER_OS_VERSION"
 }
 
-PRIMER_PKGIDX_UPDATED=${PRIMER_PKGIDX_UPDATED:-"0"}
+primer_os_init() {
+    primer_os_sudo
+    # Initialise caches, don't run in sub-shells.
+    primer_os_distribution > /dev/null
+    primer_os_version > /dev/null
+    yush_info "Discovered OS as $PRIMER_OS_DISTRO $PRIMER_OS_VERSION"
+}
+
+PRIMER_OS_PKGIDX_UPDATED=${PRIMER_OS_PKGIDX_UPDATED:-"0"}
 primer_os_update() {
-    if [ "$PRIMER_PKGIDX_UPDATED" = "0" ]; then
+    if [ "$PRIMER_OS_PKGIDX_UPDATED" = "0" ]; then
         yush_info "Updating OS package indices (if relevant)"
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
@@ -65,15 +81,15 @@ primer_os_update() {
             *)
                 yush_warn "System update NYI for $lsb_dist";;
         esac
-        PRIMER_PKGIDX_UPDATED=1
+        PRIMER_OS_PKGIDX_UPDATED=1
     fi
 }
 
-PRIMER_UPGRADED=${PRIMER_UPGRADED:-"0"}
+PRIMER_OS_UPGRADED=${PRIMER_OS_UPGRADED:-"0"}
 primer_os_upgrade() {
     # Update indices
     primer_os_update
-    if [ "$PRIMER_UPGRADED" = "0" ] || [ "$1" = "-f" ] || [ "$1" = "--force" ]; then
+    if [ "$PRIMER_OS_UPGRADED" = "0" ] || [ "$1" = "-f" ] || [ "$1" = "--force" ]; then
         yush_info "Unattended upgrade of the OS (this might take time!)"
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
@@ -94,12 +110,12 @@ primer_os_upgrade() {
             *)
                 yush_warn "System upgrade NYI for $lsb_dist";;
         esac
-        PRIMER_UPGRADED=1
+        PRIMER_OS_UPGRADED=1
     fi
 }
 
 primer_os_dependency() {
-    if ! [ -x "$(command -v "$1")" ] || [ -z "$1" ]; then
+    if ! command -v "$1" >/dev/null 2>&1 || [ -z "$1" ]; then
         cmd=$1
         shift
 
@@ -187,7 +203,6 @@ primer_os_packages() {
                     $PRIMER_OS_SUDO dpkg --get-selections | grep -v deinstall | awk '{print $1}'
                     ;;
                 alpine*)
-                    # shellcheck disable=SC2086
                     _primer_os_apk list -I 2>/dev/null | awk '{print $1}'
                     ;;
                 clear*linux*)
@@ -200,7 +215,7 @@ primer_os_packages() {
         installed)
             # Is package passed as argument installed
             shift
-            primer_os_packages list | grep -q "$1"
+            primer_os_packages list | grep -q "^$1"
             ;;
         search)
             case "$lsb_dist" in
@@ -297,7 +312,7 @@ primer_os_bash_completion_dir() {
 _primer_os_apk() {
     cmd=$1; shift
     if yush_loglevel_le debug; then
-        $PRIMER_OS_SUDO apk "$cmd" "$@" 
+        $PRIMER_OS_SUDO apk "$cmd" "$@"
     else
         $PRIMER_OS_SUDO apk "$cmd" -q "$@"
     fi
@@ -315,9 +330,8 @@ _primer_os_apt() {
 _primer_os_swupd() {
     cmd=$1; shift
     if yush_loglevel_le debug; then
-        $PRIMER_OS_SUDO swupd "$cmd" --assume=yes "$@" 
+        $PRIMER_OS_SUDO swupd "$cmd" --assume=yes "$@"
     else
         $PRIMER_OS_SUDO swupd "$cmd" --assume=yes --quiet "$@"
     fi
-
 }

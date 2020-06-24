@@ -316,6 +316,18 @@ consider. When installing or cleaning, steps will be run in that order, and the
 value of this option would override any value that would come from an
 environment variable, e.g. read as a [`.env`](#c-or---config) file.
 
+#### `--curl`
+
+The value of this option is the path to a file matching URLs to their curl
+options. In this file, blank lines and lines starting with a `#` (hash mark)
+will be ignored. Otherwise, the first item of the line should be an extended
+regular expression to match against a URL, and the remaining options that will
+be blindly passed to `curl` when it is used to download URLs matching the
+expression. The expression itself can be URL encoded to arrange for all special
+characters, including possible spaces. This feature can be used, for example,
+for debugging purposes, or to provide authentication details to `curl` to access
+URLs.
+
 #### `--<step>:<opt>`
 
 Any long option that looks like the above, where `<step>` is the name of an
@@ -382,6 +394,7 @@ with `PRIMER_`. They are:
 * `PRIMER_BINDIR` is the `bin` directory under `PRIMER_LOCAL`.
 * `PRIMER_LIBDIR` is the `lib` directory under `PRIMER_LOCAL`.
 * `PRIMER_OPTDIR` is the `opt` directory under `PRIMER_LOCAL`.
+* `PRIMER_CURL_OPTIONS` is the same as the [`--curl`](#curl) option.
 
 In addition, steps will also recognise environment variables, these all start
 with `PRIMER_STEP_`. More details are available in the [conventions] document.

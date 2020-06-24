@@ -51,7 +51,6 @@ primer_step_compose() {
             done
             ;;
         "install")
-            primer_os_dependency curl
             if ! [ -x "$(command -v "docker-compose")" ]; then
                 if [ -z "$PRIMER_STEP_COMPOSE_VERSION" ]; then
                     # Following uses the github API
@@ -60,7 +59,7 @@ primer_step_compose() {
                     # "full" releases. Release candidates have -rcXXX in their version
                     # number, these are set away by the grep/sed combo.
                     yush_notice "Discovering latest Docker Compose version from $PRIMER_STEP_COMPOSE_RELEASES"
-                    PRIMER_STEP_COMPOSE_VERSION=$(  curl -sSL "$PRIMER_STEP_COMPOSE_RELEASES" |
+                    PRIMER_STEP_COMPOSE_VERSION=$(  primer_net_curl "$PRIMER_STEP_COMPOSE_RELEASES" |
                                         grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*"' |
                                         sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*)",/\1/g' |
                                         head -1)
@@ -94,7 +93,7 @@ primer_step_compose() {
             ! [ -d "$_completion_dir" ] && \
                     $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
             ! [ -f "${_completion_dir}/docker-compose" ] && \
-                    curl -sSL https://raw.githubusercontent.com/docker/compose/v"$PRIMER_STEP_COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
+                    primer_net_curl https://raw.githubusercontent.com/docker/compose/v"$PRIMER_STEP_COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
                         $PRIMER_OS_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
             ;;
         "clean")
@@ -136,7 +135,7 @@ _primer_step_compose_install_python() {
 _primer_step_compose_install_download() {
     lsb_dist=$(primer_os_distribution)
     tmpdir=$(mktemp -d)
-    if curl --progress-bar -fSL "${PRIMER_STEP_COMPOSE_DOWNLOAD%%/}/$PRIMER_STEP_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-compose"; then
+    if primer_net_curl "${PRIMER_STEP_COMPOSE_DOWNLOAD%%/}/$PRIMER_STEP_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"  --progress-bar > "${tmpdir}/docker-compose"; then
         # Check against the sha256 sum if necessary.
         if [ -n "$PRIMER_STEP_COMPOSE_SHA256" ]; then
             yush_debug "Verifying sha256 sum"
@@ -176,7 +175,7 @@ _primer_step_compose_install_glibc() {
     # Detect latest version
     if [ -z "$PRIMER_STEP_COMPOSE_GLIBC_VERSION" ]; then
         yush_info "Discovering latest glibc support release version"
-        PRIMER_STEP_COMPOSE_GLIBC_VERSION=$(    curl -fSL --progress-bar "$PRIMER_STEP_COMPOSE_GLIBC_RELEASES" |
+        PRIMER_STEP_COMPOSE_GLIBC_VERSION=$(    primer_net_curl "$PRIMER_STEP_COMPOSE_GLIBC_RELEASES" --progress-bar |
                             grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*(-r[0-9])"' |
                             sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*(-r[0-9]))",/\1/g' |
                             head -1)
@@ -184,10 +183,10 @@ _primer_step_compose_install_glibc() {
 
     yush_info "Installing glibc support at version $PRIMER_STEP_COMPOSE_GLIBC_VERSION"
     GLIBC_TMPDIR=$(mktemp -d)
-    $PRIMER_OS_SUDO curl -fSL --progress-bar "$PRIMER_STEP_COMPOSE_GLIBC_PUBKEY" -o /etc/apk/keys/sgerrand.rsa.pub
-    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
+    primer_net_curl "$PRIMER_STEP_COMPOSE_GLIBC_PUBKEY" --progress-bar | $PRIMER_OS_SUDO tee /etc/apk/keys/sgerrand.rsa.pub > /dev/null
+    primer_net_curl "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" --progress-bar -o "$GLIBC_TMPDIR/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
     $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
-    curl -fSL --progress-bar "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" -o "$GLIBC_TMPDIR/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
+    primer_net_curl "https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${PRIMER_STEP_COMPOSE_GLIBC_VERSION}/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk" --progress-bar -o "$GLIBC_TMPDIR/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
     $PRIMER_OS_SUDO apk add "$GLIBC_TMPDIR/glibc-bin-${PRIMER_STEP_COMPOSE_GLIBC_VERSION}.apk"
     rm -rf "$GLIBC_TMPDIR"
 }
