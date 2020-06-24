@@ -45,8 +45,14 @@ PRIMER_EXTS=${PRIMER_EXTS:-".sh"}
 PRIMER_STEPS=${PRIMER_STEPS:-}
 
 # Configuration file to read, this will be a .env like file that can be used to
-# pass options to the various implementations steps.
-PRIMER_CONFIG=${PRIMER_CONFIG:-./primer.env}
+# pass options to the various implementations steps. When empty, the default,
+# the file called primer.env in the current working directory will be read. On
+# top of that file, if a file called primer_<mac>.env exists (<mac> being
+# replaced by the MAC address of the primary ethernet interface, in lowercase,
+# with colon as separators), it will also be read. This allows generic data to
+# be kept in the main primer.env and host specific to be hold in the file with
+# the mac address.
+PRIMER_CONFIG=${PRIMER_CONFIG:-}
 
 # Should we allow substitution in configuration file.
 PRIMER_SUBST=1
@@ -96,7 +102,10 @@ Usage:
   an equal sign):
     -s | --steps     List of steps to perform
     -p | --path      Colon separated path to search for steps.
-    -c | --config    .env config file to read, defaults to primer.env in cwd
+    -c | --config    .env config file to read, defaults to primer.env in cwd,
+                     then primer_<mac>.env in cwd if they exist (<mac> will be
+                     replaced with the MAC address of the primary Ethernet
+                     interface, in lower-case with colons)
     --no-subst       Do not substitute env variables in config files.
     -xx:yy           Provided xx is a step, pass the option --yy to its function
     -h | --help      Print this help and exit
@@ -198,51 +207,23 @@ $_step $_opt $_val"
     esac
 done
 
-# Read configuration from .env formatted file
-if [ -n "$PRIMER_CONFIG" ] && [ -f "$PRIMER_CONFIG" ]; then
-    yush_info "Reading installation configuration from $PRIMER_CONFIG"
-    while IFS='=' read -r key val; do
-        # Skip over lines containing comments.
-        # (Lines starting with '#').
-        [ "${key##\#*}" ] || continue
+# Read configuration (as in .env terminated) file passed as a parameter.
+primer_config() {
+    if [ -f "$1" ]; then
+        yush_info "Reading installation configuration from $1"
+        while IFS='=' read -r key val || [ -n "$key" ]; do
+            # Skip over lines containing comments.
+            # (Lines starting with '#').
+            [ "${key##\#*}" ] || continue
 
-        if [ -n "$key" ]; then
-            yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
-            yush_debug "Setting $key=$val"
-            export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
-        fi
-    done < "$PRIMER_CONFIG"
-fi
-
-# Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
-# respective modules. This is because command-line options should have
-# precedence over environment variables (even if read from file).
-[ -n "$OPT_STEPS" ] && PRIMER_STEPS=$OPT_STEPS
-while IFS= read -r line; do
-    if [ -n "$line" ]; then
-        _step=$(printf %s\\n "$line" | cut -d " " -f 1)
-        _opt=$(printf %s\\n "$line" | cut -d " " -f 2)
-        # Take everything for the value in case it contains spaces.
-        _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
-        yush_info "Passing option --$_opt to $_step"
-        if primer_utils_loadif "$_step"; then
-            "primer_step_$_step" option "--$_opt" "$_val"
-        fi
+            if [ -n "$key" ]; then
+                yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
+                yush_debug "Setting $key=$val"
+                export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
+            fi
+        done < "$1"
     fi
-done <<EOF
-$(printf %s\\n "$PRIMER_STEP_OPTIONS")
-EOF
-
-# Discover how and if to sudo
-primer_os_sudo
-
-# Default command is to install
-if [ "$#" -gt 0 ]; then
-    cmd=$1
-    shift
-else
-    cmd=install
-fi
+}
 
 # Return the list of known steps. Due to amalgamation, there is a possibility
 # that steps are printed out twice.
@@ -297,19 +278,53 @@ EOF
 
 primer_hostinfo() {
     yush_info "Getting Host information"
-    if=$(primer_net_interfaces| grep -E '^(en.*|eth[[:digit:]]{1,})' | head -n 1)
-    if [ -z "$if" ]; then
-        yush_warn "Cannot find a fast ethernet interface"
-    else
-        mac=$(primer_net_macaddr "$if")
-    fi
+    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)")
 
     printf "_hostinfo:\n"
     printf '\tdistribution: %s\n' "$(primer_os_distribution)"
     printf '\tversion: %s\n' "$(primer_os_version)"
     printf '\thostname: %s\n' "$(hostname)"
-    printf '\tmac: %s\n' "$mac"
+    printf '\tmac: %s\n' "$_mac"
 }
+
+# Read configuration from .env formatted file(s)
+if [ -n "$PRIMER_CONFIG" ]; then
+    primer_config "$PRIMER_CONFIG"
+else
+    primer_config "./primer.env"
+    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)")
+    [ -n "$_mac" ] && primer_config "./primer_${_mac}.env"
+fi
+
+# Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
+# respective modules. This is because command-line options should have
+# precedence over environment variables (even if read from file).
+[ -n "$OPT_STEPS" ] && PRIMER_STEPS=$OPT_STEPS
+while IFS= read -r line; do
+    if [ -n "$line" ]; then
+        _step=$(printf %s\\n "$line" | cut -d " " -f 1)
+        _opt=$(printf %s\\n "$line" | cut -d " " -f 2)
+        # Take everything for the value in case it contains spaces.
+        _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
+        yush_info "Passing option --$_opt to $_step"
+        if primer_utils_loadif "$_step"; then
+            "primer_step_$_step" option "--$_opt" "$_val"
+        fi
+    fi
+done <<EOF
+$(printf %s\\n "$PRIMER_STEP_OPTIONS")
+EOF
+
+# Discover how and if to sudo
+primer_os_sudo
+
+# Default command is to install
+if [ "$#" -gt 0 ]; then
+    cmd=$1
+    shift
+else
+    cmd=install
+fi
 
 # Pass the command to all relevant steps, in order.
 case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in

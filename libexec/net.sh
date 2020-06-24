@@ -8,11 +8,21 @@ primer_net_interfaces() {
 }
 
 primer_net_macaddr() {
-    ip addr show "$1" |
-        grep -E '^[[:space:]]*link' |
-        grep -Eo '[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}' |
-        head -n 1 |
-        tr '[:upper:]' '[:lower:]'
+    if [ "$#" = "0" ]; then
+        for _if in $(primer_net_interfaces); do
+            primer_net_macaddr "$_if"
+        done
+    elif [ -n "$1" ]; then
+        ip addr show "$1" |
+            grep -E '^[[:space:]]*link' |
+            grep -Eo '[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}' |
+            head -n 1 |
+            tr '[:upper:]' '[:lower:]'
+    fi
+}
+
+primer_net_primary_interface() {
+    primer_net_interfaces | grep -E '^(en.*|eth[[:digit:]]{1,})' | head -n 1
 }
 
 # shellcheck disable=SC2120
