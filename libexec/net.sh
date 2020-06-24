@@ -77,7 +77,7 @@ primer_net_curl() {
     # Install curl if necessary, do it just once.
     if ! command -v curl >/dev/null 2>&1; then
         yush_debug "First time installation of curl and dependencies"
-        primer_os_dependency curl
+        primer_os_dependency curl >/dev/null
     fi
 
     # Get the URL, this is the first argument. Everything else is free-form
