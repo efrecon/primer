@@ -105,7 +105,7 @@ Usage:
     -c | --config    .env config file to read, defaults to primer.env in cwd,
                      then primer_<mac>.env in cwd if they exist (<mac> will be
                      replaced with the MAC address of the primary Ethernet
-                     interface, in lower-case with colons)
+                     interface, in lower-case without separators)
     --no-subst       Do not substitute env variables in config files.
     -xx:yy           Provided xx is a step, pass the option --yy to its function
     -h | --help      Print this help and exit
@@ -292,7 +292,7 @@ if [ -n "$PRIMER_CONFIG" ]; then
     primer_config "$PRIMER_CONFIG"
 else
     primer_config "./primer.env"
-    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)")
+    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
     [ -n "$_mac" ] && primer_config "./primer_${_mac}.env"
 fi
 
