@@ -228,6 +228,9 @@ implementation in [cloud-init].
 * [`micro`][micro] installs micro at the latest or a specific version. micro is
   a modern editor for the terminal.
 * [`disk`][disk] formats and mounts attached disks.
+* [`install`][install] installs (recursively) remote or local files onto the
+  host. `install` benefits from the [`--curl`](#curl) option for authenticated
+  access to remote resources, when necessary.
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
@@ -243,6 +246,7 @@ implementation in [cloud-init].
   [lazydocker]: ./docs/steps/lazydocker.md
   [micro]: ./docs/steps/micro.md
   [disk]: ./docs/steps/disk.md
+  [install]: ./docs/steps/install.md
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
 ## Options, Environment and Commands
