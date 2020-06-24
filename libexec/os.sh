@@ -60,7 +60,7 @@ primer_os_init() {
     # Initialise caches, don't run in sub-shells.
     primer_os_distribution > /dev/null
     primer_os_version > /dev/null
-    yush_info "Discovered OS as $PRIMER_OS_DISTRO $PRIMER_OS_VERSION"
+    yush_info "Discovered OS as: $PRIMER_OS_DISTRO v$PRIMER_OS_VERSION"
 }
 
 PRIMER_OS_PKGIDX_UPDATED=${PRIMER_OS_PKGIDX_UPDATED:-"0"}
