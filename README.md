@@ -40,12 +40,13 @@ bugs through [PR]s.
 
 ## Example
 
-Primer is perhaps best explained through an example. As you probably do not want
-to pollute your host system just for testing primer, the example is a little bit
-more convoluted than necessary to confine primer to a Docker container and not
-harm the main host. Let's simulate the installation of the Docker daemon and
-client on an [Alpine] host by running primer in an [Alpine] container. To do
-this, run the following command from the main directory of the project:
+Primer is perhaps best explained through an example, scroll past this section
+for documentation. As you probably do not want to pollute your host system just
+for testing primer, the example is a little bit more convoluted than necessary
+to confine primer to a Docker container and not harm the main host. Let's
+simulate the installation of the Docker daemon and client on an [Alpine] host by
+running primer in an [Alpine] container. To do this, run the following command
+from the main directory of the project:
 
 ```shell
 docker run \
@@ -244,7 +245,105 @@ implementation in [cloud-init].
   [disk]: ./docs/steps/disk.md
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
-## Commands
+## Options, Environment and Commands
+
+### Options
+
+Primer recognises both single-dash led short options and double-dash led long
+options. Long options can be separated from their values using both a space or
+an equal sign. After all options come a [command](#commands) instructing Primer
+what to do, the default being to perform installation of all steps, no questions
+asked. As an example of setting options, all styles, consider the following
+invocations that are all equivalent and set verbosity to debug before printing
+the help:
+
+```shell
+./primer -v debug help
+./primer --verbose debug help
+./primer --verbose=debug help
+```
+
+#### `-p` or `--path`
+
+Colon separated list of directories where to look for the implementation of
+steps. The default is the `steps` directory in the `libexec` directory. Note
+that when [amalgamated](#packaging), the default is empty as all standard steps
+are already part of the amalgamation.
+
+#### `-c` or `--config`
+
+Path to a configuration file to read, in `.env` format. This file should contain
+a number of environment variables to specify the steps (and their order) that
+primer will perform, together with variables to change the options of these
+steps. In that file, all empty lines or lines starting with a `#` (hash mark)
+will be ignored. Variables should be separated from their values by an equal
+sign `=` and values should not be quoted. The default is to
+[substitute](#no-subst) the value of existing (or set through the file)
+variables by their value. Substitution uses an almost eval-safe
+[implementation][subst] for security and supports all POSIX [expansion] formats.
+
+The default for this option is an empty value in which case:
+
+* The file `primer.env` in the current working directory, if present will be
+  first read.
+* The file `primer_<mac>.env` in the current working directory, if present will
+  be read (on "top" of the previous file). In that filename, at run time,
+  `<mac>` will be the MAC address of the main Ethernet interface of the host, in
+  lower-case and using `:` (colon) signs as field separators.
+
+These defaults allow to use common primer settings across several (similar) host
+installations. Generic options for all hosts would be placed in the main
+`primer.env` file, while host-specific options would be present in the file
+containing the MAC address. To discover the MAC address that primer believes is
+the one of the main Ethernet interface, you can run the following command:
+
+```shell
+./primer -v notice env|grep -E '\s+mac:'|awk '{print $2}'
+```
+
+  [subst]: https://github.com/YanziNetworks/yu.sh/blob/fc4504e334133fe6d78531ed65301fa64e8b8193/multi-arch.sh#L19
+  [expansion]: https://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_06_02
+
+#### `-no-subst`
+
+When this flag is present, references to environment variables in `.env` files
+will not be expanded to their value at run time.
+
+#### `-s` or `--steps`
+
+The value of this option should be the space separated list of steps to
+consider. When installing or cleaning, steps will be run in that order, and the
+value of this option would override any value that would come from an
+environment variable, e.g. read as a [`.env`](#c-or---config) file.
+
+#### `--<step>:<opt>`
+
+Any long option that looks like the above, where `<step>` is the name of an
+existing step, and `<opt>` is one of the options supported by the implementation
+of the step will be passed further as `--<opt>` to the main function in the
+implementation of the step. These values have precedence over any value that
+would have been set through environment variables, e.g. read through an
+[`.env`](#c-or---config) file.
+
+#### `-v` or `--verbose`
+
+Change verbosity. Available levels are, from most to least verbose, and as of
+the [yu.sh][logging] implementation:
+
+* `trace`
+* `debug`
+* `info` (default)
+* `notice`
+* `warn`
+* `error`
+
+  [logging]: https://github.com/YanziNetworks/yu.sh/blob/fc4504e334133fe6d78531ed65301fa64e8b8193/log.sh#L46
+
+#### `-h` or `--help`
+
+Print help and exit.
+
+### Commands
 
 Apart from the options, Primer takes a trailing command. The trailing command
 blindly defaults to `install`, meaning that the default behaviour will be to
@@ -264,6 +363,30 @@ environment variable. Primer accepts a number of aliases to those commands:
   the behaviour of the steps to be run. The list of steps can be specified as
   for the `install` command
 * `help`: Print help and exit.
+
+### Environment Variables
+
+Primer recognises a number of environment variables, some of which associated to
+its command-line [options](#options). Command-line options always have
+precedence over the value coming from environment variables. All variables start
+with `PRIMER_`. They are:
+
+* `PRIMER_PATH` is the same as the [`--path`](#p-or---path) option.
+* `PRIMER_EXTS` is a space-separated list of dot-led extensions to add to the
+  name of the step when looking for their implementations within `PRIMER_PATH`.
+  It defaults to `.sh`.
+* `PRIMER_STEPS` is the same as the [`--steps`](#s-or---steps) option.
+* `PRIMER_CONFIG` is the same as the [`--config`](#c-or---config) option.
+* `PRIMER_LOCAL` is the root directory to use as `/usr/local` when manuall
+  installing contrib packages of various sorts. It defaults to `/usr/local`.
+* `PRIMER_BINDIR` is the `bin` directory under `PRIMER_LOCAL`.
+* `PRIMER_LIBDIR` is the `lib` directory under `PRIMER_LOCAL`.
+* `PRIMER_OPTDIR` is the `opt` directory under `PRIMER_LOCAL`.
+
+In addition, steps will also recognise environment variables, these all start
+with `PRIMER_STEP_`. More details are available in the [conventions] document.
+
+  [conventions]: ./docs/CONVENTIONS.md
 
 ## Packaging
 
