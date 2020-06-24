@@ -289,7 +289,7 @@ The default for this option is an empty value in which case:
 * The file `primer_<mac>.env` in the current working directory, if present will
   be read (on "top" of the previous file). In that filename, at run time,
   `<mac>` will be the MAC address of the main Ethernet interface of the host, in
-  lower-case and using `:` (colon) signs as field separators.
+  lower-case and without any field separators.
 
 These defaults allow to use common primer settings across several (similar) host
 installations. Generic options for all hosts would be placed in the main
@@ -298,7 +298,7 @@ containing the MAC address. To discover the MAC address that primer believes is
 the one of the main Ethernet interface, you can run the following command:
 
 ```shell
-./primer -v notice env|grep -E '\s+mac:'|awk '{print $2}'
+./primer -v notice env|grep -E '\s+mac:'|awk '{print $2}'|tr -d ':'
 ```
 
   [subst]: https://github.com/YanziNetworks/yu.sh/blob/fc4504e334133fe6d78531ed65301fa64e8b8193/multi-arch.sh#L19
