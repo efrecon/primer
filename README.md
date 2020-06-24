@@ -117,16 +117,17 @@ around.
 
 The `docker` installation step can do much more. It is for example able to
 register at a Docker registry for one (the caller) or some seleted users, and
-would install Docker directly using the official installation [script][install]
-on other distributions. The script, as it is downloaded from the Internet, will
-be checked for integrity and on Debian derivatives the GPG signature of the
-official Docker repository that it adds to the system will be validated.
-Provided you have an account at gitlab.com, the following would install Docker
-in an ubuntu container instead, and login the main user (again `root` in the
-case of a container) at gitlab (you will have to provide your credentials!).
-Note the default is to verify the commit signature of the Docker installation
-script against the one hard-coded into the `docker.sh` implementation. If the
-official Docker script changes, the `docker` step in `primer` will fail.
+would install Docker directly using the official installation
+[script][install-docker] on other distributions. The script, as it is downloaded
+from the Internet, will be checked for integrity and on Debian derivatives the
+GPG signature of the official Docker repository that it adds to the system will
+be validated. Provided you have an account at gitlab.com, the following would
+install Docker in an ubuntu container instead, and login the main user (again
+`root` in the case of a container) at gitlab (you will have to provide your
+credentials!). Note the default is to verify the commit signature of the Docker
+installation script against the one hard-coded into the `docker.sh`
+implementation. If the official Docker script changes, the `docker` step in
+`primer` will fail.
 
 ```shell
 docker run \
@@ -139,13 +140,13 @@ docker run \
   --docker:registry youruser:XXXXX@registry.gitlab.com
 ```
 
-  [install]: https://get.docker.com/
+  [install-docker]: https://get.docker.com/
 
 In the command above, note the specially formatted option `--docker:registry`.
 This option is parsed by primer so that what appears before the separating `:`
 (colon sign) is the name of a step to be looked up (in our case, the same step
 as above, i.e. `docker`). The remaining forms an option that will be blindly
-passed to the `primer_step_docker` function in the implemenation. So, in this
+passed to the `primer_step_docker` function in the implementation. So, in this
 case, the function called `primer_step_docker`, implemented as part of
 `docker.sh` will be called as follows. Note that `registry` automatically became
 a double-dashed option `--registry`.
@@ -398,7 +399,7 @@ with `PRIMER_`. They are:
 * `PRIMER_BINDIR` is the `bin` directory under `PRIMER_LOCAL`.
 * `PRIMER_LIBDIR` is the `lib` directory under `PRIMER_LOCAL`.
 * `PRIMER_OPTDIR` is the `opt` directory under `PRIMER_LOCAL`.
-* `PRIMER_CURL_OPTIONS` is the same as the [`--curl`](#curl) option.
+* `PRIMER_CURL_OPTIONS` is the same as the [`--curl`](#--curl) option.
 
 In addition, steps will also recognise environment variables, these all start
 with `PRIMER_STEP_`. More details are available in the [conventions] document.
