@@ -319,7 +319,7 @@ will not be expanded to their value at run time.
 The value of this option should be the space separated list of steps to
 consider. When installing or cleaning, steps will be run in that order, and the
 value of this option would override any value that would come from an
-environment variable, e.g. read as a [`.env`](#c-or---config) file.
+environment variable, e.g. read as a [`.env`](#-c-or---config) file.
 
 #### `--curl`
 
@@ -340,7 +340,7 @@ existing step, and `<opt>` is one of the options supported by the implementation
 of the step will be passed further as `--<opt>` to the main function in the
 implementation of the step. These values have precedence over any value that
 would have been set through environment variables, e.g. read through an
-[`.env`](#c-or---config) file.
+[`.env`](#-c-or---config) file.
 
 #### `-v` or `--verbose`
 
