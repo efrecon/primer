@@ -232,6 +232,8 @@ implementation in [cloud-init].
 * [`install`][install] installs (recursively) remote or local files onto the
   host. `install` benefits from the [`--curl`](#curl) option for authenticated
   access to remote resources, when necessary.
+* [`freeform`][freeform] looks up and executes binaries in alphabetical order to
+  perform free-form installation/removal operations.
 
   [cc]: https://github.com/canonical/cloud-init/tree/master/cloudinit/config
   [packages]: ./docs/steps/packages.md
@@ -248,6 +250,7 @@ implementation in [cloud-init].
   [micro]: ./docs/steps/micro.md
   [disk]: ./docs/steps/disk.md
   [install]: ./docs/steps/install.md
+  [freeform]: ./docs/steps/freeform.md
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
 ## Options, Environment and Commands
