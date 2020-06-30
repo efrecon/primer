@@ -1,0 +1,5 @@
+#ahmetb/kubectx kubectx_%version%_%kernel%_%machine%* kubectx
+#ahmetb/kubectx kubens_%version%_%kernel%_%machine%* kubens
+#jesseduffield/lazydocker lazydocker_%semantic%_%Kernel%_%machine%* lazydocker
+#jesseduffield/lazygit lazygit_%semantic%_%Kernel%_%machine%* lazygit
+zyedidia/micro micro-%semantic%-%kernel%%bits%* micro
