@@ -228,6 +228,7 @@ implementation in [cloud-init].
   installation.
 * [`micro`][micro] installs micro at the latest or a specific version. micro is
   a modern editor for the terminal.
+* [`github`][github] installs binaries from project releases (assets) at github.
 * [`disk`][disk] formats and mounts attached disks.
 * [`install`][install] installs (recursively) remote or local files onto the
   host. `install` benefits from the [`--curl`](#curl) option for authenticated
@@ -248,6 +249,7 @@ implementation in [cloud-init].
   [machinery]: ./docs/steps/machinery.md
   [lazydocker]: ./docs/steps/lazydocker.md
   [micro]: ./docs/steps/micro.md
+  [github]: ./docs/steps/github.md
   [disk]: ./docs/steps/disk.md
   [install]: ./docs/steps/install.md
   [freeform]: ./docs/steps/freeform.md
