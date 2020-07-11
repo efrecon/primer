@@ -6,7 +6,7 @@ TEST_VARIABLE=${TEST_VARIABLE:-}
 # Name of test to perform at installation
 TEST_TEST=${TEST_TEST:-}
 
-test() {
+primer_step_test() {
     case "$1" in
         "option")
             shift;
@@ -27,11 +27,22 @@ test() {
             case "$TEST_TEST" in
                 variable)
                     echo "$TEST_VARIABLE";;
-                sudo)
+                os_sudo)
                     echo "$PRIMER_OS_SUDO";;
-                platform | distribution)
-                    "primer_os_$TEST_TEST";;
-                locate)
+                os_container)
+                    if primer_os_in_container; then
+                        echo "1"
+                    else
+                        echo "0"
+                    fi;;
+                os_curl)
+                    primer_os_dependency curl
+                    curl -h;;
+                os_*)
+                    "primer_$TEST_TEST";;
+                net_*)
+                    "primer_$TEST_TEST";;
+                utils_locate)
                     primer_utils_locate "test";;
                 *)
                     yush_warn "$TEST_TEST is an unknown test";;
