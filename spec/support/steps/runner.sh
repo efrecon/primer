@@ -3,7 +3,7 @@
 # command to execute
 RUNNER_COMMAND=${RUNNER_COMMAND:-}
 
-runner() {
+primer_step_runner() {
     case "$1" in
         "option")
             shift;
