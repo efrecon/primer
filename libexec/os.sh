@@ -245,7 +245,7 @@ primer_os_packages() {
 }
 
 # Detect if running within a container
-primer_os_in_container() { grep -q -E '(docker|lxc)' /proc/1/cgroup; }
+primer_os_in_container() { grep -qE '(docker|lxc)' /proc/1/cgroup; }
 
 primer_os_service() {
     if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart|list)'; then
