@@ -169,6 +169,7 @@ _primer_step_dynufw_install_static() {
                         ip=$(yush_resolv_v4 "$host")
                     fi
                     if [ -n "$ip" ]; then
+                        yush_debug "One time resolution of $host led to $ip"
                         yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${ip}"
                         $PRIMER_OS_SUDO ufw allow proto "$proto" from "$ip" to any port "$port"
                     else
