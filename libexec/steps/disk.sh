@@ -89,12 +89,16 @@ primer_step_disk() {
                                 # the colon sign is well-formatted shell vars
                                 uuid=$($PRIMER_OS_SUDO blkid "/dev/$dev" | _primer_step_disk_blkid_val "UUID")
                                 if [ -n "$uuid" ]; then
-                                    yush_notice "Mounting $uuid onto $mnt at boot with options: $opts"
-                                    printf "UUID=%s %s %s %s 0 2\n" "$uuid" "$mnt" "$fmt" "$opts" |
-                                        $PRIMER_OS_SUDO tee -a /etc/fstab > /dev/null
-                                    $PRIMER_OS_SUDO mount "$mnt"
-                                    $PRIMER_OS_SUDO chown "${user}:${group}" "$mnt"
-                                    $PRIMER_OS_SUDO chmod "$perms" "$mnt"
+                                    if mount | grep -qE "^/dev/$dev"; then
+                                        yush_warn "/dev/$dev already mounted, skipping $mnt mountpoint!"
+                                    else
+                                        yush_notice "Mounting $uuid onto $mnt at boot with options: $opts"
+                                        printf "UUID=%s %s %s %s 0 2\n" "$uuid" "$mnt" "$fmt" "$opts" |
+                                            $PRIMER_OS_SUDO tee -a /etc/fstab > /dev/null
+                                        $PRIMER_OS_SUDO mount "$mnt"
+                                        $PRIMER_OS_SUDO chown "${user}:${group}" "$mnt"
+                                        $PRIMER_OS_SUDO chmod "$perms" "$mnt"
+                                    fi
                                 fi
                             else
                                 yush_warn "$fmt is an unknown filesystem type!"
