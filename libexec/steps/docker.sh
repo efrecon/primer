@@ -150,6 +150,16 @@ primer_step_docker() {
                         yush_warn "Will not copy private Docker settings information to other users"
                     fi
                 fi
+
+                # Bash completion, if necessary
+                _docker_version=$(docker --version|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)
+                yush_debug "Installing bash completions for Docker v $_docker_version"
+                _completion_dir=$(primer_os_bash_completion_dir)
+                ! [ -d "$_completion_dir" ] && \
+                        $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
+                ! [ -f "${_completion_dir}/docker" ] && \
+                        primer_net_curl https://raw.githubusercontent.com/docker/docker-ce/v${_docker_version}/components/cli/contrib/completion/bash/docker |
+                            $PRIMER_OS_SUDO tee "${_completion_dir}/docker" > /dev/null
             else
                 yush_warn "No docker client installed!"
             fi
