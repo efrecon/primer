@@ -149,7 +149,7 @@ _primer_step_github_parse() {
 _primer_step_github_latest() {
     _releases=${PRIMER_STEP_GITHUB_API%/}/repos/${1}/releases
     yush_notice "Discovering last version of $1"
-    yush_trace "Getting latest release from $_releases"
+    yush_debug "Getting latest release from $_releases"
     r_name=
     r_id=
     r_tag=
@@ -183,7 +183,7 @@ EOF
 _primer_step_github_by_version() {
     _releases=${PRIMER_STEP_GITHUB_API%/}/repos/${1}/releases
     yush_notice "Discovering version of $1 glob-matching $2"
-    yush_trace "Getting latest release from $_releases"
+    yush_debug "Getting latest release from $_releases"
     r_name=
     r_id=
     r_tag=
