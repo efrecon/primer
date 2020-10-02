@@ -90,11 +90,13 @@ primer_step_compose() {
 
             yush_debug "Installing bash completions"
             _completion_dir=$(primer_os_bash_completion_dir)
-            ! [ -d "$_completion_dir" ] && \
-                    $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
-            ! [ -f "${_completion_dir}/docker-compose" ] && \
-                    primer_net_curl https://raw.githubusercontent.com/docker/compose/v"$PRIMER_STEP_COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
-                        $PRIMER_OS_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
+            if ! [ -d "$_completion_dir" ]; then
+                $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
+            fi
+            if ! [ -f "${_completion_dir}/docker-compose" ]; then
+                primer_net_curl https://raw.githubusercontent.com/docker/compose/v"$PRIMER_STEP_COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
+                    $PRIMER_OS_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
+            fi
             ;;
         "clean")
             yush_info "Removing Docker Compose and bash completion"
