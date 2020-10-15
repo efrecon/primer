@@ -75,12 +75,25 @@ _primer_step_install() {
                 # shellcheck disable=SC2086
                 primer_net_curl "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
             else
-                if [ -d "$tgt" ]; then
-                    yush_info "Recursively copying $src into $tgt"
-                    $PRIMER_OS_SUDO cp -R "$src" "$tgt"
+                if [ -z "$src" ]; then
+                    # Ensure directory or file exists. Directories should end
+                    # with a slash.
+                    if yush_glob '*/' "$tgt"; then
+                        yush_info "Creating directory $tgt"
+                        mkdir -p "$tgt"
+                    else
+                        yush_info "Creating empty file $tgt, including containing directory"
+                        mkdir -p $(yush_dirname "$tgt")
+                        touch "$tgt"
+                    fi
                 else
-                    yush_info "Copying $src into $tgt"
-                    $PRIMER_OS_SUDO cp "$src" "$tgt"
+                    if [ -d "$tgt" ]; then
+                        yush_info "Recursively copying $src into $tgt"
+                        $PRIMER_OS_SUDO cp -R "$src" "$tgt"
+                    else
+                        yush_info "Copying $src into $tgt"
+                        $PRIMER_OS_SUDO cp "$src" "$tgt"
+                    fi
                 fi
             fi
 
