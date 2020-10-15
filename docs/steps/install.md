@@ -39,6 +39,11 @@ The `install` step uses `curl` when downloading remote resources. To access
 protected resources, you can match these to the relevant curl [options] using
 the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`)
 
+When a source is empty, the `install` step will either create an empty directory
+or an empty file. In that special case, directory names should end with a slash
+in order for the `install` step to make the difference between files and
+directories. All intermediate directories will be created, if necessary.
+
   [options]: https://curl.haxx.se/docs/manpage.html#OPTIONS
 
 ## Options
@@ -53,6 +58,15 @@ as above.
 This option can be repeated as many times as needed. Each value to this option
 should be formatted as the active lines of the specification file described
 above.
+
+### `--overwrite`
+
+The value of this option should be a boolean (`yes`/`no`, `true`/`false`,
+`on`/`off`, an integer). By default, this option is true. When it is set to
+false, nothing will be done when the target resource already exists. This also
+includes not setting the permissions when the target already exists. The
+rationale for having this boolean to true by default is that this step is
+targeting the forcefull installation of files.
 
 ## Environment Variables
 
