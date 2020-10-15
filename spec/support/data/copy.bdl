@@ -1,0 +1,3 @@
+# This file follows the rules for installation bundles.
+:/tmp/test1/:::a+rwx
+:/tmp/test2/empty:::
