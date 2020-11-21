@@ -45,23 +45,33 @@ primer_step_disk() {
                         # Parse lines and find out good defaults.
                         _primer_step_disk_linespec "$line"
 
-                        if ls -1 "/dev/${dev}" >/dev/null 2>&1; then
+                        # Resolve symlinks, as we can use udev disk/by-label
+                        # categorisation, but only the real target will be
+                        # reported by mount
+                        if [ -L "/dev/${dev}" ]; then
+                            _dev=$(readlink -f "/dev/${dev}")
+                            yush_debug "Resolved /dev/${dev} to $_dev"
+                        else
+                            _dev="/dev/${dev}"
+                        fi
+
+                        if ls -1 "$_dev" >/dev/null 2>&1; then
                             # Make sure we can format at that filesystem
                             mkfs=mkfs.$fmt
                             if command -v "$mkfs" >/dev/null; then
                                 # Check if device is already formatted.
-                                current=$($PRIMER_OS_SUDO blkid "/dev/$dev" | _primer_step_disk_blkid_val "TYPE")
+                                current=$($PRIMER_OS_SUDO blkid "$_dev" | _primer_step_disk_blkid_val "TYPE")
                                 format=0
                                 if [ -z "$current" ]; then
                                     format=1
                                 elif yush_is_true "$PRIMER_STEP_DISK_OVERWRITE"; then
                                     format=1
-                                    yush_warn "$dev already formatted as $current, overwriting with $fmt filesystem"
+                                    yush_warn "/dev/$dev already formatted as $current, overwriting with $fmt filesystem"
                                 else
-                                    yush_notice "$dev already formatted as $current, keeping it"
+                                    yush_notice "/dev/$dev already formatted as $current, keeping it"
                                 fi
 
-                                # Format 
+                                # Format
                                 if [ "$format" = "1" ]; then
                                     # Figure out filesystem specific mkfs
                                     # options.
@@ -73,8 +83,8 @@ primer_step_disk() {
                                     fi
 
                                     # Format with requested filesystem
-                                    yush_notice "Formatting $dev as $fmt with options: $opts"
-                                    $PRIMER_OS_SUDO mkfs.${PRIMER_STEP_DISK_FORMAT} $mkfs_opts "/dev/${dev}"
+                                    yush_notice "Formatting /dev/$dev as $fmt with options: $opts"
+                                    $PRIMER_OS_SUDO "mkfs.${PRIMER_STEP_DISK_FORMAT}" $mkfs_opts "$_dev"
                                 fi
 
                                 # Create mount point
@@ -83,14 +93,14 @@ primer_step_disk() {
 
                                 # Persist mount over reboots through using the
                                 # UUID of the device.
-                                yush_debug "Getting UUID for $dev"
+                                yush_debug "Getting UUID for /dev/$dev"
                                 # We parse the output, even though it would be
                                 # tempting to use eval as whatever comes after
                                 # the colon sign is well-formatted shell vars
-                                uuid=$($PRIMER_OS_SUDO blkid "/dev/$dev" | _primer_step_disk_blkid_val "UUID")
+                                uuid=$($PRIMER_OS_SUDO blkid "$_dev" | _primer_step_disk_blkid_val "UUID")
                                 if [ -n "$uuid" ]; then
-                                    if mount | grep -qE "^/dev/$dev"; then
-                                        yush_warn "/dev/$dev already mounted, skipping $mnt mountpoint!"
+                                    if mount | grep -qE "^$_dev"; then
+                                        yush_warn "$_dev already mounted, skipping $mnt mountpoint!"
                                     else
                                         yush_notice "Mounting $uuid onto $mnt at boot with options: $opts"
                                         printf "UUID=%s %s %s %s 0 2\n" "$uuid" "$mnt" "$fmt" "$opts" |
@@ -120,7 +130,17 @@ primer_step_disk() {
                         # Parse lines and find out good defaults.
                         _primer_step_disk_linespec "$line"
 
-                        if mount | grep -qE "^/dev/$dev on $mnt"; then
+                        # Resolve symlinks, as we can use udev disk/by-label
+                        # categorisation, but only the real target will be
+                        # reported by mount
+                        if [ -L "/dev/${dev}" ]; then
+                            _dev=$(readlink -f "/dev/${dev}")
+                            yush_debug "Resolved /dev/${dev} to $_dev"
+                        else
+                            _dev="/dev/${dev}"
+                        fi
+
+                        if mount | grep -qE "^$_dev on $mnt"; then
                             yush_notice "Unmounting $mnt"
                             $PRIMER_OS_SUDO umount "$mnt"
                         fi
