@@ -12,7 +12,7 @@ PRIMER_STEP_DOCKER_REGISTRY=${PRIMER_STEP_DOCKER_REGISTRY:-}
 # sha256 will change, meaning that this variable has to change. Setting it to
 # empty will disable the check, which is a security risk as this means executing
 # a script downloaded from the Internet...
-PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-1b02882d63b9cfc484ad6b0180171c679cfe0f3a}
+PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-7cae5f8b0decc17d6571f9f52eb840fbc13b2737}
 
 # Can be native (as in: OS native packaging), docker (as in: docker.com provided
 # packages) or auto (as in: pick the best one of both worlds)
