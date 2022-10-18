@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 # Short GPG signature for Docker Repo on debian derivatives
-PRIMER_STEP_DOCKER_APT_GPG=${PRIMER_STEP_DOCKER_APT_GPG:-0EBFCD88}
+PRIMER_STEP_DOCKER_APT_GPG=${PRIMER_STEP_DOCKER_APT_GPG:-}
 
 # Space separated list of registry login information in the form
 # username:password@host
@@ -271,10 +271,12 @@ _primer_step_docker_install_debian() {
 }
 
 _primer_step_docker_install_apt_verify() {
-    yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
-    dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
-    if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
-        primer_abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
+    if [ -n "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
+        yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
+        dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
+        if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
+            primer_abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
+        fi
     fi
 }
 
