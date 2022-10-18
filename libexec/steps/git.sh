@@ -83,17 +83,22 @@ primer_step_git() {
                         # Extract from the tarpack and verify we can run the
                         # binary in the first place. If that works, install it.
                         if [ -f "${tmpdir}/${_tar}" ]; then
-                            tar -C "${tmpdir}" -zxf "${tmpdir}/$_tar" git-lfs
-                            # Verify the binary actually works properly.
-                            yush_debug "Verifying binary at ${tmpdir}/git-lfs"
-                            chmod a+x "${tmpdir}/git-lfs"
-                            if ! "${tmpdir}/git-lfs" --version >/dev/null 2>&1; then
-                                yush_info "Downloaded binary at ${tmpdir}/git-lfs probaby invalid, will not install"
-                                rm -f "${tmpdir}/git-lfs"
+                            _bin=$(tar ztvf "${tmpdir}/$_tar"|grep 'git-lfs$'|awk '{print $6}')
+                            if [ -n "$_bin" ]; then
+                                tar -C "${tmpdir}" -zxf "${tmpdir}/$_tar" "$_bin"
+                                # Verify the binary actually works properly.
+                                yush_debug "Verifying binary at ${tmpdir}/git-lfs"
+                                chmod a+x "${tmpdir}/${_bin}"
+                                if ! "${tmpdir}/${_bin}" --version >/dev/null 2>&1; then
+                                    yush_info "Downloaded binary at ${tmpdir}/${_bin} probaby invalid, will not install"
+                                    rm -f "${tmpdir}/${_bin}"
+                                else
+                                    yush_notice "Installing as ${PRIMER_BINDIR%%/}/git-lfs"
+                                    ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+                                    $PRIMER_OS_SUDO mv -f "${tmpdir}/${_bin}" "${PRIMER_BINDIR%%/}/git-lfs"
+                                fi
                             else
-                                yush_notice "Installing as ${PRIMER_BINDIR%%/}/git-lfs"
-                                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
-                                $PRIMER_OS_SUDO mv -f "${tmpdir}/git-lfs" "${PRIMER_BINDIR%%/}/git-lfs"
+                                yush_warn "Cannot find git-lfs in tar file!"
                             fi
                         fi
                     else
