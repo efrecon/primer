@@ -27,6 +27,8 @@ the `:` (colon) sign. These fields are, in order:
 - [GECOS] fields (comma separated) for user
 - Login shell, ensure that the shell exists on the machine, empty for a good
   default, i.e. the default shell on that distribution.
+- A comma-separated list of GitHub usernames, the public keys of whom will be
+  allowed to login as the user with ssh.
 
   [GECOS]: https://en.wikipedia.org/wiki/Gecos_field
 
@@ -75,3 +77,8 @@ This environment variable is the same as the [`--ext`](#--ext) option.
 
 This environment variable contains the length of the generated strong passwords,
 it defaults to `12`.
+
+### `PRIMER_STEP_USERS_GHAPI`
+
+This environment variable the URL to the GitHub API. You might want to modify
+this when running against a hosted GitHub installation.
