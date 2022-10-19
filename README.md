@@ -204,8 +204,10 @@ implementation in [cloud-init].
 * [`users`][users] takes a `/etc/passwd` inspired colon separated file to create
   a number of users on the host system. Relevant groups will be created and all
   users can be made members of additional groups (e.g. `sudo`?). The module is
-  able to generate strong passwords for all these users if necessary.
-* [`git`][git] installs git on the system, with [LFS] support. 
+  able to generate strong passwords for all these users if necessary. This
+  module is also able to fetch public keys from GitHub handles to automatically
+  allow for SSH access.
+* [`git`][git] installs git on the system, with [LFS] support.
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
   The wrapper is able to track host names that would change their pointed IP
   with time (dynamic DNS).

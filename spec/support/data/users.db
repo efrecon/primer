@@ -12,8 +12,10 @@
 # - GECOS fields (comma separated) for user
 # - Login shell, ensure that the shell exists on the machine, empty for good
 #   default
+# - Comma-separated list of GitHub users whom to import SSH public keys from
+#   and will be allowed to login as that user.
 
 emmanuel:x:primer,bummer:Emmanuel Frecon,Super Hero,+461456,:
-manu:x:primer:Leunamme Nocerf,Super Vilain,+46457678,:/bin/sh
+manu:x:primer:Leunamme Nocerf,Super Vilain,+46457678,:/bin/sh:joachimlindborg,efrecon
 
 # This file must end with an empty line or a comment.

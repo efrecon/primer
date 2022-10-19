@@ -21,6 +21,9 @@ PRIMER_STEP_USERS_PWEXT=${PRIMER_STEP_USERS_PWEXT:-".pwd"}
 # Length of generated passwords
 PRIMER_STEP_USERS_PWLEN=${PRIMER_STEP_USERS_PWLEN:-12}
 
+# URL to GitHub API
+PRIMER_STEP_USERS_GHAPI=${PRIMER_STEP_USERS_GHAPI:-"https://api.github.com/"}
+
 primer_step_users() {
     case "$1" in
         "option")
@@ -58,12 +61,13 @@ primer_step_users() {
                 while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
                     if [ -n "${line}" ]; then
-                        username=$(printf %s\\n "$line" | cut -d ":" -f "1")
-                        password=$(printf %s\\n "$line" | cut -d ":" -f "2")
-                        groups=$(printf %s\\n "$line" | cut -d ":" -f "3")
+                        username=$(printf %s::::::\\n "$line" | cut -d ":" -f "1")
+                        password=$(printf %s::::::\\n "$line" | cut -d ":" -f "2")
+                        groups=$(printf %s::::::\\n "$line" | cut -d ":" -f "3")
                         group=$(yush_split "$groups" "," | head -n 1); # Primary group is first
-                        details=$(printf %s\\n "$line" | cut -d ":" -f "4")
-                        shell=$(printf %s\\n "$line" | cut -d ":" -f "5")
+                        details=$(printf %s::::::\\n "$line" | cut -d ":" -f "4")
+                        shell=$(printf %s::::::\\n "$line" | cut -d ":" -f "5")
+                        ghusers=$(printf %s::::::\\n "$line" | cut -d ":" -f "6")
                         _caller=$(id -un)
                         [ -z "$shell" ] && shell=$(getent passwd | grep -q "^$_caller:" | cut -d ":" -f 7)
 
@@ -96,11 +100,20 @@ primer_step_users() {
                                                     --group "$group" \
                                                     --gecos "$details" \
                                                     --shell "$shell"
-                            if [ -f "$_pwstore" ] && grep -Eq "^${username}:" "$_pwstore"; then
-                                password=$(grep -E "^${username}:" "$_pwstore" | head -n 1 | cut -d ":" -f "2")
-                                sed -Ei "/^${username}:.*/d" "$_pwstore"
-                                echo "${username}:${password}:${group}:${details}:${shell}" >> "$_pwstore"
+                            if yush_is_true "$PRIMER_STEP_USERS_PWSAVE"; then
+                                if [ -f "$_pwstore" ] && grep -Eq "^${username}:" "$_pwstore"; then
+                                    password=$(grep -E "^${username}:" "$_pwstore" | head -n 1 | cut -d ":" -f "2")
+                                    sed -Ei "/^${username}:.*/d" "$_pwstore"
+                                    echo "${username}:${password}:${group}:${details}:${shell}" >> "$_pwstore"
+                                fi
                             fi
+                        fi
+
+                        # Add GitHub user access
+                        if [ -n "$ghusers" ]; then
+                            for ghuser in $(yush_split "$ghusers" ","); do
+                                _primer_step_users_github_access "$username" "$group" "$ghuser"
+                            done
                         fi
                     fi
                 done < "${PRIMER_STEP_USERS_DB}"
@@ -142,6 +155,39 @@ primer_step_users() {
             fi
             ;;
     esac
+}
+
+_primer_step_users_github_access() {
+    yush_notice "Collecting SSH public keys from GitHub user $3 for user $1"
+    _homedir=$(getent passwd "$1"|cut -d ":" -f 6)
+    if ! [ -d "${_homedir}/.ssh" ]; then
+        yush_debug "Creating SSH directory ${_homedir}/.ssh for user $1"
+        $PRIMER_OS_SUDO mkdir "${_homedir}/.ssh"
+        primer_utils_path_ownership "${_homedir}/.ssh" --user "$1" --group "$2" --perms "u+rwx,go-rwx"
+    fi
+    _id=
+    _key=
+    while IFS= read -r line || [ -n "$line" ]; do
+        if printf %s\\n "$line" | grep -qE '\s*"id"\s*:'; then
+            _id=$(printf %s\\n "$line" | sed -E 's/\s*"id"\s*:\s*([0-9]+).*/\1/')
+        fi
+        if printf %s\\n "$line" | grep -qE '\s*"key"\s*:'; then
+            _key=$(printf %s\\n "$line" | sed -E 's/\s*"key"\s*:\s*"([^"]+)".*/\1/')
+        fi
+        if [ -n "$_id" ] && [ -n "$_key" ]; then
+            if ! grep -qF "${3}@github/${_id}" "${_homedir}/.ssh/authorized_keys" 2>/dev/null; then
+                yush_trace "Adding key #$_id to ${_homedir}/.ssh/authorized_keys"
+                printf '%s %s\n' "$_key" "${3}@github/${_id}" | $PRIMER_OS_SUDO tee -a "${_homedir}/.ssh/authorized_keys" > /dev/null
+            fi
+            _id=
+            _key=
+        fi
+    done <<EOF
+$(primer_net_curl "${PRIMER_STEP_USERS_GHAPI%/}/users/${3}/keys" | grep -vF -e '[' -e ']' -e '{' -e '}')
+EOF
+    if [ -f "${_homedir}/.ssh/authorized_keys" ]; then
+        primer_utils_path_ownership "${_homedir}/.ssh/authorized_keys" --user "$1" --group "$2"
+    fi
 }
 
 _primer_step_users_groups() {
