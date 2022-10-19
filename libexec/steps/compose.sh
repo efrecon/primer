@@ -60,8 +60,8 @@ primer_step_compose() {
                     # number, these are set away by the grep/sed combo.
                     yush_notice "Discovering latest Docker Compose version from $PRIMER_STEP_COMPOSE_RELEASES"
                     PRIMER_STEP_COMPOSE_VERSION=$(  primer_net_curl "$PRIMER_STEP_COMPOSE_RELEASES" |
-                                        grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*"' |
-                                        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*)",/\1/g' |
+                                        grep -E '"name"[[:space:]]*:[[:space:]]*"v?[0-9]+(\.[0-9]+)*"' |
+                                        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"(v?[0-9]+(\.[0-9]+)*)",/\1/g' |
                                         head -1)
                 fi
                 yush_info "Installing Docker compose $PRIMER_STEP_COMPOSE_VERSION and bash completion"
@@ -89,12 +89,16 @@ primer_step_compose() {
             fi
 
             yush_debug "Installing bash completions"
+            _raw_version=$(printf %s\\n "$PRIMER_STEP_COMPOSE_VERSION"|grep -E -o '[0-9]+(\.[0-9]+)*')
+            if printf %s\\n "$_raw_version" | grep -q '^[2-9]'; then
+                _raw_version=1.25.5
+            fi
             _completion_dir=$(primer_os_bash_completion_dir)
             if ! [ -d "$_completion_dir" ]; then
                 $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
             fi
             if ! [ -f "${_completion_dir}/docker-compose" ]; then
-                primer_net_curl https://raw.githubusercontent.com/docker/compose/v"$PRIMER_STEP_COMPOSE_VERSION"/contrib/completion/bash/docker-compose |
+                primer_net_curl https://raw.githubusercontent.com/docker/compose/"${_raw_version}"/contrib/completion/bash/docker-compose |
                     $PRIMER_OS_SUDO tee "${_completion_dir}/docker-compose" > /dev/null
             fi
             ;;
