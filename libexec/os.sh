@@ -321,9 +321,9 @@ _primer_os_apk() {
 _primer_os_apt() {
     cmd=$1; shift
     if yush_loglevel_le debug; then
-        DEBIAN_FRONTEND=noninteractive $PRIMER_OS_SUDO apt-get "$cmd" -y -q "$@" 
+        $PRIMER_OS_SUDO DEBIAN_FRONTEND=noninteractive apt-get "$cmd" -y -q "$@"
     else
-        DEBIAN_FRONTEND=noninteractive $PRIMER_OS_SUDO apt-get "$cmd" -y -qq "$@" > /dev/null
+        $PRIMER_OS_SUDO DEBIAN_FRONTEND=noninteractive apt-get "$cmd" -y -qq "$@" > /dev/null
     fi
 }
 
