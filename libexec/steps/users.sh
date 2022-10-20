@@ -160,11 +160,21 @@ primer_step_users() {
 _primer_step_users_github_access() {
     yush_notice "Collecting SSH public keys from GitHub user $3 for user $1"
     _homedir=$(getent passwd "$1"|cut -d ":" -f 6)
-    if ! [ -d "${_homedir}/.ssh" ]; then
+    # .ssh directory is private, so need to become root to discover if it
+    # exists. When it does not, create it and make it privately accessible to
+    # the user only.
+    if ! $PRIMER_OS_SUDO  test -d "${_homedir}/.ssh"; then
         yush_debug "Creating SSH directory ${_homedir}/.ssh for user $1"
         $PRIMER_OS_SUDO mkdir "${_homedir}/.ssh"
-        primer_utils_path_ownership "${_homedir}/.ssh" --user "$1" --group "$2" --perms "u+rwx,go-rwx"
+        primer_utils_path_ownership "${_homedir}/.ssh" \
+            --user "$1" \
+            --group "$2" \
+            --perms "u+rwx,go-rwx"
     fi
+    # Request the SSH public keys registered for the GitHub user. GitHub returns
+    # well formated JSON, so remove cruft so we keep just the meaningfull lines.
+    # Extract key id and key content in turns and add them to the
+    # authorized_keys file.
     _id=
     _key=
     while IFS= read -r line || [ -n "$line" ]; do
@@ -175,6 +185,11 @@ _primer_step_users_github_access() {
             _key=$(printf %s\\n "$line" | sed -E 's/\s*"key"\s*:\s*"([^"]+)".*/\1/')
         fi
         if [ -n "$_id" ] && [ -n "$_key" ]; then
+            # Add the key to the authorized_keys file if we haven't done it at a
+            # prior run. We use the title of the SSH key to reflect the name of
+            # the GitHub user, the origin (github itself) and the identifier of
+            # the key. This generates a unique identifier, which is also
+            # human-readable if necessary.
             if ! grep -qF "${3}@github/${_id}" "${_homedir}/.ssh/authorized_keys" 2>/dev/null; then
                 yush_trace "Adding key #$_id to ${_homedir}/.ssh/authorized_keys"
                 printf '%s %s\n' "$_key" "${3}@github/${_id}" | $PRIMER_OS_SUDO tee -a "${_homedir}/.ssh/authorized_keys" > /dev/null
@@ -185,8 +200,11 @@ _primer_step_users_github_access() {
     done <<EOF
 $(primer_net_curl "${PRIMER_STEP_USERS_GHAPI%/}/users/${3}/keys" | grep -vF -e '[' -e ']' -e '{' -e '}')
 EOF
-    if [ -f "${_homedir}/.ssh/authorized_keys" ]; then
-        primer_utils_path_ownership "${_homedir}/.ssh/authorized_keys" --user "$1" --group "$2"
+    # Arrange for the authorize_keys file to be private for the user only.
+    if $PRIMER_OS_SUDO test -f "${_homedir}/.ssh/authorized_keys"; then
+        primer_utils_path_ownership "${_homedir}/.ssh/authorized_keys" \
+            --user "$1" \
+            --group "$2"
     fi
 }
 
