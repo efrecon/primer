@@ -70,7 +70,7 @@ primer_utils_sysfile_append() {
 # Remove all lines matching $2 from (not only system) file at $1
 primer_utils_sysfile_clip() {
     _tmp=$(mktemp)
-    grep -v "$2" "$1" > $_tmp
+    grep -v "$2" "$1" > "$_tmp"
     primer_utils_path_ownership "$_tmp" --as "$1"
     $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
 }
