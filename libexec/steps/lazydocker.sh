@@ -28,29 +28,22 @@ primer_step_lazydocker() {
             done
             ;;
         "install")
-            if ! [ -x "$(command -v "lazydocker")" ]; then
+            if [ -x "$(command -v "lazydocker")" ]; then
                 if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    # Following uses the github API
-                    # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-                    # for getting the list of latest releases and focuses solely on
-                    # "full" releases. Release candidates have -rcXXX in their version
-                    # number, these are set away by the grep/sed combo.
-                    yush_notice "Discovering latest Docker Lazydocker version from $PRIMER_STEP_LAZYDOCKER_RELEASES"
-                    PRIMER_STEP_LAZYDOCKER_VERSION=$(  primer_net_curl "$PRIMER_STEP_LAZYDOCKER_RELEASES" |
-                                        grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
-                                        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
-                                        head -1)
+                    PRIMER_STEP_LAZYDOCKER_VERSION=$(primer_version_github_latest "$PRIMER_STEP_LAZYDOCKER_RELEASES" "lazydocker")
                 fi
-                yush_info "Installing lazydocker $PRIMER_STEP_LAZYDOCKER_VERSION"
-                _primer_step_lazydocker_install_download
-                # Check version
-                yush_debug "Verifying installed version against $PRIMER_STEP_LAZYDOCKER_VERSION"
-                instver=$("${PRIMER_BINDIR%%/}/lazydocker" --version|grep "Version"|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)
-                yush_info "Installed lazydocker v$(yush_yellow "$instver") at ${PRIMER_BINDIR%%/}/lazydocker"
-                if [ "$instver" != "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    yush_warn "Installed lazydocker version mismatch: should have been $PRIMER_STEP_LAZYDOCKER_VERSION"
+                if [ -n "$PRIMER_STEP_LAZYDOCKER_VERSION" ] && \
+                    [ "$(primer_version_current "lazydocker")" != "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+                    _primer_step_lazydocker_install
                 fi
-           fi
+            else
+                if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+                    PRIMER_STEP_LAZYDOCKER_VERSION=$(primer_version_github_latest "$PRIMER_STEP_LAZYDOCKER_RELEASES" "lazydocker")
+                fi
+                if [ -n "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+                    _primer_step_lazydocker_install
+                fi
+            fi
             ;;
         "clean")
             yush_info "Removing lazydocker"
@@ -89,4 +82,16 @@ _primer_step_lazydocker_install_download() {
         yush_warn "No binary at ${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file"
     fi
     rm -rf "$tmpdir"
+}
+
+_primer_step_lazydocker_install() {
+    yush_info "Installing lazydocker $PRIMER_STEP_LAZYDOCKER_VERSION"
+    _primer_step_lazydocker_install_download
+    # Check version
+    yush_debug "Verifying installed version against $PRIMER_STEP_LAZYDOCKER_VERSION"
+    instver=$(primer_version_current "${PRIMER_BINDIR%%/}/lazydocker")
+    yush_info "Installed lazydocker v$(yush_yellow "$instver") at ${PRIMER_BINDIR%%/}/lazydocker"
+    if [ "$instver" != "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+        yush_warn "Installed lazydocker version mismatch: should have been $PRIMER_STEP_LAZYDOCKER_VERSION"
+    fi
 }

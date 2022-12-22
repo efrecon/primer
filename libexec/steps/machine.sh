@@ -33,35 +33,22 @@ primer_step_machine() {
             done
             ;;
         "install")
-            if ! [ -x "$(command -v "docker-machine")" ]; then
+            if [ -x "$(command -v "docker-machine")" ]; then
                 if [ -z "$PRIMER_STEP_MACHINE_VERSION" ]; then
-                    # Following uses the github API
-                    # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-                    # for getting the list of latest releases and focuses solely on
-                    # "full" releases. Release candidates have -rcXXX in their version
-                    # number, these are set away by the grep/sed combo.
-                    yush_notice "Discovering latest Docker Machine version from $PRIMER_STEP_MACHINE_RELEASES"
-                    PRIMER_STEP_MACHINE_VERSION=$(  primer_net_curl "$PRIMER_STEP_MACHINE_RELEASES" |
-                                        grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
-                                        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
-                                        head -1)
+                    PRIMER_STEP_MACHINE_VERSION=$(primer_version_github_latest "$PRIMER_STEP_MACHINE_RELEASES" "docker-machine")
                 fi
-                yush_info "Installing Docker machine $PRIMER_STEP_MACHINE_VERSION and bash completion"
-                _primer_step_machine_install_download
-                # Check version
-                yush_debug "Verifying installed version against $PRIMER_STEP_MACHINE_VERSION"
-                if ! docker-machine --version | grep -q "$PRIMER_STEP_MACHINE_VERSION"; then
-                    yush_warn "Installed docker-machine version mismatch: $(docker-machine --version||true|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)"
+                if [ -n "$PRIMER_STEP_MACHINE_VERSION" ] && \
+                    [ "$(primer_version_current "docker-machine")" != "$PRIMER_STEP_MACHINE_VERSION" ]; then
+                    _primer_step_machine_install
+                fi
+            else
+                if [ -z "$PRIMER_STEP_MACHINE_VERSION" ]; then
+                    PRIMER_STEP_MACHINE_VERSION=$(primer_version_github_latest "$PRIMER_STEP_MACHINE_RELEASES" "docker-machine")
+                fi
+                if [ -n "$PRIMER_STEP_MACHINE_VERSION" ]; then
+                    _primer_step_machine_install
                 fi
             fi
-
-            yush_debug "Installing bash completions"
-            _completion_dir=$(primer_os_bash_completion_dir)
-            ! [ -d "$_completion_dir" ] && \
-                    $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
-            ! [ -f "${_completion_dir}/docker-machine" ] && \
-                    primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
-                        $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
             ;;
         "clean")
             yush_info "Removing Docker Compose and bash completion"
@@ -109,4 +96,25 @@ _primer_step_machine_install_download() {
         yush_warn "No binary at ${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/docker-machine-$(uname -s)-$(uname -m)"
     fi
     rm -rf "$tmpdir"
+}
+
+_primer_step_machine_install() {
+    yush_info "Installing Docker machine $PRIMER_STEP_MACHINE_VERSION and bash completion"
+    _primer_step_machine_install_download
+
+    # Check version
+    yush_debug "Verifying installed version against $PRIMER_STEP_MACHINE_VERSION"
+    instver=$(primer_version_current "${PRIMER_BINDIR%%/}/docker-machine")
+    yush_info "Installed docker-machine v$(yush_yellow "$instver") at ${PRIMER_BINDIR%%/}/docker-machine"
+    if [ "$instver" != "$PRIMER_STEP_MACHINE_VERSION" ]; then
+        yush_warn "Installed docker-machine version mismatch: should have been $PRIMER_STEP_MACHINE_VERSION"
+    fi
+
+    yush_debug "Installing bash completions"
+    _completion_dir=$(primer_os_bash_completion_dir)
+    ! [ -d "$_completion_dir" ] && \
+            $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
+    ! [ -f "${_completion_dir}/docker-machine" ] && \
+            primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
+                $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
 }

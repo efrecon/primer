@@ -28,28 +28,20 @@ primer_step_micro() {
             done
             ;;
         "install")
-            if ! [ -x "$(command -v "micro")" ]; then
+            if [ -x "$(command -v "micro")" ]; then
                 if [ -z "$PRIMER_STEP_MICRO_VERSION" ]; then
-                    # Following uses the github API
-                    # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-                    # for getting the list of latest releases and focuses solely on
-                    # "full" releases. Release candidates have -rcXXX in their version
-                    # number, these are set away by the grep/sed combo.
-                    yush_notice "Discovering latest Docker Micro version from $PRIMER_STEP_MICRO_RELEASES"
-                    PRIMER_STEP_MICRO_VERSION=$(   primer_net_curl "$PRIMER_STEP_MICRO_RELEASES" |
-                                    grep -E '"name"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*"' |
-                                    sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([0-9]+(\.[0-9]+)*)",/\1/g' |
-                                    head -1)
-
+                    PRIMER_STEP_MICRO_VERSION=$(primer_version_github_latest "$PRIMER_STEP_MICRO_RELEASES" "micro")
                 fi
-                yush_info "Installing micro v$PRIMER_STEP_MICRO_VERSION"
-                _primer_step_micro_install_download
-                # Check version
-                yush_debug "Verifying installed version against $PRIMER_STEP_MICRO_VERSION"
-                instver=$("${PRIMER_BINDIR%%/}/micro" --version|grep "Version"|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)
-                yush_info "Installed micro v$(yush_yellow "$instver") at ${PRIMER_BINDIR%%/}/micro"
-                if [ "$instver" != "$PRIMER_STEP_MICRO_VERSION" ]; then
-                    yush_warn "Installed micro version mismatch: should have been $PRIMER_STEP_MICRO_VERSION"
+                if [ -n "$PRIMER_STEP_MICRO_VERSION" ] && \
+                    [ "$(primer_version_current "micro")" != "$PRIMER_STEP_MICRO_VERSION" ]; then
+                    _primer_step_micro_install
+                fi
+            else
+                if [ -z "$PRIMER_STEP_MICRO_VERSION" ]; then
+                    PRIMER_STEP_MICRO_VERSION=$(primer_version_github_latest "$PRIMER_STEP_MICRO_RELEASES" "micro")
+                fi
+                if [ -n "$PRIMER_STEP_MICRO_VERSION" ]; then
+                    _primer_step_micro_install
                 fi
             fi
             ;;
@@ -90,4 +82,16 @@ _primer_step_micro_install_download() {
         yush_warn "No binary at ${PRIMER_STEP_MICRO_DOWNLOAD%%/}/v$PRIMER_STEP_MICRO_VERSION/$tar_file"
     fi
     rm -rf "$tmpdir"
+}
+
+_primer_step_micro_install() {
+    yush_info "Installing micro v$PRIMER_STEP_MICRO_VERSION"
+    _primer_step_micro_install_download
+    # Check version
+    yush_debug "Verifying installed version against $PRIMER_STEP_MICRO_VERSION"
+    instver=$(primer_version_current "${PRIMER_BINDIR%%/}/micro")
+    yush_info "Installed micro v$(yush_yellow "$instver") at ${PRIMER_BINDIR%%/}/micro"
+    if [ "$instver" != "$PRIMER_STEP_MICRO_VERSION" ]; then
+        yush_warn "Installed micro version mismatch: should have been $PRIMER_STEP_MICRO_VERSION"
+    fi
 }
