@@ -471,7 +471,9 @@ including some of the code. The code has since then, undergone large
 modifications up to a point where little of the original is left.
 
 Most of the design, refactoring and rewriting has been done on my free-time. A
-few enhancements have been sponsored by [Lindborg Systems AB][lsys].
+few enhancements have been sponsored by [Lindborg Systems AB][lsys] and
+[GpsGate].
 
   [Yanzi]: https://github.com/YanziNetworks
   [lsys]: https://lsys.se/
+  [GpsGate]: https://gpsgate.com/
