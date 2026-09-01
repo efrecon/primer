@@ -78,6 +78,8 @@ primer_os_update() {
             clear*linux*)
                 # Clear linux has no index
                 ;;
+            fedora*)
+                _primer_os_dnf makecache --refresh;;
             *)
                 yush_warn "System update NYI for $lsb_dist";;
         esac
@@ -107,6 +109,9 @@ primer_os_upgrade() {
             clear*linux*)
                 _primer_os_swupd update
                 ;;
+            fedora*)
+                _primer_os_dnf upgrade
+                ;;
             *)
                 yush_warn "System upgrade NYI for $lsb_dist";;
         esac
@@ -115,7 +120,7 @@ primer_os_upgrade() {
 }
 
 primer_os_dependency() {
-    if ! command -v "$1" >/dev/null 2>&1 || [ -z "$1" ]; then
+    if ! primer_utils_syscmd_exists "$1" || [ -z "$1" ]; then
         cmd=$1
         shift
 
@@ -140,6 +145,7 @@ primer_os_packages() {
                 if primer_os_packages installed "$pkg"; then
                     yush_debug "Package: $pkg already installed"
                 else
+                    yush_trace "Package $pkg will be installed"
                     _install="$_install $pkg"
                 fi
             done
@@ -159,6 +165,9 @@ primer_os_packages() {
                     clear*linux*)
                         # shellcheck source=yu.sh/log.sh disable=SC2086
                         _primer_os_swupd bundle-add $_install;;
+                    fedora*)
+                        # shellcheck disable=SC2086
+                        _primer_os_dnf install $_install;;
                     *)
                         yush_warn "Dependency resolution NYI for $lsb_dist";;
                 esac
@@ -189,6 +198,11 @@ primer_os_packages() {
                     # shellcheck disable=SC2086
                     _primer_os_swupd bundle-remove "$@"
                     ;;
+                fedora*)
+                    _primer_os_dnf remove "$@"
+                    yush_debug "Cleaning orphan packages"
+                    _primer_os_dnf autoremove
+                    ;;
                 *)
                     yush_warn "Package removal NYI for $lsb_dist";;
             esac
@@ -208,8 +222,11 @@ primer_os_packages() {
                 clear*linux*)
                     $PRIMER_OS_SUDO swupd bundle-list --status | grep installed | awk '{print $2}'
                     ;;
+                fedora*)
+                    rpm -qa --queryformat '%{NAME}\n' | sort -u
+                    ;;
                 *)
-                    yush_warn "Package removal NYI for $lsb_dist";;
+                    yush_warn "Package listing NYI for $lsb_dist";;
             esac
             ;;
         installed)
@@ -218,6 +235,7 @@ primer_os_packages() {
             primer_os_packages list | grep -q "^$1"
             ;;
         search)
+            shift
             case "$lsb_dist" in
                 *buntu)
                     $PRIMER_OS_SUDO apt-cache search "$1" |
@@ -237,24 +255,55 @@ primer_os_packages() {
                         grep -E '\s+\-\s+' |
                         awk '{print $1}'
                     ;;
+                fedora*)
+                    dnf repoquery --qf '%{name}' "$1" |
+                        grep "^$1\$"
+                    ;;
                 *)
-                    yush_warn "Package search for $lsb_dist";;
+                    yush_warn "Package search NYI for $lsb_dist";;
             esac
             ;;
     esac
 }
 
 # Detect if running within a container
-primer_os_in_container() { grep -qE '(docker|lxc)' /proc/1/cgroup; }
+primer_os_in_container() {
+    # Marker files left at the root of the filesystem by docker and podman.
+    [ -f /.dockerenv ] && return 0
+    [ -f /run/.containerenv ] && return 0
+
+    # podman, LXC and systemd-nspawn export this to the init process.
+    if [ -r /proc/1/environ ] && tr '\0' '\n' < /proc/1/environ | grep -q '^container='; then
+        return 0
+    fi
+
+    # Under cgroup v1, the cgroup paths of the init process are named after the
+    # runtime. This says nothing under cgroup v2, where they are always /.
+    if [ -r /proc/1/cgroup ] &&
+            grep -qE '(docker|lxc|kubepods|containerd|libpod|podman|garden)' /proc/1/cgroup; then
+        return 0
+    fi
+
+    if primer_utils_syscmd_exists systemd-detect-virt; then
+        # WSL is reported as a container, but behaves as a regular host as far
+        # as services and packages are concerned.
+        case "$(systemd-detect-virt --container 2>/dev/null)" in
+            none|wsl|"") ;;
+            *) return 0;;
+        esac
+    fi
+
+    return 1
+}
 
 primer_os_service() {
     if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart|list)'; then
         if primer_os_in_container; then
             yush_notice "Service $2 $1 is not relevant in a container"
         else
-            if [ -x "$(command -v systemctl)" ]; then
+            if primer_utils_syscmd_exists systemctl; then
                 if [ "$1" = "list" ]; then
-                    $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units ${2:-*}.service | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
+                    $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units "${2:-*}.service" | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
                 else
                     # We also (un)mask when enabling/disabling. See:
                     # https://stackoverflow.com/a/39109593
@@ -272,13 +321,13 @@ primer_os_service() {
                             ;;
                     esac
                 fi
-            elif [ -x "$(command -v service)" ]; then
+            elif primer_utils_syscmd_exists service; then
                 if [ "$1" = "list" ]; then
                     $PRIMER_OS_SUDO service --status-all | sed -E 's/^\s*\[\s*.\s*\]\s*(.*)/\1/'
                 else
                     $PRIMER_OS_SUDO service "$1" "$2"
                 fi
-            elif [ -x "$(command -v rc-service)" ]; then
+            elif primer_utils_syscmd_exists rc-service; then
                 case "$1" in
                     start|stop|restart)
                         $PRIMER_OS_SUDO rc-service "$2" "$1";;
@@ -341,5 +390,14 @@ _primer_os_swupd() {
         $PRIMER_OS_SUDO swupd "$cmd" --assume=yes "$@"
     else
         $PRIMER_OS_SUDO swupd "$cmd" --assume=yes --quiet "$@"
+    fi
+}
+
+_primer_os_dnf() {
+    cmd=$1; shift
+    if yush_loglevel_le debug; then
+        $PRIMER_OS_SUDO dnf "$cmd" -y "$@"
+    else
+        $PRIMER_OS_SUDO dnf "$cmd" -y -q "$@" 2>/dev/null
     fi
 }

@@ -46,7 +46,7 @@ primer_step_docker() {
             done
             ;;
         "install")
-            if ! [ -x "$(command -v dockerd)" ]; then
+            if ! primer_utils_syscmd_exists dockerd; then
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
@@ -65,10 +65,10 @@ primer_step_docker() {
                             yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on ClearLinux"
                         fi
                         ;;
-                    *buntu)
+                    *buntu|*bian)
                         _primer_step_docker_install_debian;;
-                    *bian)
-                        _primer_step_docker_install_debian;;
+                    fedora*)
+                        primer_os_packages install "moby-engine";;
                     *)
                         # Prefer the docker installation whenever possible, do
                         # some guesswork otherwise. This is likely to fail...
@@ -90,7 +90,7 @@ primer_step_docker() {
             fi
 
             # Start docker and make sure it will always start
-            if [ -x "$(command -v dockerd)" ]; then
+            if primer_utils_syscmd_exists dockerd; then
                 if ! docker info 2>/dev/null; then
                     yush_info "Starting Docker daemon"
                     primer_os_service start docker
@@ -159,7 +159,7 @@ primer_step_docker() {
                     $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
                 fi
                 if ! [ -f "${_completion_dir}/docker" ]; then
-                    primer_net_curl https://raw.githubusercontent.com/docker/docker-ce/v${_docker_version}/components/cli/contrib/completion/bash/docker |
+                    primer_net_curl "https://raw.githubusercontent.com/docker/cli/v${_docker_version}/contrib/completion/bash/docker" |
                         $PRIMER_OS_SUDO tee "${_completion_dir}/docker" > /dev/null
                 fi
             else
@@ -169,7 +169,7 @@ primer_step_docker() {
             ;;
         "clean")
             # Stop docker and remove from autostart.
-            if [ -x "$(command -v dockerd)" ]; then
+            if primer_utils_syscmd_exists dockerd; then
                 if docker info; then
                     yush_info "Stopping Docker daemon"
                     primer_os_service stop docker
@@ -183,10 +183,10 @@ primer_step_docker() {
                         primer_os_packages del docker;;
                     clear*linux*)
                         primer_os_packages del containers-basic;;
-                    *buntu)
+                    *buntu|*bian)
                         _primer_step_docker_uninstall_debian;;
-                    *bian)
-                        _primer_step_docker_uninstall_debian;;
+                    fedora*)
+                        primer_os_packages del "moby-engine";;
                     *)
                         yush_warn "Cannot remove docker on $lsb_dist"
                         ;;
@@ -202,7 +202,7 @@ _primer_step_docker_uninstall_debian() {
     if [ -n "$dkey_present" ]; then
         yush_info "Removing docker GPG key"
         dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
-        $PRIMER_OS_SUDO apt-key del $dkey
+        $PRIMER_OS_SUDO apt-key del "$dkey"
     fi
 
     if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
@@ -302,7 +302,8 @@ _primer_step_docker_install_getdocker() {
 }
 
 _primer_step_docker_install_guess() {
-    for pkg in docker.io docker-ce docker-engine docker; do
+    for pkg in docker.io docker-ce docker-engine docker moby-engine; do
+        yush_trace "Looking for package $pkg for Docker installation"
         candidate=$(primer_os_packages search "$pkg"|head -1)
         if [ -n "$candidate" ]; then
             yush_notice "Picked package $candidate for Docker installation"

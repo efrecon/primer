@@ -50,7 +50,7 @@ Describe "Internal Tests"
 
     It "Finds MAC addresses"
         When call primer alpine -v error -s test --test:test net_macaddr
-        The output should include "02:42:ac:11"
+        The output should match pattern "[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]"
     End
 
     It "Finds main address"

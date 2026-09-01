@@ -16,13 +16,15 @@ primer_step_install() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--bundle --target"
+            [ "$#" = "0" ] && echo "--bundle --target --targets"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --bundle)
                         PRIMER_STEP_INSTALL_BUNDLE=$2; shift 2;;
                     --target)
                         PRIMER_STEP_INSTALL_TARGETS="$PRIMER_STEP_INSTALL_TARGETS $2"; shift 2;;
+                    --targets)
+                        PRIMER_STEP_INSTALL_TARGETS=$2; shift 2;;
                     --overwrite)
                         PRIMER_STEP_INSTALL_OVERWRITE=$2; shift 2;;
                     -*)

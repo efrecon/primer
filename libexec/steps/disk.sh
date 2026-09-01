@@ -58,7 +58,7 @@ primer_step_disk() {
                         if ls -1 "$_dev" >/dev/null 2>&1; then
                             # Make sure we can format at that filesystem
                             mkfs=mkfs.$fmt
-                            if command -v "$mkfs" >/dev/null; then
+                            if primer_utils_syscmd_exists "$mkfs"; then
                                 # Check if device is already formatted.
                                 current=$($PRIMER_OS_SUDO blkid "$_dev" | _primer_step_disk_blkid_val "TYPE")
                                 format=0

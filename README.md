@@ -10,14 +10,15 @@ also be used in other domains than cloud first applications. Being written in
 POSIX compatible shell makes it suitable within the embedded space, for example.
 
 The main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
-Ubuntu [cloud] or [server] images or [Clear] Linux*. Primer is probably best
-fitted for initialising "on the metal", rather than VMs where [cloud-init] often
-fills such a role.
+Ubuntu [cloud] or [server] images, [Fedora] or the now defunct [Clear] Linux*.
+Primer is probably best fitted for initialising "on the metal", rather than VMs
+where [cloud-init] often fills such a role.
 
   [Alpine]: https://alpinelinux.org/
   [cloud]: http://cloud-images.ubuntu.com/
   [server]: https://ubuntu.com/download/server
   [Clear]: https://clearlinux.org/
+  [Fedora]: https://getfedora.org/
   [cloud-init]: https://cloudinit.readthedocs.io/en/latest/index.html
 
 Primer will prep your system automatically with configuration descriptions that
@@ -208,6 +209,9 @@ implementation in [cloud-init].
   module is also able to fetch public keys from GitHub handles to automatically
   allow for SSH access.
 * [`git`][git] installs git on the system, with [LFS] support.
+* [`announce`][announce] installs and enables network announcement services so
+  the host is discoverable by hostname on the local network, via [mDNS] and/or
+  [NetBIOS].
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
   The wrapper is able to track host names that would change their pointed IP
   with time (dynamic DNS).
@@ -243,6 +247,9 @@ implementation in [cloud-init].
   [users]: ./docs/steps/users.md
   [git]: ./docs/steps/git.md
   [LFS]: https://git-lfs.github.com/
+  [announce]: ./docs/steps/announce.md
+  [mDNS]: https://en.wikipedia.org/wiki/Multicast_DNS
+  [NetBIOS]: https://en.wikipedia.org/wiki/NetBIOS
   [dynufw]: ./docs/steps/dynufw.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
@@ -470,7 +477,9 @@ including some of the code. The code has since then, undergone large
 modifications up to a point where little of the original is left.
 
 Most of the design, refactoring and rewriting has been done on my free-time. A
-few enhancements have been sponsored by [Lindborg Systems AB][lsys].
+few enhancements have been sponsored by [Lindborg Systems AB][lsys] and
+[GpsGate].
 
   [Yanzi]: https://github.com/YanziNetworks
   [lsys]: https://lsys.se/
+  [GpsGate]: https://gpsgate.com/

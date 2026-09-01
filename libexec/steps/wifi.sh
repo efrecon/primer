@@ -53,7 +53,7 @@ _primer_step_wifi_install() {
     # network is in range. This more for information than anything
     # else...
     $PRIMER_OS_SUDO ip link set "$PRIMER_STEP_WIFI_INTERFACE" up
-    if command -v iwlist >/dev/null; then
+    if primer_utils_syscmd_exists iwlist; then
         if $PRIMER_OS_SUDO iwlist "$PRIMER_STEP_WIFI_INTERFACE" scan | grep "ESSID:" | grep -q "$PRIMER_STEP_WIFI_ESSID"; then
             yush_info "$PRIMER_STEP_WIFI_ESSID is in range"
         else

@@ -35,6 +35,8 @@ primer_step_machinery() {
                         primer_os_packages add tcl tclx tcl-tls tcllib tcllib-critcl tcl-vfs;;
                     *bian)
                         primer_os_packages add tcl tclx tcl-tls tcllib tcllib-critcl tcl-vfs;;
+                    fedora*)
+                        primer_os_packages add tcl tclx tcltls tcl8-tcllib tcl-tclvfs;;
                     *)
                         ;;
                 esac

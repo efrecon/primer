@@ -20,12 +20,12 @@ primer_step_locale() {
             done
             ;;
         "install")
-            if command -v locale-gen >/dev/null; then
+            if primer_utils_syscmd_exists locale-gen; then
                 $PRIMER_OS_SUDO locale-gen "$PRIMER_STEP_LOCALE_LOCALE"
             fi
             LC_ALL=$PRIMER_STEP_LOCALE_LOCALE
             export LC_ALL
-            printf "LC_ALL=%s\\n" $PRIMER_STEP_LOCALE_LOCALE | primer_utils_sysfile_append /etc/environment
+            printf "LC_ALL=%s\\n" "$PRIMER_STEP_LOCALE_LOCALE" | primer_utils_sysfile_append /etc/environment
             ;;
         "clean")
             [ -f /etc/environment ] && primer_utils_sysfile_clip /etc/environment "LC_ALL=$PRIMER_STEP_LOCALE_LOCALE"

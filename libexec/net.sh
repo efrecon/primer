@@ -1,7 +1,19 @@
 #!/usr/bin/env sh
 
+_primer_net_ip() {
+    lsb_dist=$(primer_os_distribution)
+    case "$lsb_dist" in
+        *buntu|*bian|alpine*|clear*linux*)
+            primer_os_dependency ip iproute2;;
+        fedora*)
+            primer_os_dependency ip iproute;;
+        *)
+            yush_warn "ip installation NYI for $lsb_dist";;
+    esac
+}
+
 primer_net_interfaces() {
-    primer_os_dependency ip iproute2
+    _primer_net_ip
     ip addr list |
         grep -E -e '^[[:digit:]]{1,}:[[:space:]]*' |
         sed -E 's|^[[:digit:]]{1,}:[[:space:]]*([^:]*):[[:space:]]*.*|\1|' |
@@ -9,9 +21,9 @@ primer_net_interfaces() {
 }
 
 primer_net_macaddr() {
-    primer_os_dependency ip iproute2
+    _primer_net_ip
     if [ "$#" = "0" ]; then
-        for _if in $(primer_net_interfaces); do
+        for _if in $(primer_net_interfaces | grep -v '^lo$'); do
             primer_net_macaddr "$_if"
         done
     elif [ -n "$1" ]; then
@@ -49,6 +61,9 @@ primer_net_urlenc() {
     done
     printf %s\\n "$_encoded"
 }
+
+# Return the hostname of the current machine.
+primer_net_hostname() { uname -n; }
 
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
@@ -93,6 +108,6 @@ primer_net_curl() {
     else
         _copts=-sSL
     fi
-    # shellcheck disable=SC2046
+    # shellcheck disable=SC2046,SC2086
     curl $_copts $(_primer_net_curlopts "$_url") "$@" "$_url"
 }
