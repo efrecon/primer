@@ -25,7 +25,7 @@ primer_step_locale() {
             fi
             LC_ALL=$PRIMER_STEP_LOCALE_LOCALE
             export LC_ALL
-            printf "LC_ALL=%s\\n" $PRIMER_STEP_LOCALE_LOCALE | primer_utils_sysfile_append /etc/environment
+            printf "LC_ALL=%s\\n" "$PRIMER_STEP_LOCALE_LOCALE" | primer_utils_sysfile_append /etc/environment
             ;;
         "clean")
             [ -f /etc/environment ] && primer_utils_sysfile_clip /etc/environment "LC_ALL=$PRIMER_STEP_LOCALE_LOCALE"
