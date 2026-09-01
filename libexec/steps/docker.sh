@@ -159,7 +159,7 @@ primer_step_docker() {
                     $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
                 fi
                 if ! [ -f "${_completion_dir}/docker" ]; then
-                    primer_net_curl https://raw.githubusercontent.com/docker/cli/v${_docker_version}/contrib/completion/bash/docker |
+                    primer_net_curl "https://raw.githubusercontent.com/docker/cli/v${_docker_version}/contrib/completion/bash/docker" |
                         $PRIMER_OS_SUDO tee "${_completion_dir}/docker" > /dev/null
                 fi
             else
