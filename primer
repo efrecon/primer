@@ -296,7 +296,7 @@ primer_hostinfo() {
     printf "_hostinfo:\n"
     printf '\tdistribution: %s\n' "$(primer_os_distribution)"
     printf '\tversion: %s\n' "$(primer_os_version)"
-    printf '\thostname: %s\n' "$(hostname)"
+    printf '\thostname: %s\n' "$(primer_net_hostname)"
     printf '\tmac: %s\n' "$_mac"
 }
 
@@ -310,7 +310,7 @@ for _cfg in $PRIMER_CONFIG; do
         # Note that this automagically installs the iproute2 package in a Ubuntu
         # Docker container, as the ip command does not exists there...
         _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
-        _hst=$(hostname)
+        _hst=$(primer_net_hostname)
         _cfg=$( printf %s\\n "$_cfg" |
                 sed -E  -e "s/%mac%/${_mac}/g" \
                         -e "s/%host%/${_hst}/g" \

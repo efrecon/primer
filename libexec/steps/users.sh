@@ -28,7 +28,7 @@ primer_step_users() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--db --save --ext"
+            [ "$#" = "0" ] && echo "--db --save --ext --groups"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --db)
@@ -36,7 +36,9 @@ primer_step_users() {
                     --save)
                         PRIMER_STEP_USERS_PWSAVE=$2; shift 2;;
                     --ext)
-                        PRIMER_STEP_USERS_PWSAVE=$2; shift 2;;
+                        PRIMER_STEP_USERS_PWEXT=$2; shift 2;;
+                    --groups)
+                        PRIMER_STEP_USERS_GROUPS=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)

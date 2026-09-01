@@ -48,10 +48,10 @@ primer_auth_group_membership() {
             yush_debug "$1 already in group $2"
         else
             yush_info "Adding $1 to group $2"
-            if [ -x "$(command -v "adduser")" ]; then
-                $PRIMER_OS_SUDO addgroup "$1" "$2"
-            elif [ -x "$(command -v "usermod")" ]; then
+            if [ -x "$(command -v "usermod")" ]; then
                 $PRIMER_OS_SUDO usermod -a -G "$2" "$1"
+            elif [ -x "$(command -v "adduser")" ]; then
+                $PRIMER_OS_SUDO adduser "$1" "$2"
             fi
         fi
     fi
@@ -96,7 +96,16 @@ primer_auth_user_add() {
 
         # Create the user, coping with the nightmare of the varioud adduser and
         # useradd and their varying options...
-        if [ -x "$(command -v "adduser")" ]; then
+        if [ -x "$(command -v "useradd")" ]; then
+            $PRIMER_OS_SUDO useradd \
+                            --gid "$_group" \
+                            --comment "$_gecos" \
+                            --shell "$_shell" \
+                        "$_username"
+            if [ -n "$_password" ]; then
+                primer_auth_user_password "$_username" "$_password"
+            fi
+        elif [ -x "$(command -v "adduser")" ]; then
             if adduser -h 2>&1 | grep -iq busybox; then
                 if [ -z "$_password" ]; then
                     $PRIMER_OS_SUDO adduser \
@@ -129,15 +138,6 @@ primer_auth_user_add() {
                                     --shell "$_shell" \
                                 "$_username"
                 fi
-            fi
-        elif [ -x "$(command -v "useradd")" ]; then
-            $PRIMER_OS_SUDO useradd \
-                            --gid "$_group" \
-                            --comment "$_gecos" \
-                            --shell "$_shell" \
-                        "$_username"
-            if [ -n "$_password" ]; then
-                primer_auth_user_password "$_username" "$_password"
             fi
         fi
     fi

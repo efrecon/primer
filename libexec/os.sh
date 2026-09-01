@@ -78,6 +78,8 @@ primer_os_update() {
             clear*linux*)
                 # Clear linux has no index
                 ;;
+            fedora*)
+                _primer_os_dnf makecache --refresh;;
             *)
                 yush_warn "System update NYI for $lsb_dist";;
         esac
@@ -106,6 +108,9 @@ primer_os_upgrade() {
                 ;;
             clear*linux*)
                 _primer_os_swupd update
+                ;;
+            fedora*)
+                _primer_os_dnf upgrade
                 ;;
             *)
                 yush_warn "System upgrade NYI for $lsb_dist";;
@@ -140,6 +145,7 @@ primer_os_packages() {
                 if primer_os_packages installed "$pkg"; then
                     yush_debug "Package: $pkg already installed"
                 else
+                    yush_trace "Package $pkg will be installed"
                     _install="$_install $pkg"
                 fi
             done
@@ -159,6 +165,9 @@ primer_os_packages() {
                     clear*linux*)
                         # shellcheck source=yu.sh/log.sh disable=SC2086
                         _primer_os_swupd bundle-add $_install;;
+                    fedora*)
+                        # shellcheck disable=SC2086
+                        _primer_os_dnf install $_install;;
                     *)
                         yush_warn "Dependency resolution NYI for $lsb_dist";;
                 esac
@@ -189,6 +198,11 @@ primer_os_packages() {
                     # shellcheck disable=SC2086
                     _primer_os_swupd bundle-remove "$@"
                     ;;
+                fedora*)
+                    _primer_os_dnf remove "$@"
+                    yush_debug "Cleaning orphan packages"
+                    _primer_os_dnf autoremove
+                    ;;
                 *)
                     yush_warn "Package removal NYI for $lsb_dist";;
             esac
@@ -208,8 +222,11 @@ primer_os_packages() {
                 clear*linux*)
                     $PRIMER_OS_SUDO swupd bundle-list --status | grep installed | awk '{print $2}'
                     ;;
+                fedora*)
+                    $PRIMER_OS_SUDO dnf list --installed | awk '{print $1}' | cut -d'.' -f1 | tail -n +2 | sort -u
+                    ;;
                 *)
-                    yush_warn "Package removal NYI for $lsb_dist";;
+                    yush_warn "Package listing NYI for $lsb_dist";;
             esac
             ;;
         installed)
@@ -218,6 +235,7 @@ primer_os_packages() {
             primer_os_packages list | grep -q "^$1"
             ;;
         search)
+            shift
             case "$lsb_dist" in
                 *buntu)
                     $PRIMER_OS_SUDO apt-cache search "$1" |
@@ -237,8 +255,15 @@ primer_os_packages() {
                         grep -E '\s+\-\s+' |
                         awk '{print $1}'
                     ;;
+                fedora*)
+                    _primer_os_dnf search "$1" |
+                        grep '^ ' |
+                        awk '{print $1}' |
+                        cut -d'.' -f1 |
+                        grep "^$1\$"
+                    ;;
                 *)
-                    yush_warn "Package search for $lsb_dist";;
+                    yush_warn "Package search NYI for $lsb_dist";;
             esac
             ;;
     esac
@@ -254,7 +279,7 @@ primer_os_service() {
         else
             if [ -x "$(command -v systemctl)" ]; then
                 if [ "$1" = "list" ]; then
-                    $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units ${2:-*}.service | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
+                    $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units "${2:-*}.service" | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
                 else
                     # We also (un)mask when enabling/disabling. See:
                     # https://stackoverflow.com/a/39109593
@@ -341,5 +366,14 @@ _primer_os_swupd() {
         $PRIMER_OS_SUDO swupd "$cmd" --assume=yes "$@"
     else
         $PRIMER_OS_SUDO swupd "$cmd" --assume=yes --quiet "$@"
+    fi
+}
+
+_primer_os_dnf() {
+    cmd=$1; shift
+    if yush_loglevel_le debug; then
+        $PRIMER_OS_SUDO dnf "$cmd" -y "$@" 2>/dev/null
+    else
+        $PRIMER_OS_SUDO dnf "$cmd" -y -q "$@" 2>/dev/null
     fi
 }

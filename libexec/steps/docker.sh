@@ -302,7 +302,8 @@ _primer_step_docker_install_getdocker() {
 }
 
 _primer_step_docker_install_guess() {
-    for pkg in docker.io docker-ce docker-engine docker; do
+    for pkg in docker.io docker-ce docker-engine docker moby-engine; do
+        yush_trace "Looking for package $pkg for Docker installation"
         candidate=$(primer_os_packages search "$pkg"|head -1)
         if [ -n "$candidate" ]; then
             yush_notice "Picked package $candidate for Docker installation"
