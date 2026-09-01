@@ -23,7 +23,7 @@ primer_net_interfaces() {
 primer_net_macaddr() {
     _primer_net_ip
     if [ "$#" = "0" ]; then
-        for _if in $(primer_net_interfaces); do
+        for _if in $(primer_net_interfaces | grep -v '^lo$'); do
             primer_net_macaddr "$_if"
         done
     elif [ -n "$1" ]; then
