@@ -19,15 +19,15 @@ PRIMER_YUSH_DIR="$PRIMER_LIB_DIR/yu.sh"
 ### AMLG_END
 
 ### AMLG_START ./libexec/yu.sh/log.sh ./libexec/yu.sh/text.sh ./libexec/yu.sh/file.sh ./libexec/yu.sh/multi-arch.sh ./libexec/yu.sh/net.sh
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 . "$PRIMER_YUSH_DIR/log.sh"
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 . "$PRIMER_YUSH_DIR/text.sh"
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 . "$PRIMER_YUSH_DIR/file.sh"
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 . "$PRIMER_YUSH_DIR/multi-arch.sh"
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 . "$PRIMER_YUSH_DIR/net.sh"
 ### AMLG_END
 

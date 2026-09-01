@@ -202,7 +202,7 @@ _primer_step_docker_uninstall_debian() {
     if [ -n "$dkey_present" ]; then
         yush_info "Removing docker GPG key"
         dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
-        $PRIMER_OS_SUDO apt-key del $dkey
+        $PRIMER_OS_SUDO apt-key del "$dkey"
     fi
 
     if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
