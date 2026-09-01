@@ -20,4 +20,4 @@ jobs:
           echo "$HOME/.local/lib/shellspec" >> "$GITHUB_PATH"
 
       - name: Run tests
-        run: shellspec
+        run: shellspec -t tap
