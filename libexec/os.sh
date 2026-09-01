@@ -372,7 +372,7 @@ _primer_os_swupd() {
 _primer_os_dnf() {
     cmd=$1; shift
     if yush_loglevel_le debug; then
-        $PRIMER_OS_SUDO dnf "$cmd" -y "$@" 2>/dev/null
+        $PRIMER_OS_SUDO dnf "$cmd" -y "$@"
     else
         $PRIMER_OS_SUDO dnf "$cmd" -y -q "$@" 2>/dev/null
     fi
