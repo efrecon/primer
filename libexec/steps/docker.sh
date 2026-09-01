@@ -65,10 +65,10 @@ primer_step_docker() {
                             yush_error "$PRIMER_STEP_DOCKER_PACKAGING packaging not supported on ClearLinux"
                         fi
                         ;;
-                    *buntu)
+                    *buntu|*bian)
                         _primer_step_docker_install_debian;;
-                    *bian)
-                        _primer_step_docker_install_debian;;
+                    fedora*)
+                        primer_os_packages install "moby-engine";;
                     *)
                         # Prefer the docker installation whenever possible, do
                         # some guesswork otherwise. This is likely to fail...
@@ -159,7 +159,7 @@ primer_step_docker() {
                     $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
                 fi
                 if ! [ -f "${_completion_dir}/docker" ]; then
-                    primer_net_curl https://raw.githubusercontent.com/docker/docker-ce/v${_docker_version}/components/cli/contrib/completion/bash/docker |
+                    primer_net_curl https://raw.githubusercontent.com/docker/cli/v${_docker_version}/contrib/completion/bash/docker |
                         $PRIMER_OS_SUDO tee "${_completion_dir}/docker" > /dev/null
                 fi
             else
@@ -183,10 +183,10 @@ primer_step_docker() {
                         primer_os_packages del docker;;
                     clear*linux*)
                         primer_os_packages del containers-basic;;
-                    *buntu)
+                    *buntu|*bian)
                         _primer_step_docker_uninstall_debian;;
-                    *bian)
-                        _primer_step_docker_uninstall_debian;;
+                    fedora*)
+                        primer_os_packages del "moby-engine";;
                     *)
                         yush_warn "Cannot remove docker on $lsb_dist"
                         ;;

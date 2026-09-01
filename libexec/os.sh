@@ -223,7 +223,7 @@ primer_os_packages() {
                     $PRIMER_OS_SUDO swupd bundle-list --status | grep installed | awk '{print $2}'
                     ;;
                 fedora*)
-                    $PRIMER_OS_SUDO dnf list --installed | awk '{print $1}' | cut -d'.' -f1 | tail -n +2 | sort -u
+                    rpm -qa --queryformat '%{NAME}\n' | sort -u
                     ;;
                 *)
                     yush_warn "Package listing NYI for $lsb_dist";;
@@ -256,10 +256,7 @@ primer_os_packages() {
                         awk '{print $1}'
                     ;;
                 fedora*)
-                    _primer_os_dnf search "$1" |
-                        grep '^ ' |
-                        awk '{print $1}' |
-                        cut -d'.' -f1 |
+                    dnf repoquery --qf '%{name}' "$1" |
                         grep "^$1\$"
                     ;;
                 *)
@@ -270,7 +267,34 @@ primer_os_packages() {
 }
 
 # Detect if running within a container
-primer_os_in_container() { grep -qE '(docker|lxc)' /proc/1/cgroup; }
+primer_os_in_container() {
+    # Marker files left at the root of the filesystem by docker and podman.
+    [ -f /.dockerenv ] && return 0
+    [ -f /run/.containerenv ] && return 0
+
+    # podman, LXC and systemd-nspawn export this to the init process.
+    if [ -r /proc/1/environ ] && tr '\0' '\n' < /proc/1/environ | grep -q '^container='; then
+        return 0
+    fi
+
+    # Under cgroup v1, the cgroup paths of the init process are named after the
+    # runtime. This says nothing under cgroup v2, where they are always /.
+    if [ -r /proc/1/cgroup ] &&
+            grep -qE '(docker|lxc|kubepods|containerd|libpod|podman|garden)' /proc/1/cgroup; then
+        return 0
+    fi
+
+    if [ -x "$(command -v systemd-detect-virt)" ]; then
+        # WSL is reported as a container, but behaves as a regular host as far
+        # as services and packages are concerned.
+        case "$(systemd-detect-virt --container 2>/dev/null)" in
+            none|wsl|"") ;;
+            *) return 0;;
+        esac
+    fi
+
+    return 1
+}
 
 primer_os_service() {
     if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart|list)'; then

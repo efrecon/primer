@@ -10,14 +10,15 @@ also be used in other domains than cloud first applications. Being written in
 POSIX compatible shell makes it suitable within the embedded space, for example.
 
 The main target OSes of primer are minimal linux OSes such as [Alpine] Linux,
-Ubuntu [cloud] or [server] images or [Clear] Linux*. Primer is probably best
-fitted for initialising "on the metal", rather than VMs where [cloud-init] often
-fills such a role.
+Ubuntu [cloud] or [server] images, [Fedora] or the now defunct [Clear] Linux*.
+Primer is probably best fitted for initialising "on the metal", rather than VMs
+where [cloud-init] often fills such a role.
 
   [Alpine]: https://alpinelinux.org/
   [cloud]: http://cloud-images.ubuntu.com/
   [server]: https://ubuntu.com/download/server
   [Clear]: https://clearlinux.org/
+  [Fedora]: https://getfedora.org/
   [cloud-init]: https://cloudinit.readthedocs.io/en/latest/index.html
 
 Primer will prep your system automatically with configuration descriptions that

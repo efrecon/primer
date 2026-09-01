@@ -50,8 +50,8 @@ primer_auth_group_membership() {
             yush_info "Adding $1 to group $2"
             if [ -x "$(command -v "usermod")" ]; then
                 $PRIMER_OS_SUDO usermod -a -G "$2" "$1"
-            elif [ -x "$(command -v "adduser")" ]; then
-                $PRIMER_OS_SUDO adduser "$1" "$2"
+            elif [ -x "$(command -v "addgroup")" ]; then
+                $PRIMER_OS_SUDO addgroup "$1" "$2"
             fi
         fi
     fi
@@ -146,7 +146,7 @@ primer_auth_user_add() {
 
 
 primer_auth_user_password() {
-    if [ -n "$_password" ]; then
+    if [ -n "$2" ]; then
         printf %s\\n%s\\n "$2" "$2" | $PRIMER_OS_SUDO passwd "$1"
     fi
 }

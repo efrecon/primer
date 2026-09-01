@@ -3,13 +3,7 @@
 _primer_net_ip() {
     lsb_dist=$(primer_os_distribution)
     case "$lsb_dist" in
-        *buntu)
-            primer_os_dependency ip iproute2;;
-        *bian)
-            primer_os_dependency ip iproute2;;
-        alpine*)
-            primer_os_dependency ip iproute2;;
-        clear*linux*)
+        *buntu|*bian|alpine*|clear*linux*)
             primer_os_dependency ip iproute2;;
         fedora*)
             primer_os_dependency ip iproute;;
@@ -54,9 +48,6 @@ primer_net_urldec() {
     fi
 }
 
-# Return the hostname of the current machine.
-primer_net_hostname() { uname -n; }
-
 primer_net_urlenc() {
     _encoded=
     for _pos in $(seq 1 "${#1}"); do
@@ -70,6 +61,9 @@ primer_net_urlenc() {
     done
     printf %s\\n "$_encoded"
 }
+
+# Return the hostname of the current machine.
+primer_net_hostname() { uname -n; }
 
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
