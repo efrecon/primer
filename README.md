@@ -209,6 +209,9 @@ implementation in [cloud-init].
   module is also able to fetch public keys from GitHub handles to automatically
   allow for SSH access.
 * [`git`][git] installs git on the system, with [LFS] support.
+* [`announce`][announce] installs and enables network announcement services so
+  the host is discoverable by hostname on the local network, via [mDNS] and/or
+  [NetBIOS].
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
   The wrapper is able to track host names that would change their pointed IP
   with time (dynamic DNS).
@@ -244,6 +247,9 @@ implementation in [cloud-init].
   [users]: ./docs/steps/users.md
   [git]: ./docs/steps/git.md
   [LFS]: https://git-lfs.github.com/
+  [announce]: ./docs/steps/announce.md
+  [mDNS]: https://en.wikipedia.org/wiki/Multicast_DNS
+  [NetBIOS]: https://en.wikipedia.org/wiki/NetBIOS
   [dynufw]: ./docs/steps/dynufw.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
