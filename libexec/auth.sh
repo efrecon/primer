@@ -98,6 +98,7 @@ primer_auth_user_add() {
         # useradd and their varying options...
         if [ -x "$(command -v "useradd")" ]; then
             $PRIMER_OS_SUDO useradd \
+                            --create-home \
                             --gid "$_group" \
                             --comment "$_gecos" \
                             --shell "$_shell" \
