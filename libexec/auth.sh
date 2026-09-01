@@ -30,9 +30,9 @@ primer_auth_group_add() {
     if [ "$#" -gt "0" ] && [ -n "$1" ]; then
         if ! getent group | grep -q "^$1:"; then
             yush_info "Creating group: $1"
-            if [ -x "$(command -v "addgroup")" ]; then
+            if primer_utils_syscmd_exists addgroup; then
                 $PRIMER_OS_SUDO addgroup "$1"
-            elif [ -x "$(command -v "groupadd")" ]; then
+            elif primer_utils_syscmd_exists groupadd; then
                 $PRIMER_OS_SUDO groupadd "$1"
             fi
         else
@@ -48,9 +48,9 @@ primer_auth_group_membership() {
             yush_debug "$1 already in group $2"
         else
             yush_info "Adding $1 to group $2"
-            if [ -x "$(command -v "usermod")" ]; then
+            if primer_utils_syscmd_exists usermod; then
                 $PRIMER_OS_SUDO usermod -a -G "$2" "$1"
-            elif [ -x "$(command -v "addgroup")" ]; then
+            elif primer_utils_syscmd_exists addgroup; then
                 $PRIMER_OS_SUDO addgroup "$1" "$2"
             fi
         fi
@@ -96,7 +96,7 @@ primer_auth_user_add() {
 
         # Create the user, coping with the nightmare of the varioud adduser and
         # useradd and their varying options...
-        if [ -x "$(command -v "useradd")" ]; then
+        if primer_utils_syscmd_exists useradd; then
             $PRIMER_OS_SUDO useradd \
                             --create-home \
                             --gid "$_group" \
@@ -106,7 +106,7 @@ primer_auth_user_add() {
             if [ -n "$_password" ]; then
                 primer_auth_user_password "$_username" "$_password"
             fi
-        elif [ -x "$(command -v "adduser")" ]; then
+        elif primer_utils_syscmd_exists adduser; then
             if adduser -h 2>&1 | grep -iq busybox; then
                 if [ -z "$_password" ]; then
                     $PRIMER_OS_SUDO adduser \
@@ -191,7 +191,7 @@ primer_auth_user_mod() {
             primer_auth_group_add "$_group"
         fi
 
-        if [ -x "$(command -v "usermod")" ]; then
+        if primer_utils_syscmd_exists usermod; then
             $PRIMER_OS_SUDO usermod \
                             --gid "$_group" \
                             --comment "$_gecos" \

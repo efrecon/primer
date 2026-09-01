@@ -21,79 +21,69 @@ primer_step_announce() {
                 esac
             done
             ;;
-        "install")
-            if [ -n "$PRIMER_STEP_ANNOUNCE_METHODS" ]; then
-                for method in $PRIMER_STEP_ANNOUNCE_METHODS; do
-                    if command -v "_primer_step_announce_${method}_add" >/dev/null 2>&1; then
-                        yush_info "Announcing using method: $method"
-                        "_primer_step_announce_${method}_add"
-                    else
-                        yush_warn "Announce method $method is not supported, skipping"
-                    fi
-                done
-            else
+        "install"|"clean")
+            if [ -z "$PRIMER_STEP_ANNOUNCE_METHODS" ]; then
                 yush_warn "No DNS announce methods specified."
+                return
             fi
+            lsb_dist=$(primer_os_distribution)
+            for method in $PRIMER_STEP_ANNOUNCE_METHODS; do
+                # Daemon implementing the method, and package providing it.
+                _daemon=
+                _pkg=
+                case "$(printf %s\\n "$method" | tr '[:upper:]' '[:lower:]')" in
+                    mdns)
+                        _daemon=avahi-daemon
+                        case "$lsb_dist" in
+                            *buntu|*bian)
+                                _pkg=avahi-daemon;;
+                            fedora*|alpine*|clear*linux*)
+                                _pkg=avahi;;
+                        esac
+                        ;;
+                    netbios)
+                        _daemon=nmbd
+                        case "$lsb_dist" in
+                            *buntu|*bian|fedora*|clear*linux*)
+                                _pkg=samba;;
+                            alpine*)
+                                _pkg=samba-server;;
+                        esac
+                        ;;
+                esac
+
+                if [ -z "$_daemon" ]; then
+                    yush_warn "Announce method $method is not supported, skipping"
+                elif [ -z "$_pkg" ]; then
+                    yush_warn "Announce method $method NYI for $lsb_dist"
+                elif [ "$1" = "install" ]; then
+                    yush_info "Announcing using method: $method"
+                    _primer_step_announce_install "$_daemon" "$_pkg"
+                else
+                    yush_info "Cleaning announcements for method: $method"
+                    _primer_step_announce_uninstall "$_daemon" "$_pkg"
+                fi
+            done
             ;;
-        "clean")
-            if [ -n "$PRIMER_STEP_ANNOUNCE_METHODS" ]; then
-                for method in $PRIMER_STEP_ANNOUNCE_METHODS; do
-                    if command -v "_primer_step_announce_${method}_remove" >/dev/null 2>&1; then
-                        yush_info "Cleaning announcements for method: $method"
-                        "_primer_step_announce_${method}_remove"
-                    else
-                        yush_warn "Announce method $method is not supported, skipping"
-                    fi
-                done
-            else
-                yush_warn "No DNS announce methods specified."
-            fi
-            ;;
     esac
 }
 
-_primer_step_announce_mDNS_add() {
-    lsb_dist=$(primer_os_distribution)
-    case "$lsb_dist" in
-        *buntu|*bian|alpine*|clear*linux*)
-            primer_os_dependency avahi-daemon avahi-daemon;;
-        fedora*)
-            primer_os_dependency avahi-daemon avahi;;
-        *)
-            yush_warn "avahi installation NYI for $lsb_dist";;
-    esac
-    if command -v "avahi-daemon" >/dev/null 2>&1; then
-        primer_os_service start avahi-daemon
-        primer_os_service enable avahi-daemon
+# Install package $2 and run the daemon $1 it provides at boot.
+_primer_step_announce_install() {
+    primer_os_dependency "$1" "$2"
+    if primer_utils_syscmd_exists "$1"; then
+        primer_os_service start "$1"
+        primer_os_service enable "$1"
+    else
+        yush_warn "Could not find $1 after installing $2, announcing disabled"
     fi
 }
 
-_primer_step_announce_mDNS_remove() {
-    if command -v "avahi-daemon" >/dev/null 2>&1; then
-        primer_os_service stop avahi-daemon
-        primer_os_service disable avahi-daemon
-    fi
-}
-
-_primer_step_announce_NetBIOS_add() {
-    lsb_dist=$(primer_os_distribution)
-    case "$lsb_dist" in
-        *buntu|*bian|alpine*|clear*linux*)
-            primer_os_dependency nmbd samba;;
-        fedora*)
-            primer_os_dependency nmbd samba-common-tools;;
-        *)
-            yush_warn "NetBIOS installation NYI for $lsb_dist";;
-    esac
-    if command -v "nmbd" >/dev/null 2>&1; then
-        primer_os_service start nmbd
-        primer_os_service enable nmbd
-    fi
-}
-
-_primer_step_announce_NetBIOS_remove() {
-    if command -v "nmbd" >/dev/null 2>&1; then
-        primer_os_service stop nmbd
-        primer_os_service disable nmbd
+# Stop the daemon $1 and remove the package $2 providing it.
+_primer_step_announce_uninstall() {
+    if primer_utils_syscmd_exists "$1"; then
+        primer_os_service stop "$1"
+        primer_os_service disable "$1"
+        primer_os_packages del "$2"
     fi
 }

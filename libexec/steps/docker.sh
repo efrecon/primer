@@ -46,7 +46,7 @@ primer_step_docker() {
             done
             ;;
         "install")
-            if ! [ -x "$(command -v dockerd)" ]; then
+            if ! primer_utils_syscmd_exists dockerd; then
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     alpine)
@@ -90,7 +90,7 @@ primer_step_docker() {
             fi
 
             # Start docker and make sure it will always start
-            if [ -x "$(command -v dockerd)" ]; then
+            if primer_utils_syscmd_exists dockerd; then
                 if ! docker info 2>/dev/null; then
                     yush_info "Starting Docker daemon"
                     primer_os_service start docker
@@ -169,7 +169,7 @@ primer_step_docker() {
             ;;
         "clean")
             # Stop docker and remove from autostart.
-            if [ -x "$(command -v dockerd)" ]; then
+            if primer_utils_syscmd_exists dockerd; then
                 if docker info; then
                     yush_info "Stopping Docker daemon"
                     primer_os_service stop docker

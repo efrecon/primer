@@ -15,6 +15,12 @@ primer_utils_locate() {
     printf %s\\n "$_fpath"
 }
 
+# Is the command $1 available? Regular users have no sbin directories in their
+# PATH, so look them up explicitly to also find system daemons and tools.
+primer_utils_syscmd_exists() {
+    PATH="${PATH}:/usr/local/sbin:/usr/sbin:/sbin" command -v "$1" >/dev/null 2>&1
+}
+
 primer_utils_var_exists() {
     eval "[ ! -z \"\${$1:-}\" ]"
     return $?  # Pedantic.

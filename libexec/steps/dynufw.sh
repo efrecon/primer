@@ -72,7 +72,7 @@ primer_step_dynufw() {
 # Install ufw, with additional necessary extra packages. We treat containers a
 # little bit different (which is mostly usefull for testing)
 _primer_step_dynufw_install_ufw() {
-    if [ -z "$(command -v ufw)" ]; then
+    if ! primer_utils_syscmd_exists ufw; then
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
             alpine)

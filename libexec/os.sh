@@ -120,7 +120,7 @@ primer_os_upgrade() {
 }
 
 primer_os_dependency() {
-    if ! command -v "$1" >/dev/null 2>&1 || [ -z "$1" ]; then
+    if ! primer_utils_syscmd_exists "$1" || [ -z "$1" ]; then
         cmd=$1
         shift
 
@@ -284,7 +284,7 @@ primer_os_in_container() {
         return 0
     fi
 
-    if [ -x "$(command -v systemd-detect-virt)" ]; then
+    if primer_utils_syscmd_exists systemd-detect-virt; then
         # WSL is reported as a container, but behaves as a regular host as far
         # as services and packages are concerned.
         case "$(systemd-detect-virt --container 2>/dev/null)" in
@@ -301,7 +301,7 @@ primer_os_service() {
         if primer_os_in_container; then
             yush_notice "Service $2 $1 is not relevant in a container"
         else
-            if [ -x "$(command -v systemctl)" ]; then
+            if primer_utils_syscmd_exists systemctl; then
                 if [ "$1" = "list" ]; then
                     $PRIMER_OS_SUDO systemctl --no-pager --no-legend list-units "${2:-*}.service" | awk '{print $1}' | sed -E 's/(.*)\.service$/\1/'
                 else
@@ -321,13 +321,13 @@ primer_os_service() {
                             ;;
                     esac
                 fi
-            elif [ -x "$(command -v service)" ]; then
+            elif primer_utils_syscmd_exists service; then
                 if [ "$1" = "list" ]; then
                     $PRIMER_OS_SUDO service --status-all | sed -E 's/^\s*\[\s*.\s*\]\s*(.*)/\1/'
                 else
                     $PRIMER_OS_SUDO service "$1" "$2"
                 fi
-            elif [ -x "$(command -v rc-service)" ]; then
+            elif primer_utils_syscmd_exists rc-service; then
                 case "$1" in
                     start|stop|restart)
                         $PRIMER_OS_SUDO rc-service "$2" "$1";;

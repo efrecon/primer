@@ -20,7 +20,7 @@ primer_step_locale() {
             done
             ;;
         "install")
-            if command -v locale-gen >/dev/null; then
+            if primer_utils_syscmd_exists locale-gen; then
                 $PRIMER_OS_SUDO locale-gen "$PRIMER_STEP_LOCALE_LOCALE"
             fi
             LC_ALL=$PRIMER_STEP_LOCALE_LOCALE
