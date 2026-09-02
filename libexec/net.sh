@@ -65,6 +65,72 @@ primer_net_urlenc() {
 # Return the hostname of the current machine.
 primer_net_hostname() { uname -n; }
 
+primer_net_active_firewall() {
+    if primer_utils_syscmd_exists ufw &&
+            $PRIMER_OS_SUDO ufw status 2>/dev/null | grep -q '^Status: active$'; then
+        printf '%s\n' ufw
+    elif primer_utils_syscmd_exists firewall-cmd &&
+            $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
+        printf '%s\n' firewalld
+    elif primer_utils_syscmd_exists nft &&
+            { primer_utils_syscmd_exists systemctl &&
+                $PRIMER_OS_SUDO systemctl is-active --quiet nftables ||
+              primer_utils_syscmd_exists rc-service &&
+                $PRIMER_OS_SUDO rc-service nftables status >/dev/null 2>&1; }; then
+        printf '%s\n' nftables
+    fi
+}
+
+_primer_net_port_allow() {
+    _firewall=$1
+    _port=$2
+    _proto=$3
+    case "$_firewall" in
+        ufw)
+            $PRIMER_OS_SUDO ufw allow "${_port}/${_proto}";;
+        firewalld)
+            $PRIMER_OS_SUDO firewall-cmd --permanent --add-port="${_port}/${_proto}"
+            $PRIMER_OS_SUDO firewall-cmd --add-port="${_port}/${_proto}";;
+        nftables)
+            $PRIMER_OS_SUDO nft add rule inet filter input "$_proto" dport "$_port" accept;;
+    esac
+}
+
+# Allow incoming traffic for one or more port[/protocol] rules. A protocol-less
+# rule opens both TCP and UDP. Supported protocols are TCP and UDP.
+primer_net_port_allow() {
+    _firewall=$(primer_net_active_firewall)
+    if [ -z "$_firewall" ]; then
+        yush_warn "No active UFW, firewalld, or nftables firewall found"
+        return 1
+    fi
+
+    for _rule in "$@"; do
+        _port=${_rule%%/*}
+        _proto=${_rule#*/}
+        [ "$_port" = "$_proto" ] && _proto=
+        if ! printf '%s\n' "$_port" | grep -Eq '^[0-9]+$' ||
+                [ "$_port" -lt 1 ] || [ "$_port" -gt 65535 ]; then
+            yush_warn "Invalid port rule: $_rule"
+            continue
+        fi
+        if [ -n "$_proto" ]; then
+            _proto=$(printf '%s\n' "$_proto" | tr '[:upper:]' '[:lower:]')
+            case "$_proto" in
+                tcp|udp) _primer_net_port_allow "$_firewall" "$_port" "$_proto";;
+                *) yush_warn "Invalid port protocol in rule: $_rule";;
+            esac
+        else
+            _primer_net_port_allow "$_firewall" "$_port" tcp
+            _primer_net_port_allow "$_firewall" "$_port" udp
+        fi
+    done
+
+    if [ "$_firewall" = nftables ]; then
+        yush_warn "nftables rules are not persistent; add them to the managed nftables configuration"
+    fi
+}
+
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
         yush_debug "Looking for curl options for $1"
