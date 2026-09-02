@@ -62,6 +62,7 @@ primer_step_announce() {
                 elif [ "$1" = "install" ]; then
                     yush_info "Announcing using method: $method"
                     _primer_step_announce_install "$_daemon" "$_pkg"
+                    # TODO: When using firewall-cmd, should we run --add-service=mdns, etc. instead??
                     if primer_utils_syscmd_exists "$_daemon" && [ -n "$(primer_net_active_firewall)" ]; then
                         # shellcheck disable=SC2086
                         primer_net_port_allow $_ports

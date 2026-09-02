@@ -85,6 +85,7 @@ _primer_net_port_allow() {
     _firewall=$1
     _port=$2
     _proto=$3
+    yush_info "Allowing incoming traffic for port $_port/$_proto on firewall $_firewall"
     case "$_firewall" in
         ufw)
             $PRIMER_OS_SUDO ufw allow "${_port}/${_proto}";;
