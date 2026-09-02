@@ -430,6 +430,17 @@ with `PRIMER_STEP_`. More details are available in the [conventions] document.
 
   [conventions]: ./docs/CONVENTIONS.md
 
+## Running Directly
+
+Provided a release version, you can download and run primer directly using
+`curl`, as long as it is installed. For example, the following command would
+download release `v0.2.0` and show the help message.
+
+```bash
+curl -sSL https://github.com/efrecon/primer/releases/download/v0.2.0/primer-v0.2.0.sh |
+  sh -s - --help
+```
+
 ## Packaging
 
 The current implementation depends on a number of internal modules, on the
