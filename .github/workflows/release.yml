@@ -11,14 +11,14 @@ permissions:
 jobs:
   amalgamate:
     runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Prepare release tag
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           safe_tag=$(printf '%s' "$TAG_NAME" | LC_ALL=C sed 's/[^0-9A-Za-z._+-]/-/g')
           printf 'SAFE_TAG=%s\n' "$safe_tag" >> "$GITHUB_ENV"
@@ -35,7 +35,7 @@ jobs:
           chmod +x "$out"
 
           # Verify the amalgamation script.
-          "$out" --help
+          ./"$out" --help
 
       - name: Upload release asset
         env:
