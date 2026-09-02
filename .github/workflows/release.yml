@@ -17,13 +17,22 @@ jobs:
           submodules: recursive
 
       - name: Build amalgamation
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          ./libexec/yu.sh/bin/amalgamation.sh primer > "primer-${{ github.event.release.tag_name }}.sh"
-          sed -i 's/^PRIMER_VERSION=.*/PRIMER_VERSION="${{ github.event.release.tag_name }}"/' "primer-${{ github.event.release.tag_name }}.sh"
-          chmod +x "primer-${{ github.event.release.tag_name }}.sh"
-          "./primer-${{ github.event.release.tag_name }}.sh" --help
+          safe_tag="${TAG_NAME//\//-}"
+          out="primer-${safe_tag}.sh"
+          ./libexec/yu.sh/bin/amalgamation.sh primer > "$out"
+          escaped_tag=$(printf '%s' "$TAG_NAME" | sed 's/[\/&]/\\&/g')
+          sed -i "s/^PRIMER_VERSION=.*/PRIMER_VERSION=\"$escaped_tag\"/" "$out"
+          chmod +x "$out"
+          "$out" --help
 
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "primer-${{ github.event.release.tag_name }}.sh" --clobber
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          safe_tag="${TAG_NAME//\//-}"
+          out="primer-${safe_tag}.sh"
+          gh release upload "$TAG_NAME" "$out" --clobber
