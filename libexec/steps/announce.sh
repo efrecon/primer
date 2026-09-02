@@ -62,7 +62,7 @@ primer_step_announce() {
                 elif [ "$1" = "install" ]; then
                     yush_info "Announcing using method: $method"
                     _primer_step_announce_install "$_daemon" "$_pkg"
-                    if [ -n "$(primer_net_active_firewall)" ]; then
+                    if primer_utils_syscmd_exists "$_daemon" && [ -n "$(primer_net_active_firewall)" ]; then
                         # shellcheck disable=SC2086
                         primer_net_port_allow $_ports
                     fi
