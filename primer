@@ -57,6 +57,9 @@ PRIMER_CONFIG=${PRIMER_CONFIG:-"./primer.env ./primer_%mac%.env"}
 # Should we allow substitution in configuration file.
 PRIMER_SUBST=1
 
+# Version.
+PRIMER_VERSION="<dev>"
+
 # Where to install binaries and libraries
 PRIMER_LOCAL=${PRIMER_LOCAL:-/usr/local}
 PRIMER_BINDIR=${PRIMER_BINDIR:-${PRIMER_LOCAL%%/}/bin}
@@ -95,8 +98,8 @@ usage() {
 
 Description:
 
-  $YUSH_APPNAME will execute a number of steps to initialise a pristine
-  machine in a deterministic way.
+  $YUSH_APPNAME v${PRIMER_VERSION#v} will execute a number of steps to initialise
+  a pristine machine in a deterministic way.
 
 Usage:
   $(basename "$0") [-option arg --long-option(=)arg] cmd
@@ -112,6 +115,7 @@ Usage:
     --no-subst       Do not substitute env variables in config files.
     --xx:yy          Provided xx is a step, pass the option --yy to its function
     --curl           Path to curl options matching DB
+    -V | --version   Print version and exit
     -h | --help      Print this help and exit
     -v | --verbose   Verbosity level
 
@@ -200,6 +204,9 @@ $_step $_opt $_val"
         --verbose=*)
             # shellcheck disable=SC2034
             YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
+
+        -V | --version)
+            echo "$YUSH_APPNAME v${PRIMER_VERSION#v}"; exit 0;;
 
         --non-interactive | --no-colour | --no-color)
             # shellcheck disable=SC2034
