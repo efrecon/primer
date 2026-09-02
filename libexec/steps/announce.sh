@@ -31,9 +31,11 @@ primer_step_announce() {
                 # Daemon implementing the method, and package providing it.
                 _daemon=
                 _pkg=
+                _ports=
                 case "$(printf %s\\n "$method" | tr '[:upper:]' '[:lower:]')" in
                     mdns)
                         _daemon=avahi-daemon
+                        _ports=5353/udp
                         case "$lsb_dist" in
                             *buntu|*bian)
                                 _pkg=avahi-daemon;;
@@ -43,6 +45,7 @@ primer_step_announce() {
                         ;;
                     netbios)
                         _daemon=nmbd
+                        _ports="137/udp 138/udp"
                         case "$lsb_dist" in
                             *buntu|*bian|fedora*|clear*linux*)
                                 _pkg=samba;;
@@ -59,6 +62,10 @@ primer_step_announce() {
                 elif [ "$1" = "install" ]; then
                     yush_info "Announcing using method: $method"
                     _primer_step_announce_install "$_daemon" "$_pkg"
+                    if [ -n "$(primer_net_active_firewall)" ]; then
+                        # shellcheck disable=SC2086
+                        primer_net_port_allow $_ports
+                    fi
                 else
                     yush_info "Cleaning announcements for method: $method"
                     _primer_step_announce_uninstall "$_daemon" "$_pkg"
