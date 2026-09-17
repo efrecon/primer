@@ -67,7 +67,7 @@ _primer_step_wifi_install() {
     else
         # Bring down the link, we brought it up to scan
         $PRIMER_OS_SUDO ip link set "$PRIMER_STEP_WIFI_INTERFACE" down
-        
+
         # Disable wpa_supplicant (DBus) service
         if primer_os_service list | grep -q wpa_supplicant; then
             yush_notice "Disabling wpa_supplicant service"
@@ -81,7 +81,7 @@ _primer_step_wifi_install() {
         else
             # We insert an interface block. The wpa- are parsed and
             # understood by the wpa_supplicant package for its
-            # configuration. 
+            # configuration.
             {
                 echo "";
                 echo "# primer autoadd wifi settings: $PRIMER_STEP_WIFI_INTERFACE";
@@ -111,7 +111,7 @@ _primer_step_wifi_clean() {
     if ip address show dev "$PRIMER_STEP_WIFI_INTERFACE" | grep "inet" | grep "$PRIMER_STEP_WIFI_INTERFACE" | grep -q "scope global"; then
         $PRIMER_OS_SUDO ifdown --force -v "$PRIMER_STEP_WIFI_INTERFACE"
     fi
-    
+
     # Remove interface settings. This needs to match against the
     # lines that are added as comments when installing.
     _iface=$(mktemp)

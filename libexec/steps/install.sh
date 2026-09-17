@@ -89,7 +89,7 @@ _primer_step_install() {
                 if [ -d "$tgt" ]; then
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
- 
+
                 if [ -f "$tgt" ] && ! yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
                     yush_debug "Target $tgt already exists!"
                     do_perms=0

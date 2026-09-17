@@ -3,7 +3,7 @@
 # Path to disk creation/mounting specification. The file contains colon
 # separated lines with good default values. Fields are #1 dev name (sans /dev/)
 # #2 filesystem type, e.g. ext4, #3 mount point, #4 colon separated mount
-# options, #5 user, #6 group #7 permissions for mount point 
+# options, #5 user, #6 group #7 permissions for mount point
 PRIMER_STEP_DISK_DB=${PRIMER_STEP_DISK_DB:-}
 
 # Default format when none specified
