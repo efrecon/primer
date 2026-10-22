@@ -1,7 +1,9 @@
 # dynufw
 
 `dynufw` arranges for a set of firewall rules written using host names to be
-updated at regular intervals to contain [ufw] rules with IP addresses.
+updated at regular intervals to contain [ufw] rules with IP addresses. Unless
+you have explicit needs for hostnames, you should probably use the
+[`firewall`](./firewall.md) instead.
 
   [ufw]: https://wiki.ubuntu.com/UncomplicatedFirewall
 
