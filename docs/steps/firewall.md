@@ -75,6 +75,10 @@ default, meaning automatic detection.
 Marker for the rules created by this step: the comment of nftables rules and the
 prefix of the names of awall policies. Defaults to `primer`.
 
+The marker may only contain the characters accepted in awall policy names, i.e.
+ASCII letters, digits and dashes (`[0-9a-zA-Z-]`). Other characters are removed
+with a warning. When no character remains, `primer` is used instead.
+
 ### `PRIMER_STEP_FIREWALL_AWALL_DIR`
 
 Directory where to place the awall policies created by this step. It must be one

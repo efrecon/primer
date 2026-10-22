@@ -11,7 +11,8 @@ PRIMER_STEP_FIREWALL_TYPE=${PRIMER_STEP_FIREWALL_TYPE:-}
 
 # Marker for the rules created by this step, so they can be found and removed
 # when cleaning. This is the comment of nftables rules and the prefix of the
-# names of awall policies.
+# names of awall policies. Only letters, digits and dashes are kept, as in awall
+# policy names.
 PRIMER_STEP_FIREWALL_MARKER=${PRIMER_STEP_FIREWALL_MARKER:-"primer"}
 
 # Directory where to place the awall policies created by this step. This must be
@@ -42,6 +43,14 @@ primer_step_firewall() {
             if [ -z "$PRIMER_STEP_FIREWALL_PORTS" ]; then
                 yush_warn "No firewall ports specified."
                 return
+            fi
+            # The marker ends up in nftables rules and awall policy (file)
+            # names, keep the characters accepted by awall only.
+            _marker=$(printf %s "$PRIMER_STEP_FIREWALL_MARKER" | LC_ALL=C tr -cd '0-9a-zA-Z-')
+            [ -z "$_marker" ] && _marker=primer
+            if [ "$_marker" != "$PRIMER_STEP_FIREWALL_MARKER" ]; then
+                yush_warn "Firewall marker '$PRIMER_STEP_FIREWALL_MARKER' contains unsafe characters, using '$_marker'"
+                PRIMER_STEP_FIREWALL_MARKER=$_marker
             fi
             _fw=$(_primer_step_firewall_detect)
             case "$_fw" in
