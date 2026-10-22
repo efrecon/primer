@@ -244,6 +244,8 @@ Some inspiration can be taken from the [config][cc] implementation in
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
 * The wrapper is able to track host names that would change their pointed IP
   with time (dynamic DNS).
+* [`firewall`][firewall] opens ports in the firewall of the host,
+  detecting ufw, firewalld, awall or nftables and falling back to iptables.
 * `timezone` places the host at a given location.
 * [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
   user.
@@ -284,6 +286,7 @@ Some inspiration can be taken from the [config][cc] implementation in
   [mDNS]: https://en.wikipedia.org/wiki/Multicast_DNS
   [NetBIOS]: https://en.wikipedia.org/wiki/NetBIOS
   [dynufw]: ./docs/steps/dynufw.md
+  [firewall]: ./docs/steps/firewall.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
   [compose]: ./docs/steps/compose.md
