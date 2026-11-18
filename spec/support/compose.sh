@@ -13,7 +13,5 @@ compose() {
             -p /primer/libexec/steps:/primer/spec/support/steps \
             -v error \
             -s "compose runner" \
-            --compose:version="$version" \
-            --compose:sha256="$sum" \
-            --runner:command="docker-compose --version"
+            --runner:command="true"
 }

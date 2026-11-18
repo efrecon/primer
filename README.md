@@ -251,11 +251,10 @@ Some inspiration can be taken from the [config][cc] implementation in
   user.
 * The target of this module are deploy keys when interacting with automated CI
   systems.
-* [`docker`][docker] installs the Docker daemon and client,
-  it has been described above.
-* [`compose`][compose] installs Docker compose at the latest or
-  a specific version, together with bash completion.
-* The binary integrity can be verified before installation.
+* [`docker`][docker] installs the Docker daemon and client, together with the
+  Docker compose and buildx plugins, it has been described above.
+* [`compose`][compose] is deprecated, Docker compose is now a CLI plugin
+  installed by the [`docker`][docker] step.
 * [`machine`][machine] installs Docker machine at the latest or
   a specific version, together with bash completion.
 * The binary integrity can be verified before installation.
