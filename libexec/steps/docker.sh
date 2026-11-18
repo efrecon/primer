@@ -377,9 +377,12 @@ _primer_step_docker_install_guess() {
 }
 
 # Remove the packages passed as arguments, but only those that are installed.
+# Some package managers (apk) list installed packages with their version
+# appended, e.g. docker-cli-compose-2.40.3-r6, so accept an optional version
+# suffix, which always starts with a digit.
 _primer_step_docker_uninstall_packages() {
     for _pkg in "$@"; do
-        if primer_os_packages list | grep -qx "$_pkg"; then
+        if primer_os_packages list | grep -qE "^${_pkg}(-[0-9].*)?\$"; then
             primer_os_packages del "$_pkg"
         fi
     done
@@ -417,7 +420,14 @@ _primer_step_docker_plugin_asset() {
     _os=$(uname -s | tr '[:upper:]' '[:lower:]')
     case "$1" in
         compose)
-            printf %s\\n "docker-compose-${_os}-$(uname -m)";;
+            # compose uses uname -m names, except for 32-bit ARM, where the
+            # trailing endianness letter (armv7l, armv6l) is dropped.
+            case "$(uname -m)" in
+                armv7*) _arch=armv7;;
+                armv6*) _arch=armv6;;
+                *) _arch=$(uname -m);;
+            esac
+            printf %s\\n "docker-compose-${_os}-${_arch}";;
         buildx)
             # buildx uses Go architecture names.
             case "$(uname -m)" in
@@ -432,11 +442,22 @@ _primer_step_docker_plugin_asset() {
 }
 
 # Return success when the Docker CLI plugin passed as an argument (compose or
-# buildx) is installed and, when a version was requested, at that version.
+# buildx) is installed and, when a version was requested, at that version. The
+# requested version matches the installed one exactly, or as a prefix ending at
+# a dot boundary, e.g. 2.29 matches 2.29.7, but 2.2 does not.
 _primer_step_docker_plugin_ok() {
     docker "$1" version >/dev/null 2>&1 || return 1
     _want=$(primer_utils_var_value "PRIMER_STEP_DOCKER_$(printf %s "$1" | tr '[:lower:]' '[:upper:]')_VERSION")
-    [ -z "$_want" ] || docker "$1" version | grep -q "${_want#v}"
+    [ -z "$_want" ] && return 0
+    _want=${_want#v}
+    # First dotted version number in the output, e.g. "Docker Compose version
+    # v2.29.7" or "github.com/docker/buildx 0.12.1 ..." (distro builds may add
+    # a -N suffix, which is dropped here).
+    _have=$(docker "$1" version | grep -Eo '[0-9]+(\.[0-9]+)+' | head -1)
+    case "$_have" in
+        "$_want"|"$_want".*) return 0;;
+    esac
+    return 1
 }
 
 # Install the Docker CLI plugin passed as an argument (compose or buildx),
