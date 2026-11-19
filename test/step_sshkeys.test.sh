@@ -58,7 +58,8 @@ test_sshkeys_keeps_existing_keys() {
     in_container "$IMG_ALPINE" '
         apk add -q openssh-keygen >/dev/null
         mkdir -p /root/.ssh && chmod 700 /root/.ssh
-        ssh-keygen -N "" -t ed25519 -C "my own key" -q -f /root/.ssh/id_ed25519
+        # The marker in the middle of the comment is not the marker.
+        ssh-keygen -N "" -t ed25519 -C "my own key (primer) copy" -q -f /root/.ssh/id_ed25519
         before=$(cat /root/.ssh/id_ed25519.pub)
         primer_run -s sshkeys install
         assert_equal 0 "$PRIMER_RC"

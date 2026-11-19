@@ -24,6 +24,13 @@ primer_step_timezone() {
             ;;
         "install")
             if [ -n "$PRIMER_STEP_TIMEZONE_LOCATION" ]; then
+                # Locations are relative to the zoneinfo directory, and stay
+                # in it.
+                case "/$PRIMER_STEP_TIMEZONE_LOCATION/" in
+                    //*|*/../*)
+                        yush_error "Invalid timezone $PRIMER_STEP_TIMEZONE_LOCATION"
+                        return 1;;
+                esac
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
                     *buntu|*bian|fedora*|alpine*)
@@ -35,6 +42,12 @@ primer_step_timezone() {
                 _zone="${PRIMER_STEP_TIMEZONE_ZONEINFO%/}/$PRIMER_STEP_TIMEZONE_LOCATION"
                 if ! [ -f "$_zone" ]; then
                     yush_error "Unknown timezone $PRIMER_STEP_TIMEZONE_LOCATION, no $_zone"
+                    return 1
+                fi
+                # Zone files start with this magic, other files in the
+                # directory, e.g. zone1970.tab, are not zones.
+                if [ "$(head -c 4 "$_zone")" != "TZif" ]; then
+                    yush_error "$_zone is not a timezone file"
                     return 1
                 fi
                 yush_info "Setting timezone to $PRIMER_STEP_TIMEZONE_LOCATION"

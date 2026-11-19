@@ -189,11 +189,20 @@ _primer_step_install() {
                     fi
                 fi
             elif printf %s\\n "$src" | grep -Eq '^https?://'; then
-                # Downloads are placed into target directories.
+                # Downloads are placed into target directories. They are only
+                # removed when still equal to a fresh download.
                 if [ -d "$tgt" ]; then
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
-                _primer_step_install_rm_file "$tgt"
+                if [ -e "$tgt" ] || [ -L "$tgt" ]; then
+                    _download=$(mktemp)
+                    if primer_net_curl "$src" > "$_download"; then
+                        _primer_step_install_rm_file "$tgt" "$_download"
+                    else
+                        yush_warn "Could not download $src to compare, keeping $tgt"
+                    fi
+                    rm -f "$_download"
+                fi
             elif [ -d "$src" ]; then
                 # Directories are copied into existing target directories, or
                 # become the target. As nothing records which one happened,
@@ -214,13 +223,19 @@ _primer_step_install() {
                 elif [ -e "$tgt" ] && ! yush_glob '*/' "$tgt"; then
                     yush_notice "$tgt is not a copy of $src, not removing it"
                 fi
+            elif [ -z "$src" ]; then
+                # Files created from an empty source are only removed when
+                # still empty: the file might have existed before.
+                _primer_step_install_rm_file "$tgt" /dev/null
             else
                 # Files are copied into target directories, or become the
-                # target.
-                if [ -n "$src" ] && { yush_glob '*/' "$tgt" || [ -d "$tgt" ]; }; then
+                # target. They are only removed when still equal to the
+                # source: the file might have existed before, e.g. when not
+                # overwritten.
+                if yush_glob '*/' "$tgt" || [ -d "$tgt" ]; then
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
-                _primer_step_install_rm_file "$tgt"
+                _primer_step_install_rm_file "$tgt" "$src"
             fi
             ;;
     esac
@@ -233,13 +248,20 @@ _primer_step_install_field() {
     printf %s\\n "$1" | awk -F: -v n="$2" '{print $n}'
 }
 
-# Remove the file (or link) at $1, never a directory.
+# Remove the file (or link) at $1, never a directory, and only when its content
+# is the same as the one of the file at $2, i.e. what this step installs.
 _primer_step_install_rm_file() {
     if [ -d "$1" ] && ! [ -L "$1" ]; then
         yush_warn "Not removing directory $1"
     elif [ -e "$1" ] || [ -L "$1" ]; then
-        yush_info "Removing $1"
-        $PRIMER_OS_SUDO rm -f "$1"
+        if ! [ -e "$2" ]; then
+            yush_warn "Cannot read $2 to compare, keeping $1"
+        elif $PRIMER_OS_SUDO cmp -s "$1" "$2"; then
+            yush_info "Removing $1"
+            $PRIMER_OS_SUDO rm -f "$1"
+        else
+            yush_notice "$1 differs from what was installed, keeping it"
+        fi
     fi
 }
 

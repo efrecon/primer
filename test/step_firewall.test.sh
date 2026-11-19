@@ -12,32 +12,46 @@ test_firewall_ufw_inactive() {
     in_container "$IMG_TRIXIE" '
         apt-get update -qq >/dev/null
         DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw >/dev/null 2>&1
-        primer_run -s firewall --firewall:ports "8080 443/tcp" install
+        # Rules of the admin, before primer
+        ufw allow 22/tcp >/dev/null
+        ufw deny 4444/tcp >/dev/null
+        primer_run -s firewall --firewall:ports "22/tcp 4444/tcp 8080 443/tcp" install
         assert_equal 0 "$PRIMER_RC" "install status"
         assert_contains "Using firewall ufw" "$PRIMER_ERR"
         added=$(ufw show added)
-        assert_contains "ufw allow 8080/tcp" "$added"
-        assert_contains "ufw allow 8080/udp" "$added"
-        assert_contains "ufw allow 443/tcp" "$added"
+        assert_contains "ufw allow 8080/tcp comment '"'"'primer firewall'"'"'" "$added"
+        assert_contains "ufw allow 8080/udp comment '"'"'primer firewall'"'"'" "$added"
+        assert_contains "ufw allow 443/tcp comment '"'"'primer firewall'"'"'" "$added"
         assert_not_contains "443/udp" "$added"
-        primer_run -s firewall --firewall:ports "8080 443/tcp" clean
+        assert_match "^ufw allow 22/tcp$" "$added" "rule of the admin untouched"
+        assert_match "^ufw deny 4444/tcp$" "$added" "rule of the admin untouched"
+        primer_run -s firewall --firewall:ports "22/tcp 4444/tcp 8080 443/tcp" clean
         assert_equal 0 "$PRIMER_RC" "clean status"
-        assert_not_contains "allow" "$(ufw show added)"'
+        assert_equal "$(printf "ufw allow 22/tcp\nufw deny 4444/tcp")" "$(ufw show added | grep "^ufw ")"'
 }
 
 test_firewall_firewalld_offline() {
     in_container "$IMG_TRIXIE" '
         apt-get update -qq >/dev/null
         DEBIAN_FRONTEND=noninteractive apt-get install -y -qq firewalld >/dev/null 2>&1
+        # Port opened by the admin, before primer
+        firewall-offline-cmd --add-port=8080/tcp >/dev/null
         primer_run -s firewall --firewall:type firewalld --firewall:ports "8080 53/udp" install
         assert_equal 0 "$PRIMER_RC" "install status"
-        ports=$(firewall-offline-cmd --list-ports)
+        ports=$(firewall-offline-cmd --service=primer --get-ports)
         assert_contains "8080/tcp" "$ports"
         assert_contains "8080/udp" "$ports"
         assert_contains "53/udp" "$ports"
+        assert_match "(^| )primer( |$)" "$(firewall-offline-cmd --list-services)"
+        primer_run -s firewall --firewall:type firewalld --firewall:ports "8080 53/udp" install
+        assert_equal 0 "$PRIMER_RC" "second install status"
         primer_run -s firewall --firewall:type firewalld --firewall:ports "8080 53/udp" clean
         assert_equal 0 "$PRIMER_RC" "clean status"
-        assert_equal "" "$(firewall-offline-cmd --list-ports)"'
+        assert_equal "8080/tcp" "$(firewall-offline-cmd --list-ports)" "port of the admin kept"
+        assert_not_contains primer "$(firewall-offline-cmd --list-services)"
+        assert_not_contains primer "$(firewall-offline-cmd --get-services)"
+        primer_run -s firewall --firewall:type firewalld --firewall:ports "8080 53/udp" clean
+        assert_equal 0 "$PRIMER_RC" "second clean status"'
 }
 
 test_firewall_iptables() {
@@ -47,15 +61,23 @@ test_firewall_iptables() {
         assert_equal 0 "$PRIMER_RC" "install status"
         assert_contains "Using firewall iptables" "$PRIMER_ERR"
         assert_contains "not persistent" "$PRIMER_ERR"
-        assert_true iptables -C INPUT -p tcp --dport 8080 -j ACCEPT
-        assert_true iptables -C INPUT -p udp --dport 5353 -j ACCEPT
+        for b in iptables ip6tables; do
+            assert_true $b -C INPUT -p tcp --dport 8080 -m comment --comment primer -j ACCEPT
+            assert_true $b -C INPUT -p udp --dport 5353 -m comment --comment primer -j ACCEPT
+        done
+        # A rule of the admin for the same traffic
+        iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
         primer_run -s firewall --firewall:ports "8080/tcp 5353/udp" install
         assert_equal 0 "$PRIMER_RC" "second install status"
-        assert_equal 1 "$(iptables -S INPUT | grep -c "dport 8080")" "rules after two installs"
+        assert_equal 2 "$(iptables -S INPUT | grep -c "dport 8080")" "rules after two installs"
+        assert_equal 1 "$(ip6tables -S INPUT | grep -c "dport 8080")" "IPv6 rules after two installs"
         primer_run -s firewall --firewall:ports "8080/tcp 5353/udp" clean
         assert_equal 0 "$PRIMER_RC" "clean status"
-        assert_false iptables -C INPUT -p tcp --dport 8080 -j ACCEPT
-        assert_false iptables -C INPUT -p udp --dport 5353 -j ACCEPT'
+        for b in iptables ip6tables; do
+            assert_false $b -C INPUT -p tcp --dport 8080 -m comment --comment primer -j ACCEPT
+            assert_false $b -C INPUT -p udp --dport 5353 -m comment --comment primer -j ACCEPT
+        done
+        assert_true iptables -C INPUT -p tcp --dport 8080 -j ACCEPT'
 }
 
 test_firewall_nftables() {
@@ -152,11 +174,19 @@ test_firewall_commands() {
         PRIMER_STEP_FIREWALL_PORTS="80 443/tcp"
 
         PRIMER_STEP_FIREWALL_TYPE=ufw
-        mock ufw
+        # Rules as printed by ufw show added: the 80/tcp rule of the admin.
+        printf "ufw allow 80/tcp\n" > /tmp/added
+        ufw() {
+            if [ "$1" = show ]; then cat /tmp/added; return; fi
+            mock_log ufw "$@"
+            case "$1" in
+                allow) printf "ufw allow %s comment '"'"'%s'"'"'\n" "$2" "$4" >> /tmp/added;;
+            esac
+        }
         primer_step_firewall install
         primer_step_firewall clean
-        assert_equal "$(printf "%s\n" "ufw allow 80/tcp" "ufw allow 80/udp" "ufw allow 443/tcp" \
-            "ufw delete allow 80/tcp" "ufw delete allow 80/udp" "ufw delete allow 443/tcp")" "$(mock_calls)" "ufw"
+        assert_equal "$(printf "%s\n" "ufw allow 80/udp comment primer firewall" "ufw allow 443/tcp comment primer firewall" \
+            "ufw delete allow 80/udp comment primer firewall" "ufw delete allow 443/tcp comment primer firewall")" "$(mock_calls)" "ufw"
 
         mock_reset
         PRIMER_STEP_FIREWALL_TYPE=firewalld
@@ -164,15 +194,20 @@ test_firewall_commands() {
         PRIMER_STEP_FIREWALL_PORTS=443/tcp
         primer_step_firewall install
         calls=$(mock_calls)
-        assert_contains "firewall-cmd --permanent --add-port=443/tcp" "$calls"
-        assert_contains "firewall-cmd --add-port=443/tcp" "$calls"
+        assert_contains "firewall-cmd --permanent --new-service=primer" "$calls"
+        assert_contains "firewall-cmd --permanent --service=primer --add-port=443/tcp" "$calls"
+        assert_contains "firewall-cmd --permanent --add-service=primer" "$calls"
+        assert_contains "firewall-cmd --reload" "$calls"
+        assert_not_contains "add-port=443/tcp --" "$calls"
 
         mock_reset
         mock -o stopped firewall-cmd
-        mock firewall-offline-cmd
+        mock -o primer firewall-offline-cmd
         primer_step_firewall clean
-        assert_contains "firewall-offline-cmd --remove-port=443/tcp" "$(mock_calls)"
-        assert_not_contains "firewall-cmd --permanent" "$(mock_calls)"'
+        calls=$(mock_calls)
+        assert_contains "firewall-offline-cmd --service=primer --remove-port=443/tcp" "$calls"
+        assert_not_contains "firewall-cmd --permanent" "$calls"
+        assert_not_contains "firewall-cmd --reload" "$calls"'
 }
 
 test_firewall_marker() {
@@ -195,4 +230,69 @@ test_firewall_unknown_type_and_no_ports() {
         primer_run -s firewall install
         assert_equal 0 "$PRIMER_RC"
         assert_contains "No firewall ports specified" "$PRIMER_ERR"'
+}
+
+# Rules that existed before install survive clean, for iptables and
+# ip6tables. The stateful iptables mock stores rules as given after the chain:
+# primer marks its rules (-m comment --comment primer), so primer rules and user
+# rules are distinct lines, as with the real iptables.
+test_firewall_iptables_keeps_user_rules() {
+    unit "$IMG_ALPINE" '
+        unit_step firewall
+        # Stateful iptables: one rule per line in /tmp/<bin>, as given after the chain.
+        _ipt() {
+            _f=/tmp/$1; shift; _op=$1; shift 2; _r=$*
+            touch "$_f"
+            case "$_op" in
+                -C) grep -qxF -- "$_r" "$_f";;
+                -I) { printf "%s\n" "$_r"; cat "$_f"; } > "$_f.n" && mv "$_f.n" "$_f";;
+                -D) grep -qxF -- "$_r" "$_f" || return 1
+                    awk -v r="$_r" "!d && \$0 == r { d = 1; next } { print }" "$_f" > "$_f.n" && mv "$_f.n" "$_f";;
+            esac
+        }
+        iptables() { _ipt iptables "$@"; }
+        ip6tables() { _ipt ip6tables "$@"; }
+        mock primer_os_dependency
+        PRIMER_STEP_FIREWALL_TYPE=iptables
+        # SSH opened by the admin, before primer
+        iptables -I INPUT -p tcp --dport 22 -j ACCEPT
+        ip6tables -I INPUT -p tcp --dport 22 -j ACCEPT
+        PRIMER_STEP_FIREWALL_PORTS="22/tcp 8080/tcp"
+        primer_step_firewall install
+        assert_true ip6tables -C INPUT -p tcp --dport 8080 -m comment --comment primer -j ACCEPT
+        assert_true iptables -C INPUT -p tcp --dport 22 -m comment --comment primer -j ACCEPT
+        primer_step_firewall clean
+        for b in iptables ip6tables; do
+            assert_false $b -C INPUT -p tcp --dport 8080 -m comment --comment primer -j ACCEPT
+            assert_false $b -C INPUT -p tcp --dport 22 -m comment --comment primer -j ACCEPT
+            assert_true $b -C INPUT -p tcp --dport 22 -j ACCEPT
+        done'
+}
+
+# Alpine persistence through OpenRC.
+test_firewall_iptables_persistent() {
+    unit "$IMG_ALPINE" '
+        unit_step firewall
+        mock iptables ip6tables primer_os_dependency primer_os_service rc-service
+        mkdir -p /etc/init.d
+        printf "#!/bin/sh\n" > /etc/init.d/iptables; printf "#!/bin/sh\n" > /etc/init.d/ip6tables
+        chmod a+x /etc/init.d/iptables /etc/init.d/ip6tables
+        PRIMER_STEP_FIREWALL_TYPE=iptables
+        PRIMER_STEP_FIREWALL_PORTS=8080/tcp
+        run primer_step_firewall install
+        assert_equal 0 "$RUN_RC"
+        calls=$(mock_calls)
+        assert_contains "rc-service iptables save" "$calls"
+        assert_contains "rc-service ip6tables save" "$calls"
+        assert_contains "primer_os_service enable iptables" "$calls"
+        assert_contains "primer_os_service enable ip6tables" "$calls"
+        assert_not_contains "not persistent" "$RUN_ERR"
+        mock_reset
+        # Rules are found once when cleaning (a mock that always succeeds
+        # makes the while -C loop of clean run forever)
+        mock -r 1 iptables ip6tables
+        primer_step_firewall clean
+        calls=$(mock_calls)
+        assert_contains "rc-service iptables save" "$calls"
+        assert_not_contains "primer_os_service enable" "$calls"'
 }

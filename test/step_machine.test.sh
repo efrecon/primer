@@ -32,7 +32,7 @@ test_machine_sha256() {
 test_machine_bad_sha256() {
     in_container "$IMG_TRIXIE" '
         primer_run -s machine --machine:version '"$MACHINE_OLD_VERSION"' --machine:sha256 0000 install
-        assert_equal 0 "$PRIMER_RC"
+        assert_equal 1 "$PRIMER_RC"
         assert_contains "SHA256 sum mismatch" "$PRIMER_ERR"
         assert_false test -e /usr/local/bin/docker-machine'
 }
@@ -45,4 +45,21 @@ test_machine_upgrade() {
         primer_run -s machine --machine:version '"$MACHINE_VERSION"' install
         assert_equal 0 "$PRIMER_RC"
         assert_contains "'"$MACHINE_VERSION"'" "$(docker-machine --version)"'
+}
+
+# Asset names per architecture, and no completion file when the binary could
+# not be downloaded, which fails the step.
+test_machine_platform_assets() {
+    unit "$IMG_ALPINE" '
+        mock -r 22 primer_net_curl
+        unit_step machine
+        primer_step_machine option --version 0.16.2
+        for _pair in x86_64:x86_64 aarch64:aarch64 armv7l:armhf; do
+            eval "uname() { case \"\$1\" in -m) echo ${_pair%%:*};; *) echo Linux;; esac; }"
+            mock_reset
+            run primer_step_machine install
+            assert_equal 1 "$RUN_RC"
+            assert_match "/v0.16.2/docker-machine-Linux-${_pair#*:}$" "$(mock_calls)" "asset for ${_pair%%:*}"
+        done
+        assert_false [ -e "$(primer_os_bash_completion_dir)/docker-machine" ]'
 }

@@ -41,6 +41,8 @@ primer_step_wifi() {
             elif [ -z "$PRIMER_STEP_WIFI_ESSID" ]; then
                 yush_warn "No wifi network specified, nothing to configure"
             else
+                # Invalid input fails the step, and changes nothing.
+                _primer_step_wifi_valid || return 1
                 _primer_step_wifi_install
             fi
             ;;
@@ -68,7 +70,7 @@ _primer_step_wifi_install() {
     # else...
     $PRIMER_OS_SUDO ip link set "$PRIMER_STEP_WIFI_INTERFACE" up
     if primer_utils_syscmd_exists iwlist; then
-        if $PRIMER_OS_SUDO iwlist "$PRIMER_STEP_WIFI_INTERFACE" scan | grep "ESSID:" | grep -q "$PRIMER_STEP_WIFI_ESSID"; then
+        if $PRIMER_OS_SUDO iwlist "$PRIMER_STEP_WIFI_INTERFACE" scan | grep -qF "ESSID:\"$PRIMER_STEP_WIFI_ESSID\""; then
             yush_info "$PRIMER_STEP_WIFI_ESSID is in range"
         else
             yush_warn "$PRIMER_STEP_WIFI_ESSID seems not in range"
@@ -92,6 +94,10 @@ _primer_step_wifi_install() {
         # Insert settings if we don't yet have them, replace them when they
         # have changed, e.g. another network or passphrase.
         _block=$(_primer_step_wifi_block)
+        if [ -n "$PRIMER_STEP_WIFI_PSK" ] && ! printf %s\\n "$_block" | grep -qE '^    wpa-psk [0-9a-f]{64}$'; then
+            yush_error "Could not compute the key for $PRIMER_STEP_WIFI_ESSID, nothing changed"
+            return 1
+        fi
         if [ -f "$PRIMER_STEP_WIFI_IFLIST" ] \
                 && grep -qxF "$(_primer_step_wifi_marker autoadd)" "$PRIMER_STEP_WIFI_IFLIST"; then
             if [ "$(_primer_step_wifi_current)" = "$_block" ]; then
@@ -207,6 +213,22 @@ _primer_step_wifi_remove() {
     # Replace atomically, keeping the owner and permissions of the file.
     primer_utils_sysfile_replace "$PRIMER_STEP_WIFI_IFLIST" < "$_iface"
     rm -f "$_iface"
+}
+
+# Check the network name and the passphrase: the name is written between double
+# quotes, and wpa_passphrase only accepts passphrases of 8 to 63 characters.
+_primer_step_wifi_valid() {
+    case "$PRIMER_STEP_WIFI_ESSID" in
+        *\"*)
+            yush_error "Wifi network names containing double quotes are not supported: $PRIMER_STEP_WIFI_ESSID"
+            return 1;;
+    esac
+    if [ -n "$PRIMER_STEP_WIFI_PSK" ]; then
+        if [ "${#PRIMER_STEP_WIFI_PSK}" -lt 8 ] || [ "${#PRIMER_STEP_WIFI_PSK}" -gt 63 ]; then
+            yush_error "Wifi passphrases must have 8 to 63 characters, nothing changed"
+            return 1
+        fi
+    fi
 }
 
 # Use wpa_passphrase to get the hex encoded value for the passphrase.

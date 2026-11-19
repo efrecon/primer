@@ -218,6 +218,9 @@ Placing relevant `.env` formatted files under revision control,
 combined with the ability for primer not only to install, but
 also clean a system,
 makes it possible to operate on existing OS installations in a reproducible way.
+Cleaning only removes what primer can prove it made, e.g. firewall rules carrying
+its marker, or files still equal to what it would install, so it never removes
+what existed before. Clean with the same options as when installing.
 
 ## Steps
 

@@ -118,3 +118,23 @@ test_github_install_real() {
         assert_equal 0 "$PRIMER_RC"
         assert_false test -e /usr/local/bin/lazydocker'
 }
+
+# Clean only removes the binaries of the projects, not other executables.
+test_github_clean_keeps_other_binaries() {
+    unit "$IMG_ALPINE" '
+        mkdir -p /usr/local/bin
+        for b in othertool toolbox; do
+            printf "#!/bin/sh\n" > /usr/local/bin/$b; chmod a+x /usr/local/bin/$b
+        done
+        printf "#!/bin/sh\n" > /usr/local/bin/tool; chmod a+x /usr/local/bin/tool
+        printf "acme/tool tool_%%semantic%%_Linux_x86_64.tar.gz\n" > /tmp/projects
+        unit_step github
+        primer_step_github option --projects /tmp/projects
+        run primer_step_github clean
+        assert_equal 0 "$RUN_RC"
+        assert_false test -e /usr/local/bin/tool
+        assert_true test -x /usr/local/bin/othertool
+        assert_true test -x /usr/local/bin/toolbox
+        run primer_step_github clean
+        assert_equal 0 "$RUN_RC" "second clean"'
+}

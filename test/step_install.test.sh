@@ -218,3 +218,76 @@ test_install_spec_defaults() {
         assert_equal root:root "$(stat -c %U:%G /tmp/defaults.db)"
         assert_equal -rw-r----- "$(stat -c %A /tmp/defaults.db)"'
 }
+
+# Clean never removes files that existed before: from an empty source (only
+# ensured to exist), or not overwritten.
+test_install_clean_keeps_preexisting_files() {
+    in_container "$IMG_ALPINE" '
+        printf "PATH=/usr/bin\nFOO=bar\n" > /etc/environment
+        primer_run -s install --install:target ":/etc/environment" install
+        assert_equal 0 "$PRIMER_RC"
+        primer_run -s install --install:target ":/etc/environment" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_true grep -qx FOO=bar /etc/environment
+        primer_run -s install --install:target ":/tmp/created" install
+        primer_run -s install --install:target ":/tmp/created" clean
+        assert_false [ -e /tmp/created ]
+        echo original > /etc/motd.local
+        spec="/primer/test/data/users.db:/etc/motd.local"
+        primer_run -s install --install:overwrite 0 --install:target "$spec" install
+        assert_equal original "$(cat /etc/motd.local)"
+        primer_run -s install --install:overwrite 0 --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_equal original "$(cat /etc/motd.local)" "file not installed is kept"'
+}
+
+# Owner and group fields (3 and 4) of specifications.
+test_install_owner_group() {
+    in_container "$IMG_ALPINE" '
+        primer_run -s install \
+            --install:target ":/srv/owned/:daemon:daemon:0750" \
+            --install:target "/primer/test/data/users.db:/srv/owned/db:daemon::0640" \
+            install
+        assert_equal 0 "$PRIMER_RC"
+        assert_equal daemon:daemon "$(stat -c %U:%G /srv/owned)"
+        assert_equal drwxr-x--- "$(stat -c %A /srv/owned)"
+        assert_equal daemon:root "$(stat -c %U:%G /srv/owned/db)" "group defaults to the caller"
+        assert_equal -rw-r----- "$(stat -c %A /srv/owned/db)"'
+}
+
+# Downloaded files are only removed when still equal to a fresh download, and
+# kept when the download fails.
+test_install_clean_downloads() {
+    in_container "$IMG_ALPINE" '
+        apk add -q busybox-extras >/dev/null
+        mkdir -p /www && echo "served" > /www/conf.txt
+        httpd -p 127.0.0.1:8080 -h /www
+        spec="http%3A%2F%2F127.0.0.1%3A8080%2Fconf.txt:/tmp/conf"
+        primer_run -s install --install:target "$spec" install
+        assert_equal served "$(cat /tmp/conf)"
+        echo "changed" > /tmp/conf
+        primer_run -s install --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_equal changed "$(cat /tmp/conf)" "changed file kept"
+        echo "served" > /tmp/conf
+        rm /www/conf.txt
+        primer_run -s install --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_true [ -f /tmp/conf ]
+        assert_contains "keeping /tmp/conf" "$PRIMER_ERR"
+        echo "served" > /www/conf.txt
+        primer_run -s install --install:target "$spec" clean
+        assert_false [ -e /tmp/conf ]'
+}
+
+# Targets from the environment, installed after the bundle.
+test_install_targets_after_bundle() {
+    in_container -e "PRIMER_STEP_INSTALL_TARGETS=:/tmp/t1 /tmp/b:/tmp/order" "$IMG_ALPINE" '
+        echo bundle > /tmp/a
+        echo targets > /tmp/b
+        echo "/tmp/a:/tmp/order" > /tmp/bundle
+        primer_run -s install --install:bundle /tmp/bundle install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true [ -f /tmp/t1 ]
+        assert_equal targets "$(cat /tmp/order)" "targets after the bundle"'
+}

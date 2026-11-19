@@ -1,18 +1,23 @@
 #!/usr/bin/env sh
 
-# Short GPG signature for Docker Repo on debian derivatives
+# Short GPG signature (last 8 hexadecimal digits of the fingerprint) of the key
+# of the Docker repository on Debian derivatives, e.g. 0EBFCD88. When set, the
+# key installed by the convenience script is verified against it.
 PRIMER_STEP_DOCKER_APT_GPG=${PRIMER_STEP_DOCKER_APT_GPG:-}
 
 # Space separated list of registry login information in the form
 # username:password@host
 PRIMER_STEP_DOCKER_REGISTRY=${PRIMER_STEP_DOCKER_REGISTRY:-}
 
-# Commit SHA sum contained in script, so we do not run something that has not
-# been verified. Every time the installation script is changed, the commit
-# sha256 will change, meaning that this variable has to change. Setting it to
-# empty will disable the check, which is a security risk as this means executing
-# a script downloaded from the Internet...
-PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-8ad27bd3ac871feabe62f1d926c4067800c1732f}
+# The convenience script (get.docker.com) is downloaded from its repository,
+# https://github.com/docker/docker-install, at this commit. get.docker.com
+# changes with every commit to the repository, which has no tags: a commit is
+# the only fixed reference. To move to a newer commit, see the documentation.
+PRIMER_STEP_DOCKER_INSTALL_COMMIT=${PRIMER_STEP_DOCKER_INSTALL_COMMIT:-8ad27bd3ac871feabe62f1d926c4067800c1732f}
+
+# sha256 sum of the convenience script, as downloaded. The script only runs when
+# its sum matches, it never runs when this is empty.
+PRIMER_STEP_DOCKER_INSTALL_SHA256=${PRIMER_STEP_DOCKER_INSTALL_SHA256:-77f623a9f23857ebc45a50e37696fc406e3a60bda4ef17399444f792ecf8895d}
 
 # Can be native (as in: OS native packaging), docker (as in: docker.com provided
 # packages) or auto (as in: pick the best one of both worlds)
@@ -22,8 +27,9 @@ PRIMER_STEP_DOCKER_PACKAGING=${PRIMER_STEP_DOCKER_PACKAGING:-auto}
 # docker group. In practice these users will be given root access!
 PRIMER_STEP_DOCKER_ACCESS=${PRIMER_STEP_DOCKER_ACCESS:-}
 
-# Where to get the docker installation script from
-PRIMER_STEP_DOCKER_GET_URL=https://get.docker.com/
+# Where to get the convenience script from. When empty, the default, the script
+# of the repository at PRIMER_STEP_DOCKER_INSTALL_COMMIT.
+PRIMER_STEP_DOCKER_GET_URL=${PRIMER_STEP_DOCKER_GET_URL:-}
 
 # Version of the Docker compose plugin to download when it cannot be installed
 # from packages. Empty, the default, means the latest as per the releases below.
@@ -65,11 +71,13 @@ primer_step_docker() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--registry --sha256 --access --compose-version --compose-sha256 --buildx-version --buildx-sha256"
+            [ "$#" = "0" ] && echo "--registry --commit --sha256 --access --compose-version --compose-sha256 --buildx-version --buildx-sha256"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --registry)
                         PRIMER_STEP_DOCKER_REGISTRY="$PRIMER_STEP_DOCKER_REGISTRY $2"; shift 2;;
+                    --commit)
+                        PRIMER_STEP_DOCKER_INSTALL_COMMIT="$2"; shift 2;;
                     --sha256)
                         PRIMER_STEP_DOCKER_INSTALL_SHA256="$2"; shift 2;;
                     --access)
@@ -175,13 +183,20 @@ primer_step_docker() {
                     printf %s\\n "$_pass" | docker login --password-stdin -u "$_user" "$_host"
                 done
 
-                if [ -n "$PRIMER_STEP_DOCKER_REGISTRY" ]; then
+                # Copy the credentials to the users given access to Docker, and
+                # to them only: an empty access means no user.
+                if [ -n "$PRIMER_STEP_DOCKER_REGISTRY" ] && [ -n "$PRIMER_STEP_DOCKER_ACCESS" ]; then
                     if [ "$_prior_settings" = "0" ]; then
-                        primer_auth_user_list | grep -v "$(id -un)" | while IFS= read -r _username || [ -n "$_username" ]; do
+                        _me=$(id -un)
+                        primer_auth_user_list | while IFS= read -r _username || [ -n "$_username" ]; do
+                            [ "$_username" = "$_me" ] && continue
                             if printf %s\\n "$_username" | grep -qE "$PRIMER_STEP_DOCKER_ACCESS"; then
-                                _home=$(getent passwd | grep -E "^${_username}:" | cut -d ":" -f 6)
+                                _home=$(getent passwd "$_username" | cut -d ":" -f 6)
                                 if ! [ -f "$_home/.docker/config.json" ]; then
-                                    $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
+                                    if ! [ -d "$_home/.docker" ]; then
+                                        $PRIMER_OS_SUDO mkdir -p "$_home/.docker"
+                                        primer_utils_path_ownership "$_home/.docker" --user "$_username" --perm 700
+                                    fi
                                     $PRIMER_OS_SUDO cp "$_config" "$_home/.docker/config.json"
                                     primer_utils_path_ownership "$_home/.docker/config.json" --as "$_config" --user "$_username"
                                     yush_info "Local user $_username logged in at all Docker registries from above"
@@ -196,8 +211,8 @@ primer_step_docker() {
                 fi
 
                 # Docker compose and buildx, as Docker CLI plugins
-                _primer_step_docker_install_plugin compose
-                _primer_step_docker_install_plugin buildx
+                _primer_step_docker_install_plugin compose || return 1
+                _primer_step_docker_install_plugin buildx || return 1
 
                 # Bash completion, if necessary
                 _docker_version=$(docker --version|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)
@@ -216,12 +231,9 @@ primer_step_docker() {
 
             ;;
         "clean")
-            # Remove the plugins, if they had been downloaded.
+            # Remove the plugins, if they had been downloaded by this step.
             for _plugin in compose buildx; do
-                if [ -f "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-${_plugin}" ]; then
-                    yush_info "Removing Docker $_plugin plugin from $PRIMER_STEP_DOCKER_PLUGINS_DIR"
-                    $PRIMER_OS_SUDO rm -f "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-${_plugin}"
-                fi
+                _primer_step_docker_plugin_clean "$_plugin"
             done
 
             # Stop docker and remove from autostart.
@@ -347,35 +359,93 @@ _primer_step_docker_install_debian() {
     esac
 }
 
+# Print the file of the key of the Docker repository: the keyring given to
+# signed-by in the list of the repository, as installed by current versions of
+# the convenience script, or the usual location.
+_primer_step_docker_apt_keyring() {
+    _keyring=
+    if [ -f /etc/apt/sources.list.d/docker.list ]; then
+        _keyring=$(sed -nE 's/.*signed-by=([^] ]+).*/\1/p' /etc/apt/sources.list.d/docker.list | head -n 1)
+    fi
+    for _k in "$_keyring" /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg; do
+        if [ -n "$_k" ] && [ -f "$_k" ]; then
+            printf %s\\n "$_k"
+            return
+        fi
+    done
+}
+
+# Print the short key (last 8 hexadecimal digits of the fingerprint) of the
+# Docker repository: from its keyring file, or through apt-key with older
+# versions of the convenience script (apt-key is gone since Debian 13).
+_primer_step_docker_apt_shortkey() {
+    _keyring=$(_primer_step_docker_apt_keyring)
+    if [ -n "$_keyring" ]; then
+        primer_os_dependency gpg gnupg
+        gpg --show-keys --with-colons "$_keyring" 2>/dev/null |
+            awk -F: '$1 == "fpr" { print substr($10, length($10) - 7); exit }'
+    elif command -v apt-key >/dev/null 2>&1; then
+        apt-key list 2>/dev/null | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}'
+    fi
+}
+
 _primer_step_docker_install_apt_verify() {
     if [ -n "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
         yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
-        dkey=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1 | head -1 | awk '{print $9$10}')
-        if [ "$dkey" != "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
+        dkey=$(_primer_step_docker_apt_shortkey)
+        if [ "$(printf %s "$dkey" | tr '[:lower:]' '[:upper:]')" != "$(printf %s "$PRIMER_STEP_DOCKER_APT_GPG" | tr '[:lower:]' '[:upper:]')" ]; then
             primer_abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
         fi
     fi
 }
 
+# Succeed when the sha256 sum of the file $1 is exactly $2 (in any case).
+_primer_step_docker_sha256_ok() {
+    [ -n "$2" ] || return 1
+    _sum=$(sha256sum < "$1" | cut -d " " -f 1)
+    [ "$_sum" = "$(printf %s "$2" | tr '[:upper:]' '[:lower:]')" ]
+}
+
+# Download the convenience script, from the docker-install repository at the
+# pinned commit unless another URL is given, and run it when its sha256 sum
+# matches. The script runs with LOAD_SCRIPT_COMMIT_SHA set to the commit: the
+# repository version of the script uses it for the commit it prints, a value
+# that the upload to get.docker.com substitutes in the script.
 _primer_step_docker_install_getdocker() {
-    # Download the installation script from getdocker
-    yush_info "Downloading and running Docker installation script from $(yush_yellow "$PRIMER_STEP_DOCKER_GET_URL")"
-    _get=$(mktemp)
-    primer_net_curl "$PRIMER_STEP_DOCKER_GET_URL" -o "$_get"
-    if [ -n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
-        if grep 'SCRIPT_COMMIT_SHA=' "$_get" | grep -q "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
-            yush_info "Verified Docker installation script, running it now"
-            sh "$_get"
-        else
-            yush_warn "Commit SHA in script diffs from $PRIMER_STEP_DOCKER_INSTALL_SHA256. Maybe a new version? Verify the script and run again with --docker:sha256"
-            yush_error "Unable to verify Docker installation script!!"
-            rm -f "$_get"
-            return 1
-        fi
+    _url=${PRIMER_STEP_DOCKER_GET_URL:-"https://raw.githubusercontent.com/docker/docker-install/${PRIMER_STEP_DOCKER_INSTALL_COMMIT}/install.sh"}
+    if [ -z "$PRIMER_STEP_DOCKER_INSTALL_SHA256" ]; then
+        yush_error "No sha256 sum for the Docker installation script, refusing to run it unverified!"
+        yush_error "Unable to verify Docker installation script!!"
+        return 1
+    fi
+    if printf %s\\n "$PRIMER_STEP_DOCKER_INSTALL_SHA256" | grep -qE '^[0-9a-fA-F]{40}$'; then
+        yush_error "$PRIMER_STEP_DOCKER_INSTALL_SHA256 is a git commit, not a sha256 sum: pass the commit with --commit, and the sum of the script with --sha256"
+        yush_error "Unable to verify Docker installation script!!"
+        return 1
     fi
 
-    # Cleanup
+    yush_info "Downloading Docker installation script from $(yush_yellow "$_url")"
+    _get=$(mktemp)
+    if ! primer_net_curl "$_url" -o "$_get"; then
+        rm -f "$_get"
+        yush_error "Could not download Docker installation script from $_url"
+        return 1
+    fi
+    if ! _primer_step_docker_sha256_ok "$_get" "$PRIMER_STEP_DOCKER_INSTALL_SHA256"; then
+        rm -f "$_get"
+        yush_warn "The sha256 sum of the script differs from $PRIMER_STEP_DOCKER_INSTALL_SHA256. Verify the script and run again with --docker:sha256 (and --docker:commit)"
+        yush_error "Unable to verify Docker installation script!!"
+        return 1
+    fi
+
+    yush_info "Verified Docker installation script, running it now"
+    _rc=0
+    LOAD_SCRIPT_COMMIT_SHA=$PRIMER_STEP_DOCKER_INSTALL_COMMIT sh "$_get" || _rc=$?
     rm -f "$_get"
+    if [ "$_rc" != "0" ]; then
+        yush_error "Docker installation script failed. The script at commit $PRIMER_STEP_DOCKER_INSTALL_COMMIT might not support this distribution: try a newer --docker:commit, with its --docker:sha256"
+        return "$_rc"
+    fi
 }
 
 _primer_step_docker_install_guess() {
@@ -512,13 +582,52 @@ _primer_step_docker_install_plugin() {
     fi
 
     if ! _primer_step_docker_plugin_ok "$1"; then
-        _primer_step_docker_plugin_download "$1" || true
+        if ! _primer_step_docker_plugin_download "$1"; then
+            yush_error "Could not install Docker $1 plugin!"
+            return 1
+        fi
     fi
 
     if ! docker "$1" version >/dev/null 2>&1; then
-        yush_warn "Could not install Docker $1 plugin!"
+        yush_error "Could not install Docker $1 plugin!"
+        return 1
     elif ! _primer_step_docker_plugin_ok "$1"; then
         yush_warn "Installed Docker $1 version mismatch: $(docker "$1" version | head -1)"
+    fi
+}
+
+# Print the latest version of the Docker CLI plugin passed as an argument
+# (compose or buildx), from the list of its releases.
+_primer_step_docker_plugin_latest() {
+    # Following uses the github API
+    # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
+    # for getting the list of latest releases and focuses solely on "full"
+    # releases. Release candidates have -rcXXX in their version number, these
+    # are set away by the grep/sed combo.
+    _releases=$(primer_utils_var_value "PRIMER_STEP_DOCKER_$(printf %s "$1" | tr '[:lower:]' '[:upper:]')_RELEASES")
+    yush_notice "Discovering latest Docker $1 version from $_releases"
+    primer_net_curl "$_releases" |
+        grep -E '"name"[[:space:]]*:[[:space:]]*"v?[0-9]+(\.[0-9]+)*"' |
+        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"(v?[0-9]+(\.[0-9]+)*)",/\1/g' |
+        head -1
+}
+
+# Remove the Docker CLI plugin passed as an argument (compose or buildx) from
+# the plugins directory, but only when it is at the version that this step
+# installs: the one requested, or the latest one. Other binaries might not have
+# been installed by this step, and are kept.
+_primer_step_docker_plugin_clean() {
+    _path="${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
+    [ -f "$_path" ] || return 0
+    _want=$(primer_utils_var_value "PRIMER_STEP_DOCKER_$(printf %s "$1" | tr '[:lower:]' '[:upper:]')_VERSION")
+    [ -z "$_want" ] && _want=$(_primer_step_docker_plugin_latest "$1" || true)
+    _have=$("$_path" docker-cli-plugin-metadata 2>/dev/null |
+        sed -nE 's/.*"Version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' || true)
+    if [ -n "$_want" ] && [ "${_have#v}" = "${_want#v}" ]; then
+        yush_info "Removing Docker $1 plugin $_have from $PRIMER_STEP_DOCKER_PLUGINS_DIR"
+        $PRIMER_OS_SUDO rm -f "$_path"
+    else
+        yush_warn "Keeping $_path, at version ${_have:-unknown}, not installed by primer (version ${_want:-unknown})"
     fi
 }
 
@@ -528,21 +637,11 @@ _primer_step_docker_install_plugin() {
 # the checksums.txt file of the release.
 _primer_step_docker_plugin_download() {
     _var=PRIMER_STEP_DOCKER_$(printf %s "$1" | tr '[:lower:]' '[:upper:]')
-    _releases=$(primer_utils_var_value "${_var}_RELEASES")
     _version=$(primer_utils_var_value "${_var}_VERSION")
     if [ -z "$_version" ]; then
-        # Following uses the github API
-        # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-        # for getting the list of latest releases and focuses solely on
-        # "full" releases. Release candidates have -rcXXX in their version
-        # number, these are set away by the grep/sed combo.
-        yush_notice "Discovering latest Docker $1 version from $_releases"
-        _version=$(primer_net_curl "$_releases" |
-                    grep -E '"name"[[:space:]]*:[[:space:]]*"v?[0-9]+(\.[0-9]+)*"' |
-                    sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"(v?[0-9]+(\.[0-9]+)*)",/\1/g' |
-                    head -1)
+        _version=$(_primer_step_docker_plugin_latest "$1" || true)
         if [ -z "$_version" ]; then
-            yush_warn "Could not discover latest Docker $1 version"
+            yush_error "Could not discover latest Docker $1 version"
             return 1
         fi
         # Remember the version for the verification after installation
@@ -561,7 +660,7 @@ _primer_step_docker_plugin_download() {
     if [ -z "$_sha256" ]; then
         yush_debug "Reading sha256 sum for $_asset from ${_release}/checksums.txt"
         _sha256=$(primer_net_curl "${_release}/checksums.txt" |
-                    awk -v a="$_asset" '{f=$2; sub(/^\*/, "", f); if (f == a) {print $1; exit}}')
+                    awk -v a="$_asset" '{f=$2; sub(/^\*/, "", f); if (f == a && !s) s = $1} END {print s}')
         if [ -z "$_sha256" ]; then
             yush_error "Could not find sha256 sum for $_asset in ${_release}/checksums.txt, will not install"
             return 1
@@ -571,26 +670,27 @@ _primer_step_docker_plugin_download() {
     yush_info "Installing Docker $1 plugin $_version from $_url"
     _tmpdir=$(mktemp -d)
     _bin="${_tmpdir}/docker-$1"
-    if primer_net_curl "$_url" --progress-bar > "$_bin"; then
-        yush_debug "Verifying sha256 sum against $_sha256"
-        if ! printf "%s  %s\n" "$_sha256" "$_bin" | sha256sum -c -; then
-            yush_error "SHA256 sum mismatch, should have been $_sha256"
-            rm -f "$_bin"
-        fi
-        if [ -f "$_bin" ]; then
-            # All Docker CLI plugins answer to the metadata sub-command.
-            yush_debug "Verifying binary at $_bin"
-            chmod a+x "$_bin"
-            if ! "$_bin" docker-cli-plugin-metadata >/dev/null 2>&1; then
-                yush_warn "Downloaded binary from $_url probably invalid, will not install"
-            else
-                yush_notice "Installing as ${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
-                ! [ -d "$PRIMER_STEP_DOCKER_PLUGINS_DIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_STEP_DOCKER_PLUGINS_DIR"
-                $PRIMER_OS_SUDO mv -f "$_bin" "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
-            fi
-        fi
+    _rc=1
+    if ! primer_net_curl "$_url" --progress-bar > "$_bin"; then
+        yush_error "No binary at $_url"
+    elif ! _primer_step_docker_sha256_ok "$_bin" "$_sha256"; then
+        yush_error "SHA256 sum mismatch, should have been $_sha256"
     else
-        yush_warn "No binary at $_url"
+        yush_info "Verified sha256 sum of $_asset"
+        # All Docker CLI plugins answer to the metadata sub-command.
+        yush_debug "Verifying binary at $_bin"
+        chmod a+x "$_bin"
+        if ! "$_bin" docker-cli-plugin-metadata >/dev/null 2>&1; then
+            yush_error "Downloaded binary from $_url probably invalid, will not install"
+        else
+            yush_notice "Installing as ${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
+            if ! [ -d "$PRIMER_STEP_DOCKER_PLUGINS_DIR" ]; then
+                $PRIMER_OS_SUDO mkdir -p "$PRIMER_STEP_DOCKER_PLUGINS_DIR"
+            fi
+            $PRIMER_OS_SUDO mv -f "$_bin" "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
+            _rc=0
+        fi
     fi
     rm -rf "$_tmpdir"
+    return "$_rc"
 }

@@ -53,10 +53,10 @@ it already contains a filesystem, or a partition table.
 ### `--ext4`
 
 Options to give to `mkfs.ext4`, these defaults to
-`-m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard`. The step always adds
-the option forcing filesystem creation (`-F` for ext filesystems, `-f` for xfs
-and btrfs), as it only formats devices that are empty or when asked to
-overwrite.
+`-m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard`. The step adds the
+option forcing filesystem creation (`-F` for ext filesystems, `-f` for xfs and
+btrfs) only when overwriting existing content, i.e. a filesystem or a partition
+table, so `mkfs` keeps its own safety checks otherwise.
 
 ## Environment Variables
 

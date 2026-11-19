@@ -42,7 +42,9 @@ Name of the network to connect to. `--network` and `--ssid` are aliases.
 ### `--psk`
 
 Passphrase for the network, empty (the default) for an open network.
-`--password`, `--key` and `--passphrase` are aliases.
+`--password`, `--key` and `--passphrase` are aliases. Passphrases must have 8
+to 63 characters, and network names cannot contain double quotes: the step
+fails otherwise, without changing anything.
 
 ## Environment Variables
 

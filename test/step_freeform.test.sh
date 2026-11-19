@@ -66,3 +66,21 @@ test_freeform_runs_symlinks() {
         assert_equal 0 "$PRIMER_RC"
         assert_equal "plain linked" "$(tr "\n" " " < /tmp/ff.log | sed "s/ $//")"'
 }
+
+# Scripts run through sudo with --sudo 1 (the default) only. Tests run as root,
+# so sudo is replaced by a stub logging its calls.
+test_freeform_sudo() {
+    unit "$IMG_ALPINE" '
+        stub_bin fakesudo "printf \"%s\\n\" \"fakesudo \$*\" >> $MOCK_LOG; exec \"\$@\""
+        unit_step freeform
+        PRIMER_OS_SUDO=fakesudo
+        primer_step_freeform option --root /primer/test/data/freeform
+        primer_step_freeform install
+        assert_match "^fakesudo /primer/test/data/freeform/install/.*a\.sh$" "$(mock_calls)"
+        assert_match "^fakesudo /primer/test/data/freeform/install/.*b\.sh$" "$(mock_calls)"
+        mock_reset
+        primer_step_freeform option --sudo 0
+        primer_step_freeform install
+        assert_not_contains fakesudo "$(mock_calls)"
+        assert_contains "a" "$(cat /tmp/freeform.log)"'
+}

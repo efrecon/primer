@@ -106,9 +106,11 @@ _primer_step_dynufw_install_ufw() {
     # message when enabling ufw.
     if primer_os_in_container && [ -f "/etc/default/ufw" ]; then
         yush_debug "Turning off IPv6 in containers"
-        $PRIMER_OS_SUDO sed -E -i.bak \
+        # Replaced atomically, keeping owner and permissions, with no backup
+        # left behind.
+        $PRIMER_OS_SUDO sed -E \
             's/#?[[:space:]]*IPV6=[[:space:]]*[[:alnum:]]*[[:space:]]*$/IPV6=no/g' \
-            /etc/default/ufw
+            /etc/default/ufw | primer_utils_sysfile_replace /etc/default/ufw
     fi
 }
 

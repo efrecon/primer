@@ -59,3 +59,15 @@ test_timezone_no_location() {
         assert_equal 0 "$PRIMER_RC"
         assert_contains "cannot be removed" "$PRIMER_ERR"'
 }
+
+# Only real zones are accepted, and invalid locations fail the step. Needs
+# network (tzdata).
+test_timezone_rejects_non_zones() {
+    in_container "$IMG_ALPINE" '
+        primer_run -s timezone --timezone:location Europe/Stockholm install
+        for loc in zone1970.tab ../../../etc/passwd /etc/passwd Europe/../Europe/Paris; do
+            primer_run -s timezone --timezone:location "$loc" install
+            assert_false [ "$PRIMER_RC" = 0 ]
+            assert_equal /usr/share/zoneinfo/Europe/Stockholm "$(readlink /etc/localtime)"
+        done'
+}

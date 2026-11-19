@@ -39,14 +39,17 @@ primer_step_machine() {
                 fi
                 if [ -n "$PRIMER_STEP_MACHINE_VERSION" ] && \
                     [ "$(primer_version_current "docker-machine")" != "$PRIMER_STEP_MACHINE_VERSION" ]; then
-                    _primer_step_machine_install
+                    _primer_step_machine_install || return 1
                 fi
             else
                 if [ -z "$PRIMER_STEP_MACHINE_VERSION" ]; then
                     PRIMER_STEP_MACHINE_VERSION=$(primer_version_github_latest "$PRIMER_STEP_MACHINE_RELEASES" "docker-machine")
                 fi
                 if [ -n "$PRIMER_STEP_MACHINE_VERSION" ]; then
-                    _primer_step_machine_install
+                    _primer_step_machine_install || return 1
+                else
+                    yush_error "Could not find the latest version of Docker machine"
+                    return 1
                 fi
             fi
             ;;
@@ -65,42 +68,53 @@ primer_step_machine() {
     esac
 }
 
+# Print the name of the release asset for the current OS and architecture, as
+# named in the releases of Docker machine, e.g. docker-machine-Linux-armhf.
+_primer_step_machine_asset() {
+    case "$(uname -m)" in
+        armv6*|armv7*) _arch=armhf;;
+        arm64) _arch=aarch64;;
+        amd64) _arch=x86_64;;
+        *) _arch=$(uname -m);;
+    esac
+    printf 'docker-machine-%s-%s\n' "$(uname -s)" "$_arch"
+}
+
 # Download from github, making sure we can actually execute the binary that we
-# downloaded. We download the first byte to check all the redirects, and on
-# success we will download everything and possibly check against the sha256 sum.
+# downloaded and possibly check against the sha256 sum. Fails, installing
+# nothing, when any of this fails.
 _primer_step_machine_install_download() {
-    tmpdir=$(mktemp -d)
-    if primer_net_curl "${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/docker-machine-$(uname -s)-$(uname -m)" > "${tmpdir}/docker-machine"; then
-        # Check against the sha256 sum if necessary.
-        if [ -n "$PRIMER_STEP_MACHINE_SHA256" ]; then
-            yush_debug "Verifying sha256 sum"
-            if ! printf "%s  %s\n" "${PRIMER_STEP_MACHINE_SHA256}" "${tmpdir}/docker-machine" | sha256sum -c -; then
-                yush_error "SHA256 sum mismatch, should have been $PRIMER_STEP_MACHINE_SHA256"
-                rm -f "${tmpdir}/docker-machine"
-            fi
-        fi
-        if [ -f "${tmpdir}/docker-machine" ]; then
-            # Verify the binary actually works properly.
-            yush_debug "Verifying binary at ${tmpdir}/docker-machine"
-            chmod a+x "${tmpdir}/docker-machine"
-            if ! "${tmpdir}/docker-machine" --version >/dev/null 2>&1; then
-                yush_info "Downloaded binary at ${PRIMER_BINDIR%%/}/docker-machine probaby invalid, will not install"
-                rm -f "${tmpdir}/docker-machine"
-            else
-                yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-machine"
-                ! [ -d "$PRIMER_BINDIR" ] && $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
-                $PRIMER_OS_SUDO mv -f "${tmpdir}/docker-machine" "${PRIMER_BINDIR%%/}/docker-machine"
-            fi
-        fi
+    _url="${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/$(_primer_step_machine_asset)"
+    _tmpdir=$(mktemp -d)
+    _bin="${_tmpdir}/docker-machine"
+    _rc=1
+    if ! primer_net_curl "$_url" > "$_bin"; then
+        yush_error "No binary at $_url"
+    elif [ -n "$PRIMER_STEP_MACHINE_SHA256" ] \
+            && [ "$(sha256sum < "$_bin" | cut -d " " -f 1)" != "$PRIMER_STEP_MACHINE_SHA256" ]; then
+        yush_error "SHA256 sum mismatch, should have been $PRIMER_STEP_MACHINE_SHA256"
     else
-        yush_warn "No binary at ${PRIMER_STEP_MACHINE_DOWNLOAD%%/}/v$PRIMER_STEP_MACHINE_VERSION/docker-machine-$(uname -s)-$(uname -m)"
+        # Verify the binary actually works properly.
+        yush_debug "Verifying binary at $_bin"
+        chmod a+x "$_bin"
+        if ! "$_bin" --version >/dev/null 2>&1; then
+            yush_error "Downloaded binary from $_url probably invalid, will not install"
+        else
+            yush_notice "Installing as ${PRIMER_BINDIR%%/}/docker-machine"
+            if ! [ -d "$PRIMER_BINDIR" ]; then
+                $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+            fi
+            $PRIMER_OS_SUDO mv -f "$_bin" "${PRIMER_BINDIR%%/}/docker-machine"
+            _rc=0
+        fi
     fi
-    rm -rf "$tmpdir"
+    rm -rf "$_tmpdir"
+    return "$_rc"
 }
 
 _primer_step_machine_install() {
     yush_info "Installing Docker machine $PRIMER_STEP_MACHINE_VERSION and bash completion"
-    _primer_step_machine_install_download
+    _primer_step_machine_install_download || return 1
 
     # Check version
     yush_debug "Verifying installed version against $PRIMER_STEP_MACHINE_VERSION"
@@ -110,13 +124,21 @@ _primer_step_machine_install() {
         yush_warn "Installed docker-machine version mismatch: should have been $PRIMER_STEP_MACHINE_VERSION"
     fi
 
+    # Bash completion, through a temporary file: never leave an empty or
+    # partial file behind.
     yush_debug "Installing bash completions"
     _completion_dir=$(primer_os_bash_completion_dir)
-    if ! [ -d "$_completion_dir" ]; then
-        $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
-    fi
     if ! [ -f "${_completion_dir}/docker-machine" ]; then
-        primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
-            $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
+        _completion=$(mktemp)
+        if primer_net_curl "https://raw.githubusercontent.com/docker/machine/v${PRIMER_STEP_MACHINE_VERSION}/contrib/completion/bash/docker-machine.bash" > "$_completion" \
+                && [ -s "$_completion" ]; then
+            if ! [ -d "$_completion_dir" ]; then
+                $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
+            fi
+            primer_utils_sysfile_replace "${_completion_dir}/docker-machine" < "$_completion"
+        else
+            yush_warn "Could not download bash completion for docker-machine"
+        fi
+        rm -f "$_completion"
     fi
 }

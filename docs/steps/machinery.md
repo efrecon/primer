@@ -12,9 +12,11 @@ The `machinery` step arranges for the Docker [machinery] CLI to be present at
 the host. [machinery] combines [machine], [compose] and [docker] to create and
 manage clusters and their applications lifecycles. The step is able to pinpoint
 a given [branch] from the git repo. The branch will be checked out under the
-default `opt` directory of `primer` so that several branches could coexist. At
-the time of the installation, the main script from the branch is made available
-under the `bin` directory of `primer`.
+default `opt` directory of `primer` so that several branches coexist. At the
+time of the installation, the main script from the branch is made available
+under the `bin` directory of `primer`: installing another branch clones it, and
+points the link to it. Cleaning a branch removes its directory, and the link
+only when it points to that branch.
 
   [compose]: https://docs.docker.com/machine/overview/
   [docker]: https://docs.docker.com/engine/

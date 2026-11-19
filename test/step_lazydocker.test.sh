@@ -28,26 +28,61 @@ test_lazydocker_upgrade() {
         assert_contains "Version: '"$LAZYDOCKER_VERSION"'" "$(lazydocker --version)"'
 }
 
+# A fake release, served by primer_net_curl, with the checksum FAKE_SUM (the
+# real one when empty).
+LAZYDOCKER_FAKE='
+mkdir -p /tmp/fake
+printf "#!/bin/sh\necho Version: '"$LAZYDOCKER_VERSION"'\n" > /tmp/fake/lazydocker
+chmod a+x /tmp/fake/lazydocker
+tar -C /tmp/fake -czf /tmp/fake.tar.gz lazydocker
+FAKE_SUM=
+primer_net_curl() {
+    mock_log primer_net_curl "$@"
+    case "$1" in
+        */checksums.txt)
+            printf "%s  %s\n" "${FAKE_SUM:-$(sha256sum < /tmp/fake.tar.gz | cut -d" " -f1)}" \
+                "lazydocker_'"$LAZYDOCKER_VERSION"'_Linux_x86_64.tar.gz";;
+        *.tar.gz) cat /tmp/fake.tar.gz;;
+        *) return 22;;
+    esac
+}
+uname() { case "$1" in -m) echo x86_64;; *) echo Linux;; esac; }
+'
+
 test_lazydocker_bad_checksum() {
-    unit "$IMG_ALPINE" '
-        mkdir -p /tmp/fake
-        printf "#!/bin/sh\necho Version: '"$LAZYDOCKER_VERSION"'\n" > /tmp/fake/lazydocker
-        chmod a+x /tmp/fake/lazydocker
-        tar -C /tmp/fake -czf /tmp/fake.tar.gz lazydocker
-        primer_net_curl() {
-            mock_log primer_net_curl "$@"
-            case "$1" in
-                */checksums.txt) printf "%s  %s\n" 0000 "$(basename "$(mock_calls | grep -o "lazydocker_[^ ]*tar.gz" | head -n 1)")";;
-                *.tar.gz) cat /tmp/fake.tar.gz;;
-                *) return 22;;
-            esac
-        }
+    unit "$IMG_ALPINE" "$LAZYDOCKER_FAKE"'
+        FAKE_SUM=0000
+        unit_step lazydocker
+        primer_step_lazydocker option --version '"$LAZYDOCKER_VERSION"'
+        run primer_step_lazydocker install
+        assert_equal 1 "$RUN_RC"
+        assert_contains "Checksum mismatch" "$RUN_ERR"
+        assert_false test -e /usr/local/bin/lazydocker'
+}
+
+# Installing the same version twice downloads nothing the second time.
+test_lazydocker_install_twice() {
+    unit "$IMG_ALPINE" "$LAZYDOCKER_FAKE"'
         unit_step lazydocker
         primer_step_lazydocker option --version '"$LAZYDOCKER_VERSION"'
         run primer_step_lazydocker install
         assert_equal 0 "$RUN_RC"
-        assert_contains "Checksum mismatch" "$RUN_ERR"
-        assert_false test -e /usr/local/bin/lazydocker'
+        assert_true test -x /usr/local/bin/lazydocker
+        mock_reset
+        run primer_step_lazydocker install
+        assert_equal 0 "$RUN_RC" "second install"
+        assert_equal "" "$(mock_calls)" "downloads"'
+}
+
+# Without a version, and when the latest one cannot be found, the step fails.
+test_lazydocker_no_latest() {
+    unit "$IMG_ALPINE" '
+        mock primer_version_github_latest primer_net_curl
+        unit_step lazydocker
+        run primer_step_lazydocker install
+        assert_equal 1 "$RUN_RC"
+        assert_contains "Could not find the latest version of lazydocker" "$RUN_ERR"
+        assert_not_contains primer_net_curl "$(mock_calls)"'
 }
 
 test_lazydocker_platform_assets() {
@@ -59,7 +94,7 @@ test_lazydocker_platform_assets() {
             eval "uname() { case \"\$1\" in -m) echo ${_pair%%:*};; *) echo Linux;; esac; }"
             mock_reset
             run primer_step_lazydocker install
-            assert_equal 0 "$RUN_RC"
+            assert_equal 1 "$RUN_RC"
             assert_contains "lazydocker_'"$LAZYDOCKER_VERSION"'_Linux_${_pair#*:}.tar.gz" "$(mock_calls)" "asset for ${_pair%%:*}"
             assert_contains "No binary at" "$RUN_ERR"
         done'

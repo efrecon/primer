@@ -10,7 +10,9 @@ and Alpine, the `tzdata` package is installed first, if necessary. An existing
 `/etc/localtime`, including a dangling link, is replaced. When the distribution
 uses an `/etc/timezone` file, it is updated as well.
 
-The step fails when the location is not known to the timezone database. When
+The step fails when the location is not known to the timezone database, i.e.
+not a timezone file under the database directory, e.g. `zone1970.tab`, or a
+location with `..` or a leading `/`. When
 no location is specified, the step does nothing. Timezone information cannot
 be removed, so cleaning only prints a warning.
 

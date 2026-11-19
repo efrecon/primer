@@ -65,7 +65,9 @@ test_locale_generated_debian() {
         assert_equal 0 "$PRIMER_RC"
         assert_match "^sv_SE\.utf8$" "$(locale -a)"
         assert_true grep -qx "LC_ALL=sv_SE.UTF-8" /etc/environment
-        assert_true grep -q "^sv_SE.UTF-8 UTF-8" /etc/locale.gen'
+        assert_true grep -q "^sv_SE.UTF-8 UTF-8" /etc/locale.gen
+        # Only the requested line is enabled, e.g. not sv_SE ISO-8859-1.
+        assert_equal "sv_SE.UTF-8 UTF-8" "$(grep -v "^#" /etc/locale.gen | grep -v "^[[:space:]]*$")"'
 }
 
 # On Debian, the charset of locales missing from /etc/locale.gen comes from

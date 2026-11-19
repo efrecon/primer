@@ -20,6 +20,15 @@ for Windows clients.
   [Avahi]: https://avahi.org/
   [Samba]: https://www.samba.org/
 
+The daemons are started and enabled at boot. When a firewall is active, their
+ports are opened (5353/udp for mDNS, 137/udp and 138/udp for NetBIOS) through
+the [firewall] step, with the marker `primer-announce`. When cleaning, the
+daemons are stopped and disabled, and the ports opened by this step closed.
+Rules that existed before are kept, and so are the packages: they might have
+been installed before primer, e.g. Samba on a file server.
+
+  [firewall]: ./firewall.md
+
 ## Options
 
 ### `--method`

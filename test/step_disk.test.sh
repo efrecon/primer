@@ -199,3 +199,21 @@ test_disk_loop_device() {
         assert_false grep -q " /mnt/loop " /proc/mounts
         assert_false grep -q " /mnt/loop " /etc/fstab'
 }
+
+# Install and clean leave other fstab entries alone, and never remove a mount
+# point that is not empty.
+test_disk_clean_keeps_other_entries() {
+    in_container "$IMG_ALPINE" '
+        . test/data/disk/setup.sh
+        printf "UUID=0000-1111 / ext4 defaults 0 1\n# A comment\n/dev/sdz1 /srv/other xfs defaults 0 2\n" >> /etc/fstab
+        before=$(cat /etc/fstab)
+        primer_run -s disk --disk:db /primer/test/data/disk/disks.db install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        umount /mnt/disks/fakedisk
+        touch /mnt/disks/fakedisk/precious
+        primer_run -s disk --disk:db /primer/test/data/disk/disks.db clean
+        assert_equal 0 "$PRIMER_RC" "clean status"
+        assert_equal "$before" "$(cat /etc/fstab)" "fstab after clean"
+        assert_true test -f /mnt/disks/fakedisk/precious
+        assert_contains "Could not remove mount point /mnt/disks/fakedisk" "$PRIMER_ERR"'
+}

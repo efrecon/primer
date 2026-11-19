@@ -163,3 +163,33 @@ test_wifi_no_network() {
         assert_contains "No wifi network specified" "$PRIMER_ERR"
         assert_not_contains "ip link set" "$(mock_calls)"'
 }
+
+# Invalid input fails the step and changes nothing: passphrases that
+# wpa_passphrase rejects (outside 8..63 characters), network names with double
+# quotes.
+test_wifi_invalid_input() {
+    in_container "$IMG_ALPINE" '
+        . test/data/wifi/setup.sh
+        for psk in short "$(printf "%064d" 0)" ""; do
+            if [ -n "$psk" ]; then
+                primer_run -s wifi --wifi:essid IEEE --wifi:psk "$psk" install
+            else
+                primer_run -s wifi --wifi:essid "IE\"EE" --wifi:psk longenough install
+            fi
+            assert_equal 1 "$PRIMER_RC" "status for [$psk]"
+            assert_false grep -q "wpa-" /etc/network/interfaces
+            assert_equal "$(cat test/data/wifi/interfaces)" "$(cat /etc/network/interfaces)"
+            assert_not_contains "ifup" "$(mock_calls)"
+        done'
+}
+
+# The network name is matched as a fixed string in the scan.
+test_wifi_in_range_fixed_string() {
+    in_container "$IMG_ALPINE" '
+        . test/data/wifi/setup.sh
+        primer_run -s wifi --wifi:essid "I.EE" install
+        assert_equal 0 "$PRIMER_RC"
+        assert_contains "I.EE seems not in range" "$PRIMER_ERR"
+        primer_run -s wifi --wifi:essid IEEE install
+        assert_contains "IEEE is in range" "$PRIMER_ERR"'
+}

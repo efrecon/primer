@@ -55,8 +55,12 @@ permissions are only applied to what was installed, never to the directory it
 was copied into.
 
 When cleaning, what was installed is removed: files, and directories copied from
-a local source directory (recursively). Nothing records what was installed, so a
-directory is only removed when it is still a copy of the source directory, i.e.
+a local source directory (recursively). Nothing records what was installed, so
+files are only removed when they are still what the step installs: empty for an
+empty source, equal to the source for copies, and equal to a fresh download for
+URLs (kept, with a warning, when the download fails). Files that existed before,
+e.g. not overwritten, are kept. Likewise, a directory is only removed when it is
+still a copy of the source directory, i.e.
 contains the same files and sub-directories: the copy inside the destination
 first, then the destination itself. Existing directories, or copies modified
 since installation, are never removed, even when cleaning several times.

@@ -76,14 +76,13 @@ primer_step_announce() {
                 elif [ "$1" = "install" ]; then
                     yush_info "Announcing using method: $method"
                     _primer_step_announce_install "$_daemon" "$_pkg"
-                    # TODO: When using firewall-cmd, should we run --add-service=mdns, etc. instead??
-                    if primer_utils_syscmd_exists "$_daemon" && [ -n "$(primer_net_active_firewall)" ]; then
-                        # shellcheck disable=SC2086
-                        primer_net_port_allow $_ports
+                    if primer_utils_syscmd_exists "$_daemon"; then
+                        _primer_step_announce_ports install "$_ports"
                     fi
                 else
                     yush_info "Cleaning announcements for method: $method"
-                    _primer_step_announce_uninstall "$_daemon" "$_pkg"
+                    _primer_step_announce_uninstall "$_daemon"
+                    _primer_step_announce_ports clean "$_ports"
                 fi
             done
             ;;
@@ -101,11 +100,32 @@ _primer_step_announce_install() {
     fi
 }
 
-# Stop the daemon $1 and remove the package $2 providing it.
+# Stop the daemon $1 and disable it at boot. The package providing it is kept:
+# it might have been installed before primer, e.g. Samba on a file server.
 _primer_step_announce_uninstall() {
     if primer_utils_syscmd_exists "$1"; then
         primer_os_service stop "$1"
         primer_os_service disable "$1"
-        primer_os_packages del "$2"
     fi
+}
+
+# Open ($1 is install) or close ($1 is clean) the ports $2 in the active
+# firewall, if any. This uses the firewall step with its own marker, so that
+# only the rules opened by this step are ever removed.
+_primer_step_announce_ports() {
+    _fw=$(primer_net_active_firewall)
+    if [ -z "$_fw" ]; then
+        yush_debug "No active firewall, no port to handle"
+        return 0
+    fi
+    primer_utils_loadif firewall
+    (
+        # shellcheck disable=SC2034 # Used by the firewall step
+        PRIMER_STEP_FIREWALL_TYPE=$_fw
+        # shellcheck disable=SC2034
+        PRIMER_STEP_FIREWALL_PORTS=$2
+        # shellcheck disable=SC2034
+        PRIMER_STEP_FIREWALL_MARKER=primer-announce
+        primer_step_firewall "$1"
+    )
 }

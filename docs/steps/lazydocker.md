@@ -8,9 +8,11 @@
 
 The `lazydocker` step arranges for the [lazydocker] CUI to be present at the
 host. The step is able to pinpoint a given version, defaulting to the latest.
-Prior to installation, the sha256 sum of the local binary is checked against the
-published sha256 sum. Installation will happen directly in the default primer
-bin directory, e.g. `/usr/local/bin`.
+Prior to installation, the sha256 sum of the download is checked against the
+published sha256 sum. The step fails, installing nothing, when the download or
+its verification fails, or when the latest version cannot be found.
+Installation will happen directly in the default primer bin directory, e.g.
+`/usr/local/bin`.
 
 ## Options
 

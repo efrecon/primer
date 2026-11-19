@@ -57,7 +57,7 @@ primer_step_users() {
                 # whois package, which should have been installed previously.
                 yush_info "Users setup using DB at $(yush_green "$PRIMER_STEP_USERS_DB")..."
                 if yush_is_true "$PRIMER_STEP_USERS_PWSAVE"; then
-                    _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
+                    _pwstore=$(_primer_step_users_pwstore)
                     yush_notice "Will store cleartext passwords in $_pwstore"
                     # Make the store private before anything is written to it.
                     ( umask 077 && touch "$_pwstore" )
@@ -142,7 +142,7 @@ primer_step_users() {
             ;;
         "clean")
             if [ -n "$PRIMER_STEP_USERS_DB" ] && [ -f "$PRIMER_STEP_USERS_DB" ]; then
-                _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
+                _pwstore=$(_primer_step_users_pwstore)
                 if yush_is_true "$PRIMER_STEP_USERS_PWSAVE" && [ -f "$_pwstore" ]; then
                     yush_notice "Removing existing password storage at $(yush_green "$_pwstore")"
                     rm -f "$_pwstore"
@@ -218,6 +218,19 @@ EOF
             --user "$1" \
             --group "$2"
     fi
+}
+
+# Print the path of the password store: next to the database, with the same
+# name, but its extension (if any) replaced by PRIMER_STEP_USERS_PWEXT. Only
+# the name of the file can have an extension, not its directories.
+_primer_step_users_pwstore() {
+    _pwdir=$(dirname "$PRIMER_STEP_USERS_DB")
+    _pwname=$(basename "$PRIMER_STEP_USERS_DB")
+    # A leading dot is not an extension, e.g. .users
+    case "$_pwname" in
+        ?*.*) _pwname=${_pwname%.*};;
+    esac
+    printf '%s/%s.%s\n' "${_pwdir%/}" "$_pwname" "${PRIMER_STEP_USERS_PWEXT#.}"
 }
 
 _primer_step_users_groups() {

@@ -154,3 +154,21 @@ EOF
         assert_false [ -e /usr/local/opt/dynufw ]
         assert_false [ -e /etc/ufw-dynamic-hosts.allow ]'
 }
+
+# IPv6 is only turned off in ufw when in a container, without leaving a backup
+# behind.
+test_dynufw_ipv6_kept_on_hosts() {
+    unit "$IMG_ALPINE" '
+        unit_step dynufw
+        mock ufw
+        mkdir -p /etc/default
+        printf "IPV6=yes\nDEFAULT_INPUT_POLICY=\"DROP\"\n" > /etc/default/ufw
+        mock -r 1 primer_os_in_container
+        _primer_step_dynufw_install_ufw
+        assert_true grep -qx "IPV6=yes" /etc/default/ufw
+        mock primer_os_in_container
+        _primer_step_dynufw_install_ufw
+        assert_true grep -qx "IPV6=no" /etc/default/ufw
+        assert_true grep -qx "DEFAULT_INPUT_POLICY=\"DROP\"" /etc/default/ufw
+        assert_false test -e /etc/default/ufw.bak'
+}

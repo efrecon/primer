@@ -8,8 +8,11 @@
 
 The `micro` step arranges for the [micro] terminal editor to be present at the
 host. The step is able to pinpoint a given version, defaulting to the latest.
-Installation will happen directly in the default primer bin directory, e.g.
-`/usr/local/bin`.
+Prior to installation, the download is verified against the sha256 sum
+published next to it (the `.sha` file of the release). The step fails,
+installing nothing, when the download or its verification fails, or when the
+latest version cannot be found. Installation will happen directly in the
+default primer bin directory, e.g. `/usr/local/bin`.
 
 ## Options
 
