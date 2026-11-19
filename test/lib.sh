@@ -16,14 +16,24 @@
 IMG_ALPINE=${IMG_ALPINE:-docker.io/library/alpine:3.24}
 IMG_TRIXIE=${IMG_TRIXIE:-docker.io/library/debian:trixie}
 IMG_BOOKWORM=${IMG_BOOKWORM:-docker.io/library/debian:bookworm}
+# An exact Alpine release, for tests of version detection.
+IMG_ALPINE_PINNED=${IMG_ALPINE_PINNED:-docker.io/library/alpine:3.24.4}
 
 # Root of the primer repository on the host. Set by run.sh.
 TEST_ROOT=${TEST_ROOT:-}
 
-# Container runtime (docker or podman) and whether it runs rootless. Set by
-# container_runtime, cached and exported by run.sh.
+# Container runtime (docker or podman), whether it is podman (also behind the
+# podman-docker shim, which installs podman as docker) and whether it runs
+# rootless. Set by container_runtime, cached and exported by run.sh.
 PRIMER_TEST_RUNTIME=${PRIMER_TEST_RUNTIME:-}
+PRIMER_TEST_PODMAN=${PRIMER_TEST_PODMAN:-}
 PRIMER_TEST_ROOTLESS=${PRIMER_TEST_ROOTLESS:-}
+
+# Identifier of the current run of the suite, and name of the current test.
+# Containers are labelled with both, so they can be removed when a test times
+# out or the run is interrupted. Set by run.sh.
+PRIMER_TEST_RUN=${PRIMER_TEST_RUN:-}
+PRIMER_TEST_NAME=${PRIMER_TEST_NAME:-}
 
 # Where mocks log their calls (inside containers).
 MOCK_LOG=${MOCK_LOG:-/tmp/mock.log}
@@ -36,7 +46,9 @@ STUB_DIR=${STUB_DIR:-/tmp/stubs}
 
 # Pick the container runtime: PRIMER_TEST_RUNTIME when set, otherwise the first
 # of docker and podman that is installed and answers. Prints the runtime and
-# sets PRIMER_TEST_RUNTIME and PRIMER_TEST_ROOTLESS.
+# sets PRIMER_TEST_RUNTIME, PRIMER_TEST_PODMAN and PRIMER_TEST_ROOTLESS. The
+# kind of runtime is detected from what it answers, not from its name: only
+# podman knows about .Host in the output of info.
 container_runtime() {
     if [ -z "$PRIMER_TEST_RUNTIME" ]; then
         for _rt in docker podman; do
@@ -47,10 +59,19 @@ container_runtime() {
         done
     fi
     [ -z "$PRIMER_TEST_RUNTIME" ] && return 1
+    if [ -z "$PRIMER_TEST_PODMAN" ]; then
+        PRIMER_TEST_PODMAN=0
+        if "$PRIMER_TEST_RUNTIME" info --format '{{.Host.OS}}' >/dev/null 2>&1; then
+            PRIMER_TEST_PODMAN=1
+        fi
+    fi
     if [ -z "$PRIMER_TEST_ROOTLESS" ]; then
         PRIMER_TEST_ROOTLESS=0
-        if [ "$(basename "$PRIMER_TEST_RUNTIME")" = "podman" ] \
-                && [ "$("$PRIMER_TEST_RUNTIME" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
+        if [ "$PRIMER_TEST_PODMAN" = "1" ]; then
+            if [ "$("$PRIMER_TEST_RUNTIME" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
+                PRIMER_TEST_ROOTLESS=1
+            fi
+        elif "$PRIMER_TEST_RUNTIME" info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q 'name=rootless'; then
             PRIMER_TEST_ROOTLESS=1
         fi
     fi
@@ -116,7 +137,9 @@ _quote() {
 
 # Prelude executed in every container: extract the repository streamed on
 # stdin to /primer, detach stdin, and arrange for authenticated GitHub API
-# access when GITHUB_TOKEN is set (to avoid anonymous rate limits).
+# access when GITHUB_TOKEN is set (to avoid anonymous rate limits). The script
+# runs with set -e, and must reach its end: an early exit with status 0 would
+# skip the remaining assertions, so it fails the test (see _test_exit).
 # shellcheck disable=SC2016
 _TEST_PRELUDE='
 set -e
@@ -130,7 +153,39 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
     export PRIMER_CURL_OPTIONS
 fi
 . /primer/test/lib.sh
+trap _test_exit EXIT
+eval "$1"
+_TEST_RC=$?
+test_done
+exit "$_TEST_RC"
 '
+
+# Print the files to stream into containers, relative to TEST_ROOT: the files
+# known to git, including submodules, and new files that are not ignored. Files
+# ignored by git, e.g. a primer.env of the developer, which primer would read,
+# are never streamed. Prints nothing outside a git checkout.
+_test_files() {
+    git -C "$TEST_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+    {
+        git -C "$TEST_ROOT" ls-files --recurse-submodules
+        git -C "$TEST_ROOT" ls-files --others --exclude-standard
+    } | while IFS= read -r _tf; do
+        # Skip files deleted from the working tree, but not from git yet.
+        if [ -e "$TEST_ROOT/$_tf" ] || [ -L "$TEST_ROOT/$_tf" ]; then
+            printf %s\\n "$_tf"
+        fi
+    done
+}
+
+# Stream the repository to stdout, as a tar archive.
+_test_stream() {
+    _tfiles=$(_test_files)
+    if [ -n "$_tfiles" ]; then
+        printf %s\\n "$_tfiles" | tar -C "$TEST_ROOT" -cf - -T -
+    else
+        tar -C "$TEST_ROOT" --exclude=.git -cf - .
+    fi
+}
 
 # Run a shell script in a fresh container, with the repository at /primer.
 # in_container [-P] [-h HOSTNAME] [-e NAME=VALUE]... IMAGE SCRIPT
@@ -153,13 +208,14 @@ in_container() {
     done
     _img=$1
     _script=$2
-    set -- run -i --rm
+    set -- run -i --rm --label "primer-test=${PRIMER_TEST_RUN:-none}" \
+        --label "primer-test.name=${PRIMER_TEST_NAME:-none}"
     [ -n "$_priv" ] && set -- "$@" --privileged
     # podman can be configured to share namespaces with the host (e.g. the
     # quay.io/podman/stable image does). Tests change firewall rules,
     # hostnames, etc. in privileged containers, so always ask for private
     # namespaces to never touch the host. These are docker's defaults.
-    if [ "$(basename "$PRIMER_TEST_RUNTIME")" = "podman" ]; then
+    if [ "$PRIMER_TEST_PODMAN" = "1" ]; then
         set -- "$@" --network=private --uts=private --pid=private --ipc=private
     fi
     [ -n "$_host" ] && set -- "$@" --hostname "$_host"
@@ -171,10 +227,8 @@ in_container() {
         set -- "$@" -e "$_env"
     done
     IFS=$_oldifs
-    # shellcheck disable=SC2016
-    tar -C "$TEST_ROOT" --exclude=.git -cf - . |
-        "$PRIMER_TEST_RUNTIME" "$@" "$_img" sh -c "$_TEST_PRELUDE"'
-eval "$1"' sh "$_script"
+    _test_stream |
+        "$PRIMER_TEST_RUNTIME" "$@" "$_img" sh -c "$_TEST_PRELUDE" sh "$_script"
 }
 
 # Run the primer CLI in a fresh container, then a verification script in the
@@ -199,7 +253,7 @@ primer_in() {
         _args="$_args $(_quote "$1")"; shift
     done
     # shellcheck disable=SC2016
-    _verify='exit "$PRIMER_RC"'
+    _verify='test_done; exit "$PRIMER_RC"'
     [ "${1:-}" = "--" ] && _verify=$2
     _pscript="primer_run $_args
 $_verify"
@@ -255,10 +309,20 @@ unit_step() {
 # Run the primer CLI with the test steps directory first in the path. Sets
 # PRIMER_RC, PRIMER_OUT and PRIMER_ERR, and copies the output to the test log.
 # Never fails, check PRIMER_RC. Can be called several times in a container.
+# primer reads primer.env files from its working directory: when called from
+# the repository, it runs from an empty directory instead.
 primer_run() {
     PRIMER_RC=0
-    /primer/primer -p /primer/test/steps:/primer/libexec/steps "$@" \
-        >/tmp/primer.out 2>/tmp/primer.err || PRIMER_RC=$?
+    _prdir=$(pwd)
+    if [ "$_prdir" = /primer ]; then
+        mkdir -p /tmp/primer-cwd
+        _prdir=/tmp/primer-cwd
+    fi
+    _test_set_e_off
+    ( cd "$_prdir" && exec /primer/primer -p /primer/test/steps:/primer/libexec/steps "$@" ) \
+        >/tmp/primer.out 2>/tmp/primer.err
+    PRIMER_RC=$?
+    _test_set_e_restore
     PRIMER_OUT=$(cat /tmp/primer.out)
     PRIMER_ERR=$(cat /tmp/primer.err)
     printf '>>> primer %s (exit status %s)\n' "$*" "$PRIMER_RC"
@@ -268,11 +332,74 @@ primer_run() {
 }
 
 
+# Print the device of the default route of the container. Interface names
+# depend on the runtime: eth0 with docker, the name of the host interface with
+# rootless podman and pasta.
+default_route_dev() {
+    awk '$2 == "00000000" { print $1; exit }' /proc/net/route
+}
+
+# Print the device of the default route of the container when primer can
+# select it as the primary interface (en* or eth*), or skip the test. Assign
+# the output to a variable, e.g. dev=$(primary_dev_or_skip): set -e then exits
+# with the status of the skip.
+primary_dev_or_skip() {
+    _dev=$(default_route_dev)
+    case "$_dev" in
+        en*|eth[0-9]*) printf %s\\n "$_dev";;
+        *) skip "default route device [$_dev] is not named en* or eth*";;
+    esac
+}
+
+
 #### Assertions ###############################################################
 
 _assert_fail() {
     printf 'ASSERT: %s\n' "$*" >&2
     exit 1
+}
+
+# Tell that the script reached its end. Called by the prelude after the script,
+# and before the default verification of primer_in.
+test_done() {
+    _TEST_DONE=1
+}
+
+# at_exit CMD : run the command when the script exits, whatever the reason,
+# e.g. to release resources shared with the host. Do not set an EXIT trap in
+# scripts, it would replace the one of the prelude.
+at_exit() {
+    _TEST_AT_EXIT="${_TEST_AT_EXIT:-}
+$1"
+}
+
+# EXIT trap of the prelude: run the commands registered with at_exit, then fail
+# a script that exits with status 0 before its end.
+_test_exit() {
+    _trc=$?
+    set +e
+    [ -n "${_TEST_AT_EXIT:-}" ] && eval "$_TEST_AT_EXIT"
+    if [ "$_trc" = 0 ] && [ "${_TEST_DONE:-0}" != 1 ]; then
+        printf 'ASSERT: %s\n' "exited with status 0 before the end of the script" >&2
+        _trc=1
+    fi
+    exit "$_trc"
+}
+
+# Turn set -e off, remembering whether it was on, to capture the status of a
+# command. The command itself runs in a subshell with set -e, like primer.
+_test_set_e_off() {
+    case "$-" in
+        *e*) _TEST_SET_E=1;;
+        *) _TEST_SET_E=0;;
+    esac
+    set +e
+}
+
+# Restore set -e as it was before _test_set_e_off.
+_test_set_e_restore() {
+    [ "$_TEST_SET_E" = 1 ] && set -e
+    return 0
 }
 
 fail() { _assert_fail "${1:-failed}"; }
@@ -309,24 +436,38 @@ assert_not_contains() {
     esac
 }
 
+# The helpers below run the command in a subshell with set -e, as primer runs
+# (set -eu): calling it in an || or if context would turn set -e off for the
+# whole command, functions included, hiding failures in the middle of it.
+# These helpers take no message argument: an extra argument goes to the
+# command.
+
 # assert_true CMD... : the command succeeds
 assert_true() {
-    "$@" || _assert_fail "command failed: $*"
+    _test_set_e_off
+    ( set -e; "$@" )
+    _rc=$?
+    _test_set_e_restore
+    [ "$_rc" = 0 ] || _assert_fail "command failed: $*"
 }
 
 # assert_false CMD... : the command fails
 assert_false() {
-    if "$@"; then
-        _assert_fail "command succeeded: $*"
-    fi
+    _test_set_e_off
+    ( set -e; "$@" )
+    _rc=$?
+    _test_set_e_restore
+    [ "$_rc" != 0 ] || _assert_fail "command succeeded: $*"
 }
 
 # assert_exit STATUS CMD... : the command, run in a subshell (so it can exit),
 # returns that status.
 assert_exit() {
     _want=$1; shift
-    _rc=0
-    ( "$@" ) || _rc=$?
+    _test_set_e_off
+    ( set -e; "$@" )
+    _rc=$?
+    _test_set_e_restore
     [ "$_rc" = "$_want" ] || _assert_fail "exit status of [$*]: expected $_want, got $_rc"
 }
 
@@ -334,8 +475,10 @@ assert_exit() {
 # its stderr in RUN_ERR and its exit status in RUN_RC. Never fails.
 # shellcheck disable=SC2034 # RUN_* are read by the tests
 run() {
-    RUN_RC=0
-    RUN_OUT=$( ( "$@" ) 2>/tmp/run.err ) || RUN_RC=$?
+    _test_set_e_off
+    RUN_OUT=$( set -e; "$@" 2>/tmp/run.err )
+    RUN_RC=$?
+    _test_set_e_restore
     RUN_ERR=$(cat /tmp/run.err)
 }
 

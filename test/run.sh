@@ -14,6 +14,7 @@ export TEST_ROOT
 . "$TEST_ROOT/test/lib.sh"
 
 JOBS=
+TIMEOUT=${PRIMER_TEST_TIMEOUT:-1200}
 TAP=0
 KEEP=0
 LIST=0
@@ -31,6 +32,8 @@ tests run, together with a coverage check.
 Options:
   -j N        Number of tests to run in parallel (default: number of CPUs of
               the container runtime, at least 2)
+  -T SECS     Fail tests that run longer than this, 0 for no limit (default:
+              1200, generous for tests installing Debian or docker packages)
   -t          Output results in TAP format
   -k          Keep the directory with test logs, even on success
   -l          List matching tests and exit
@@ -39,6 +42,7 @@ Options:
 
 Environment:
   PRIMER_TEST_RUNTIME  Same as -r
+  PRIMER_TEST_TIMEOUT  Same as -T
   PRIMER_TEST_WARM     Set to 0 to use the official Debian images instead of
                        warm copies (see warm_image in test/lib.sh)
   GITHUB_TOKEN         When set, used for GitHub API calls in containers
@@ -47,9 +51,10 @@ USAGE
     exit "${1:-0}"
 }
 
-while getopts "j:tklr:h" opt; do
+while getopts "j:T:tklr:h" opt; do
     case "$opt" in
         j) JOBS=$OPTARG;;
+        T) TIMEOUT=$OPTARG;;
         t) TAP=1;;
         k) KEEP=1;;
         l) LIST=1;;
@@ -60,13 +65,21 @@ while getopts "j:tklr:h" opt; do
 done
 shift $((OPTIND - 1))
 
+case "$JOBS" in
+    *[!0-9]*|0) echo "Invalid number of parallel tests: $JOBS" >&2; usage 1;;
+esac
+case "$TIMEOUT" in
+    ''|*[!0-9]*) echo "Invalid timeout: $TIMEOUT" >&2; usage 1;;
+esac
+
 # Print all tests, as file:function, from the test files, without executing
-# them.
+# them. Functions are declared as "test_name()" or "test_name ()".
 discover() {
     for _f in "$TEST_ROOT"/test/*.test.sh; do
         [ -f "$_f" ] || continue
         _base=$(basename "$_f" .test.sh)
-        grep -oE '^test_[A-Za-z0-9_]*\(\)' "$_f" | sed -e 's/()$//' -e "s/^/${_base}:/"
+        grep -oE '^test_[A-Za-z0-9_]*[[:space:]]*\(\)' "$_f" \
+            | sed -e 's/[[:space:]]*()$//' -e "s/^/${_base}:/"
     done
 }
 
@@ -88,15 +101,17 @@ select_tests() {
     fi
 }
 
-# Print missing coverage: library functions without a unit test named
-# test_<function>[_suffix], and steps without a test file.
+# Print missing coverage: functions of primer and of the library modules
+# without a unit test named test_<function>[_suffix], and steps without a test
+# file. usage() of primer is tested through --help.
 coverage() {
     _tests=$(discover | cut -d: -f2)
-    for _lib in "$TEST_ROOT"/libexec/*.sh; do
+    for _lib in "$TEST_ROOT"/primer "$TEST_ROOT"/libexec/*.sh; do
         # shellcheck disable=SC2013 # function names have no spaces
-        for _fn in $(grep -oE '^[_a-z][a-z0-9_]*\(\)' "$_lib" | sed 's/()$//'); do
+        for _fn in $(grep -oE '^[_a-z][a-z0-9_]*[[:space:]]*\(\)' "$_lib" | sed 's/[[:space:]]*()$//'); do
+            [ "$_fn" = usage ] && continue
             if ! printf %s\\n "$_tests" | grep -qE "^test_${_fn}(_[a-z0-9]+)*\$"; then
-                printf 'function %s (%s)\n' "$_fn" "libexec/$(basename "$_lib")"
+                printf 'function %s (%s)\n' "$_fn" "${_lib#"$TEST_ROOT"/}"
             fi
         done
     done
@@ -130,22 +145,53 @@ if ! container_runtime >/dev/null; then
     echo "No working container runtime found (tried: ${PRIMER_TEST_RUNTIME:-docker podman})" >&2
     exit 1
 fi
-export PRIMER_TEST_RUNTIME PRIMER_TEST_ROOTLESS
+export PRIMER_TEST_RUNTIME PRIMER_TEST_PODMAN PRIMER_TEST_ROOTLESS
 
 # Default parallelism: as many tests as the container runtime has CPUs. Most
 # of the time goes to installing packages, so running more only slows down all
 # of them.
 if [ -z "$JOBS" ]; then
-    case "$(basename "$PRIMER_TEST_RUNTIME")" in
-        podman) JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.Host.CPUs}}' 2>/dev/null || true);;
-        *) JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.NCPU}}' 2>/dev/null || true);;
-    esac
+    if [ "$PRIMER_TEST_PODMAN" = "1" ]; then
+        JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.Host.CPUs}}' 2>/dev/null || true)
+    else
+        JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.NCPU}}' 2>/dev/null || true)
+    fi
     case "$JOBS" in
         ''|*[!0-9]*|0|1) JOBS=2;;
     esac
 fi
 
 LOGS=$(mktemp -d "${TMPDIR:-/tmp}/primer-tests.XXXXXX")
+# Containers of this run are labelled with its identifier.
+PRIMER_TEST_RUN=$(basename "$LOGS")
+export PRIMER_TEST_RUN
+
+# Remove the containers of this run, or of one test of this run when a test
+# name is given.
+remove_containers() {
+    if [ -n "${1:-}" ]; then
+        _ids=$("$PRIMER_TEST_RUNTIME" ps -aq --filter "label=primer-test=$PRIMER_TEST_RUN" \
+            --filter "label=primer-test.name=$1" 2>/dev/null || true)
+    else
+        _ids=$("$PRIMER_TEST_RUNTIME" ps -aq --filter "label=primer-test=$PRIMER_TEST_RUN" 2>/dev/null || true)
+    fi
+    # shellcheck disable=SC2086 # One identifier per word
+    [ -n "$_ids" ] && "$PRIMER_TEST_RUNTIME" rm -f $_ids >/dev/null 2>&1
+    return 0
+}
+
+# When interrupted, stop the running tests, remove their containers and the
+# logs.
+interrupted() {
+    trap - INT TERM
+    echo "Interrupted, removing containers and logs" >&2
+    # shellcheck disable=SC2046 # One process identifier per word
+    kill $(jobs -p) 2>/dev/null || true
+    remove_containers
+    rm -rf "$LOGS"
+    exit 130
+}
+trap interrupted INT TERM
 TOTAL=$(printf %s\\n "$TESTS" | wc -l | tr -d ' ')
 [ "$#" = "0" ] && TOTAL=$((TOTAL + 1))
 
@@ -157,7 +203,7 @@ else
 fi
 
 # Pull images once, quietly, so parallel tests do not race to pull them.
-for _img in "$IMG_ALPINE" "$IMG_TRIXIE" "$IMG_BOOKWORM"; do
+for _img in "$IMG_ALPINE" "$IMG_ALPINE_PINNED" "$IMG_TRIXIE" "$IMG_BOOKWORM"; do
     "$PRIMER_TEST_RUNTIME" pull -q "$_img" >/dev/null 2>&1 || true
 done
 
@@ -189,10 +235,10 @@ FAILURES=
 
 # Report the result of a test: report NAME STATUS SECONDS
 report() {
-    NUM=$((NUM + 1))
     _log="$LOGS/$(printf %s "$1" | tr ':' '.').log"
     case "$2" in
         0)
+            NUM=$((NUM + 1))
             PASSED=$((PASSED + 1))
             if [ "$TAP" = "1" ]; then
                 echo "ok $NUM - $1"
@@ -201,8 +247,15 @@ report() {
             fi
             ;;
         77)
-            SKIPPED=$((SKIPPED + 1))
+            # Only a call to skip (that explains why) is a skip: other
+            # commands, e.g. curl, also use this status.
             _reason=$(grep -m1 '^SKIP: ' "$_log" 2>/dev/null | sed 's/^SKIP: //' || true)
+            if [ -z "$_reason" ]; then
+                report "$1" 1 "$3"
+                return
+            fi
+            NUM=$((NUM + 1))
+            SKIPPED=$((SKIPPED + 1))
             if [ "$TAP" = "1" ]; then
                 echo "ok $NUM - $1 # SKIP ${_reason}"
             else
@@ -210,6 +263,7 @@ report() {
             fi
             ;;
         *)
+            NUM=$((NUM + 1))
             FAILED=$((FAILED + 1))
             FAILURES="$FAILURES $1"
             if [ "$TAP" = "1" ]; then
@@ -231,19 +285,46 @@ if [ "$#" = "0" ]; then
 fi
 
 # Run one test in the background, writing "status seconds" to its .rc file.
+# The test runs with set -e, outside of any || or if context, which would
+# turn set -e off: a test whose first container call fails must fail, even
+# when the next calls pass. Tests running longer than TIMEOUT seconds are
+# stopped, and their containers removed.
 launch() {
     _file=${1%%:*}
     _fn=${1#*:}
     _base="$LOGS/$(printf %s "$1" | tr ':' '.')"
     (
+        PRIMER_TEST_NAME=$1
+        export PRIMER_TEST_NAME
         _start=$(date +%s)
-        _rc=0
+        set +e
         (
+            set -e
             cd "$TEST_ROOT"
             # shellcheck disable=SC1090
             . "$TEST_ROOT/test/${_file}.test.sh"
             "$_fn"
-        ) > "${_base}.log" 2>&1 < /dev/null || _rc=$?
+        ) > "${_base}.log" 2>&1 < /dev/null &
+        _pid=$!
+        if [ "$TIMEOUT" -gt 0 ]; then
+            # Watchdog: polls, so it ends with the test.
+            (
+                _waited=0
+                while kill -0 "$_pid" 2>/dev/null; do
+                    if [ "$_waited" -ge "$TIMEOUT" ]; then
+                        echo "ASSERT: timed out after ${TIMEOUT}s" >> "${_base}.log"
+                        kill "$_pid" 2>/dev/null
+                        remove_containers "$PRIMER_TEST_NAME"
+                        break
+                    fi
+                    sleep 1
+                    _waited=$((_waited + 1))
+                done
+            ) &
+        fi
+        wait "$_pid"
+        _rc=$?
+        set -e
         echo "$_rc $(( $(date +%s) - _start ))" > "${_base}.rc.tmp"
         mv "${_base}.rc.tmp" "${_base}.rc"
     ) &

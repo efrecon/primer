@@ -35,7 +35,7 @@ test_primer_net_interfaces() {
     unit "$IMG_ALPINE" '
         out=$(primer_net_interfaces)
         assert_match "^lo$" "$out"
-        assert_match "^eth0$" "$out"
+        assert_match "^$(default_route_dev)$" "$out"
         assert_not_contains "@" "$out"'
 }
 
@@ -59,7 +59,7 @@ wlp3s0" "$(primer_net_interfaces)"'
 
 test_primer_net_macaddr() {
     unit "$IMG_ALPINE" '
-        mac=$(primer_net_macaddr eth0)
+        mac=$(primer_net_macaddr "$(default_route_dev)")
         assert_match "^([0-9a-f]{2}:){5}[0-9a-f]{2}$" "$mac"
         # All interfaces but the loopback
         assert_equal "$mac" "$(primer_net_macaddr)"
@@ -85,7 +85,8 @@ test_primer_net_macaddr_parsing() {
 
 test_primer_net_primary_interface() {
     unit "$IMG_ALPINE" '
-        assert_equal eth0 "$(primer_net_primary_interface)"
+        dev=$(primary_dev_or_skip)
+        assert_equal "$dev" "$(primer_net_primary_interface)"
         primer_net_interfaces() { printf "lo\nwlan0\nenp3s0\neth1\n"; }
         assert_equal enp3s0 "$(primer_net_primary_interface)"
         primer_net_interfaces() { printf "lo\nwlan0\ndocker0\n"; }
@@ -274,6 +275,9 @@ test__primer_net_curlopts_debian() {
 test_primer_net_curl() {
     unit "$IMG_ALPINE" "$NET_CURLOPTS_FIXTURE"'
         mock curl
+        # No options file to start with, even when the prelude made one for
+        # GITHUB_TOKEN (CI).
+        PRIMER_CURL_OPTIONS=
         # Quiet: failures are errors, no progress
         primer_net_curl https://example.com/a -o /tmp/a
         # Info (the default): no progress either

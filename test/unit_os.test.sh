@@ -62,7 +62,7 @@ test_primer_os_distribution_unknown() {
 }
 
 test_primer_os_version_alpine() {
-    unit docker.io/library/alpine:3.24.4 '
+    unit "$IMG_ALPINE_PINNED" '
         assert_equal 3.24.4 "$(primer_os_version)"
         PRIMER_OS_VERSION=42
         assert_equal 42 "$(primer_os_version)"'

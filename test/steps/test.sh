@@ -17,7 +17,7 @@ primer_step_test() {
                     --test)
                         TEST_TEST=$2; shift 2;;
                     -*)
-                        yush_warn "Unknown option: $1 !";;
+                        yush_warn "Unknown option: $1 !"; shift;;
                     *)
                         break;;
                 esac

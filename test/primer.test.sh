@@ -40,7 +40,7 @@ test_cli_detects_distribution() {
 }
 
 test_cli_detects_version() {
-    primer_in docker.io/library/alpine:3.24.4 -v error -s test --test:test os_version -- '
+    primer_in "$IMG_ALPINE_PINNED" -v error -s test --test:test os_version -- '
         assert_equal 3.24.4 "$PRIMER_OUT"'
 }
 
@@ -72,7 +72,8 @@ test_cli_finds_mac_addresses() {
 
 test_cli_finds_primary_interface() {
     primer_in "$IMG_ALPINE" -v error -s test --test:test net_primary_interface -- '
-        assert_match "^eth[0-9]+$" "$PRIMER_OUT"'
+        dev=$(primary_dev_or_skip)
+        assert_equal "$dev" "$PRIMER_OUT"'
 }
 
 test_cli_help() {
@@ -113,7 +114,6 @@ test_cli_config_file() {
 # environment. Sourced, it loads everything and stops, also from a script.
 test_cli_library_mode() {
     in_container "$IMG_TRIXIE" '
-        apt-get update -qq >/dev/null && apt-get install -y -qq bash >/dev/null 2>&1 || true
         ./libexec/yu.sh/bin/amalgamation.sh primer > /tmp/primer.sh
         chmod a+x /tmp/primer.sh
         for p in ./primer /tmp/primer.sh; do
@@ -139,4 +139,64 @@ test_cli_amalgamation() {
         out=$(/tmp/primer.sh -v notice -s compose install 2>&1)
         assert_contains "Docker compose is now a Docker CLI plugin" "$out"
         assert_true /tmp/primer.sh --help'
+}
+
+
+#### Functions of primer itself, in library mode #############################
+
+test_primer_abort() {
+    unit "$IMG_ALPINE" '
+        run primer_abort "Something went wrong"
+        assert_equal 1 "$RUN_RC"
+        assert_contains "Something went wrong" "$RUN_ERR"'
+}
+
+# Comments are skipped, values are exported and substituted, invalid names
+# only warn, a missing file is ignored, the last line needs no newline.
+test_primer_config() {
+    unit "$IMG_ALPINE" '
+        printf "# A comment=1\nPRIMER_A=one\nPRIMER_B=\${PRIMER_A}-two\nnot-a-name=3\nPRIMER_C=last" > /tmp/cfg.env
+        run primer_config /tmp/cfg.env
+        assert_equal 0 "$RUN_RC"
+        assert_contains "not-a-name is not a valid variable name" "$RUN_ERR"
+        primer_config /tmp/cfg.env 2>/dev/null
+        assert_equal one "$PRIMER_A"
+        assert_equal one-two "$PRIMER_B" "substituted"
+        assert_equal last "$PRIMER_C" "last line without newline"
+        assert_equal one "$(sh -c "echo \$PRIMER_A")" "exported"
+        PRIMER_SUBST=0
+        primer_config /tmp/cfg.env 2>/dev/null
+        assert_equal "\${PRIMER_A}-two" "$PRIMER_B" "not substituted"
+        run primer_config /tmp/missing.env
+        assert_equal 0 "$RUN_RC" "missing file"
+        assert_equal "" "$RUN_ERR$RUN_OUT"'
+}
+
+test_primer_steps() {
+    unit "$IMG_ALPINE" '
+        PRIMER_PATH=/primer/test/steps:/primer/libexec/steps
+        steps=$(primer_steps 2>/dev/null)
+        assert_match "^test$" "$steps"
+        assert_match "^docker$" "$steps"
+        assert_match "^users$" "$steps"
+        assert_not_contains ".sh" "$steps"'
+}
+
+# The options of the step, and its variables that can be set from outside.
+test_primer_info() {
+    unit "$IMG_ALPINE" '
+        PRIMER_PATH=/primer/libexec/steps
+        out=$(primer_info packages)
+        assert_match "^packages: " "$out"
+        assert_match "^	PRIMER_STEP_PACKAGES_PACKAGES=" "$out"
+        assert_equal "" "$(primer_info nosuchstep 2>/dev/null)"'
+}
+
+test_primer_hostinfo() {
+    unit -h primer-host "$IMG_ALPINE" '
+        out=$(primer_hostinfo)
+        assert_match "^_hostinfo:$" "$out"
+        assert_match "^	distribution: alpine$" "$out"
+        assert_match "^	version: $(cat /etc/alpine-release)$" "$out"
+        assert_match "^	hostname: primer-host$" "$out"'
 }

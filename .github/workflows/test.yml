@@ -5,10 +5,18 @@ on:
   push:
     branches:
       - master
+  # Weekly, with the official Debian images instead of warm copies, to catch
+  # differences between both.
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
@@ -19,4 +27,5 @@ jobs:
           # Authenticated GitHub API calls from within the test containers,
           # to avoid anonymous rate limits.
           GITHUB_TOKEN: ${{ github.token }}
+          PRIMER_TEST_WARM: ${{ github.event_name == 'schedule' && '0' || '1' }}
         run: ./test/run.sh -t -j 4

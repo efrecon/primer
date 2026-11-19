@@ -551,20 +551,28 @@ The suite contains:
   Most run primer for real in Alpine and Debian containers and verify the
   resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
   tested with mocks. Some tests, e.g. `docker` and `firewall`, need privileged
-  containers; they are skipped, with a reason, under rootless podman.
-+ Tests of the command-line interface, in `test/primer.test.sh`.
+  containers; they are skipped, with a reason, with rootless podman or docker.
++ Tests of the command-line interface and of the functions of `primer` itself,
+  in `test/primer.test.sh`.
++ Tests of the test framework, in `test/lib.test.sh`.
 
 Tests are named `file:function`. Any argument to `run.sh` is an extended regular
 expression that selects tests by name, and `-l` lists them. When run without
-patterns, the suite also checks that every library function and every step has
-tests. Run `./test/run.sh -h` for all options:
+patterns, the suite also checks that every function of primer and of the
+library modules, and every step, has tests. Options come before the patterns.
+Run `./test/run.sh -h` for all options:
 
 ```shell
 ./test/run.sh -l                     # List all tests
 ./test/run.sh '^unit_'               # Only unit tests
-./test/run.sh step_docker -j 8       # Docker step tests, 8 in parallel
+./test/run.sh -j 8 step_docker       # Docker step tests, 8 in parallel
 ./test/run.sh -t                     # TAP output, as in CI
 ```
+
+Only the files known to git, and new files that git does not ignore, are copied
+into the containers: a `primer.env` of yours, which primer would read, never
+is. Tests running longer than 20 minutes fail (`-T` to change). Containers are
+labelled with `primer-test`, and removed when the suite is interrupted.
 
 Some steps download releases from GitHub. Set `GITHUB_TOKEN` to make these
 calls authenticated and avoid anonymous rate limits.

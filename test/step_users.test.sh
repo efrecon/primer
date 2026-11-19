@@ -71,7 +71,7 @@ test_users_save_passwords_private() {
         umask 022
         printf "anna:x:::\nbert:x:::/bin/nope\n" > /tmp/u.db
         primer_run -s users --users:db /tmp/u.db --users:save 1 install
-        assert_false [ "$PRIMER_RC" = 0 ] "invalid shell aborts"
+        assert_false [ "$PRIMER_RC" = 0 ]
         assert_true grep -q "^anna:" /tmp/u.pwd
         assert_equal -rw------- "$(stat -c %A /tmp/u.pwd)"'
 }

@@ -86,6 +86,99 @@ primer_abort() {
     exit 1
 }
 
+# The functions below are defined before the library mode stops, so they can
+# be tested.
+
+# Read configuration (as in .env terminated) file passed as a parameter. The
+# second parameter, if present, is the source of the file, i.e. typically a
+# remote resource.
+primer_config() {
+    if [ -f "$1" ]; then
+        _src=$1
+        [ $# -ge 2 ] && _src=$2
+        yush_info "Reading installation configuration from $_src"
+        while IFS='=' read -r key val || [ -n "$key" ]; do
+            # Skip over lines containing comments.
+            # (Lines starting with '#').
+            [ "${key##\#*}" ] || continue
+
+            if [ -n "$key" ]; then
+                # Check the name first: export of an invalid name is a fatal
+                # error in POSIX shells, e.g. busybox ash.
+                if ! printf %s\\n "$key" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*$'; then
+                    yush_warn "warning $key is not a valid variable name"
+                    continue
+                fi
+                yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
+                yush_debug "Setting $key=$val"
+                export "${key}=${val}"
+            fi
+        done < "$1"
+    fi
+}
+
+# Return the list of known steps. Due to amalgamation, there is a possibility
+# that steps are printed out twice.
+primer_steps() {
+### AMLG_START
+    for _fpath in $(primer_utils_find '*'); do
+        _step=$(yush_basename "$_fpath")
+        echo "${_step%.*}"
+    done
+### AMLG_END
+
+    # When run as an amalgamation, we have to discover the steps from the list
+    # of functions that are present in the amalgamation. Ideally, we would like
+    # to ask the runtime, e.g. by calling set, but this does not work on POSIX
+    # shells. So we grep inside our own code.
+    grep -oE "^primer_step_([a-z0-9_]+)\s*\(\)" "$0" |
+        sed -E 's/primer_step_([a-z0-9_]+)\s*\(\)/\1/'
+}
+
+# Print out information about a given step: the command line options and flags
+# that it takes, and the external variables that can be set to change it
+# behaviour.
+primer_info() {
+    _oldstate=$(set +o); set -f
+    if primer_utils_loadif "$1"; then
+        # Print out the step and the options that it accepts through
+        # asking for its options.
+        printf "%s: %s\n" "$1" "$("primer_step_$1" option)"
+        # Now, for all known variables starting with the PRIMER_STEP
+        # followed by the name of the step in uppercase, look for the
+        # ones that can be set from the outside and print out their
+        # current value.
+        _vars=PRIMER_STEP_$(printf %s\\n "$1" | tr '[:lower:]' '[:upper:]')
+        while IFS= read -r _varset; do
+            # The variable name is everything before the equal sign.
+            _var=$(printf %s\\n "$_varset" | sed -E 's/^(PRIMER_STEP_[A-Z0-9_]+)=.*/\1/')
+            # Ask where the step was loaded from
+            _origin=$(primer_utils_origin "$1")
+            # If we found an origin and the variable is set from itself
+            # as a default, then it is an external variable. Print out
+            # the original set line.
+            if [ -n "$_origin" ] && grep -Eq "^${_var}\s*=\s*\\\$\{${_var}:" "$_origin"; then
+                printf \\t%s\\n "$_varset"
+            fi
+        done <<EOF
+$(set|grep "^$_vars"|grep "=")
+EOF
+    fi
+    set +vx; eval "$_oldstate"
+
+}
+
+primer_hostinfo() {
+    yush_info "Getting Host information"
+    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)")
+
+    printf "_hostinfo:\n"
+    printf '\tdistribution: %s\n' "$(primer_os_distribution)"
+    printf '\tversion: %s\n' "$(primer_os_version)"
+    printf '\thostname: %s\n' "$(primer_net_hostname)"
+    printf '\tmac: %s\n' "$_mac"
+}
+
 ### AMLG_START ./libexec/*.sh
 # Source in all relevant modules. This is where most of the "stuff" will occur.
 _modules=$(find "${PRIMER_LIB_DIR}" -maxdepth 1 -mindepth 1 \( -name '*.sh' -a ! -name 'x-*.sh' \) -exec basename '{}' \; | sed -e 's/\.sh$//g' | tr '\n' ' ')
@@ -246,90 +339,6 @@ $_step $_opt $_val"
             break;;
     esac
 done
-
-# Read configuration (as in .env terminated) file passed as a parameter. The
-# second parameter, if present, is the source of the file, i.e. typically a
-# remote resource.
-primer_config() {
-    if [ -f "$1" ]; then
-        _src=$1
-        [ $# -ge 2 ] && _src=$2
-        yush_info "Reading installation configuration from $_src"
-        while IFS='=' read -r key val || [ -n "$key" ]; do
-            # Skip over lines containing comments.
-            # (Lines starting with '#').
-            [ "${key##\#*}" ] || continue
-
-            if [ -n "$key" ]; then
-                yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
-                yush_debug "Setting $key=$val"
-                export "${key}=${val}" 2>/dev/null || yush_warn "warning $key is not a valid variable name"
-            fi
-        done < "$1"
-    fi
-}
-
-# Return the list of known steps. Due to amalgamation, there is a possibility
-# that steps are printed out twice.
-primer_steps() {
-### AMLG_START
-    for _fpath in $(primer_utils_find '*'); do
-        _step=$(yush_basename "$_fpath")
-        echo "${_step%.*}"
-    done
-### AMLG_END
-
-    # When run as an amalgamation, we have to discover the steps from the list
-    # of functions that are present in the amalgamation. Ideally, we would like
-    # to ask the runtime, e.g. by calling set, but this does not work on POSIX
-    # shells. So we grep inside our own code.
-    grep -oE "^primer_step_([a-z0-9_]+)\s*\(\)" "$0" |
-        sed -E 's/primer_step_([a-z0-9_]+)\s*\(\)/\1/'
-}
-
-# Print out information about a given step: the command line options and flags
-# that it takes, and the external variables that can be set to change it
-# behaviour.
-primer_info() {
-    _oldstate=$(set +o); set -f
-    if primer_utils_loadif "$1"; then
-        # Print out the step and the options that it accepts through
-        # asking for its options.
-        printf "%s: %s\n" "$1" "$("primer_step_$1" option)"
-        # Now, for all known variables starting with the PRIMER_STEP
-        # followed by the name of the step in uppercase, look for the
-        # ones that can be set from the outside and print out their
-        # current value.
-        _vars=PRIMER_STEP_$(printf %s\\n "$1" | tr '[:lower:]' '[:upper:]')
-        while IFS= read -r _varset; do
-            # The variable name is everything before the equal sign.
-            _var=$(printf %s\\n "$_varset" | sed -E 's/^(PRIMER_STEP_[A-Z0-9_]+)=.*/\1/')
-            # Ask where the step was loaded from
-            _origin=$(primer_utils_origin "$1")
-            # If we found an origin and the variable is set from itself
-            # as a default, then it is an external variable. Print out
-            # the original set line.
-            if [ -n "$_origin" ] && grep -Eq "^${_var}\s*=\s*\\\$\{${_var}:" "$_origin"; then
-                printf \\t%s\\n "$_varset"
-            fi
-        done <<EOF
-$(set|grep "^$_vars"|grep "=")
-EOF
-    fi
-    set +vx; eval "$_oldstate"
-
-}
-
-primer_hostinfo() {
-    yush_info "Getting Host information"
-    _mac=$(primer_net_macaddr "$(primer_net_primary_interface)")
-
-    printf "_hostinfo:\n"
-    printf '\tdistribution: %s\n' "$(primer_os_distribution)"
-    printf '\tversion: %s\n' "$(primer_os_version)"
-    printf '\thostname: %s\n' "$(primer_net_hostname)"
-    printf '\tmac: %s\n' "$_mac"
-}
 
 # Discover OS type and how to run sudo.
 primer_os_init

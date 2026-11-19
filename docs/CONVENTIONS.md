@@ -75,7 +75,22 @@ or new installation steps:
   names that are not valid function names) or `stub_bin` (executables, visible
   to child processes).
 + Tests that need privileged containers call `require_privileged` first, and
-  `skip` explains why a test cannot run.
+  `skip` explains why a test cannot run. Exit status 77 without a call to
+  `skip` is a failure.
++ Tests, and the scripts run in containers, run with `set -e`, as primer does.
+  `run`, `assert_true`, `assert_false` and `assert_exit` also run their command
+  with `set -e`, in a subshell. Never call container helpers or functions under
+  test in an `||`, `&&` or `if` context: it turns `set -e` off for the whole
+  call, and hides failures in its middle.
++ `assert_true` and `assert_false` take no message argument: an extra argument
+  goes to the command, and can make the assertion unable to fail.
++ Scripts run in containers must reach their end: an early `exit 0` fails the
+  test, as it skips the remaining assertions. Release resources shared with the
+  host, e.g. loop devices, with `at_exit`, never with a trap on `EXIT`.
++ Do not assume interface names: compare with `default_route_dev`, or use
+  `primary_dev_or_skip`.
++ Test files and test functions declared as `test_name ()` are discovered too.
+  Test the functions of `primer` itself in `test/primer.test.sh`.
 + Snippets passed to the container helpers are single-quoted on purpose, as
   they expand inside the containers. Start test files with
   `# shellcheck disable=SC2016` to keep [shellcheck] quiet about this.

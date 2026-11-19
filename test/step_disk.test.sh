@@ -182,9 +182,8 @@ test_disk_loop_device() {
         DEBIAN_FRONTEND=noninteractive apt-get install -y -qq e2fsprogs mount >/dev/null
         dd if=/dev/zero of=/tmp/primer-test-disk.img bs=1M count=0 seek=64 2>/dev/null
         loop=$(losetup -f --show /tmp/primer-test-disk.img) || skip "cannot attach a loop device"
-        # Always detach: loop devices are shared with the host. Cleaning must
-        # not stop at the first error (the container script runs with set -e).
-        trap "rc=\$?; set +e; umount /mnt/loop 2>/dev/null; losetup -d $loop; exit \$rc" EXIT
+        # Always detach: loop devices are shared with the host.
+        at_exit "umount /mnt/loop 2>/dev/null; losetup -d $loop"
         name=${loop#/dev/}
         # The device node may not exist in the container
         if ! [ -b "$loop" ]; then
