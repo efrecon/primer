@@ -82,13 +82,13 @@ jesseduffield/lazygit lazygit_%semantic%_%Kernel%_%machine%*
 micro-editor/micro micro-%semantic%-%kernel%%bits%-static.tar.gz
 ```
 
-The two first lines focus on installing the go binaries of the [kubectx] project.
-Note the difference between the two lines, one installing the latest `kubectx`
-(using the default version and binary name out of the project's name), the
-second specifying `kubens` as the binary to find in the compressed tar files. To
-be able to get the latest, it specifies an empty version filter manually. All
-tokens in the asset filters are tweaked to the naming [conventions] for the
-project.
+The two first lines focus on installing the go binaries of the [kubectx]
+project. Note the difference between the two lines, one installing the latest
+`kubectx` (using the default version and binary name out of the project's name),
+the second specifying `kubens` as the binary to find in the compressed tar
+files. To be able to get the latest, it specifies an empty version filter
+manually. All tokens in the asset filters are tweaked to the naming
+[conventions] for the project.
 
   [kubectx]: https://github.com/ahmetb/kubectx
   [conventions]: https://github.com/ahmetb/kubectx/releases

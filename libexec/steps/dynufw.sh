@@ -153,36 +153,28 @@ _primer_step_dynufw_update() {
 # protocol, which must all match exactly. The added rules are listed in the
 # syntax of the ufw command, independently of the status of the firewall.
 _primer_step_dynufw_clean_rules() {
-    # Dynamic rules as "proto port host" lines, with ranges in ufw format.
+    # Dynamic rules as "proto port host" lines, with ranges in ufw format, i.e.
+    # 8080:8090 instead of 8080-8090.
     _dynamic=
     if [ -f "$PRIMER_STEP_DYNUFW_DYNPATH" ]; then
         _dynamic=$(sed -E -e '/^[[:space:]]*$/d' -e '/^[[:space:]]*#/d' "$PRIMER_STEP_DYNUFW_DYNPATH" |
-                    awk -F: 'NF >= 3 { gsub(/-/, ":", $2); print $1, $2, $3 }')
+            while IFS=: read -r _proto _port _host; do
+                [ -n "$_host" ] || continue
+                case "$_port" in
+                    *-*) _port=${_port%%-*}:${_port#*-};;
+                esac
+                printf '%s %s %s\n' "$_proto" "$_port" "$_host"
+            done)
     fi
-    _rules=$($PRIMER_OS_SUDO ufw show added |
-        PRIMER_DYNUFW_RULES=$_dynamic PRIMER_DYNUFW_COMMENT=$PRIMER_STEP_DYNUFW_COMMENT awk '
-            BEGIN {
-                n = split(ENVIRON["PRIMER_DYNUFW_RULES"], lines, "\n")
-                for (i = 1; i <= n; i++) {
-                    if (split(lines[i], f, " ") >= 3) dyn[f[1] " " f[2] " " f[3]] = 1
-                }
-            }
-            {
-                # Lines are: ufw <rule> comment \047<comment>\047
-                c = index($0, " comment \047")
-                if (substr($0, 1, 4) != "ufw " || c == 0) next
-                rule = substr($0, 5, c - 5)
-                comment = substr($0, c + 10)
-                sub(/\047$/, "", comment)
-                if (comment == ENVIRON["PRIMER_DYNUFW_COMMENT"]) { print rule; next }
-                port = ""; proto = ""
-                nw = split(rule, w, " ")
-                for (i = 1; i < nw; i++) {
-                    if (w[i] == "port") port = w[i + 1]
-                    if (w[i] == "proto") proto = w[i + 1]
-                }
-                if ((proto " " port " " comment) in dyn) print rule
-            }')
+    _rules=$(_primer_step_dynufw_rules | while IFS='|' read -r _action _rule _comment; do
+        if [ -z "$_comment" ]; then
+            continue
+        fi
+        if [ "$_comment" = "$PRIMER_STEP_DYNUFW_COMMENT" ] \
+                || _primer_step_dynufw_is_dynamic "$_rule" "$_comment" "$_dynamic"; then
+            printf '%s %s\n' "$_action" "$_rule"
+        fi
+    done)
     if [ -n "$_rules" ]; then
         yush_info "Removing dynufw rules from firewall"
         printf %s\\n "$_rules" | while IFS= read -r _rule; do
@@ -190,6 +182,85 @@ _primer_step_dynufw_clean_rules() {
             # shellcheck disable=SC2086 # The rule is made of several words.
             $PRIMER_OS_SUDO ufw delete $_rule < /dev/null
         done
+    fi
+}
+
+# Is the ufw rule $1, commented $2, one created by the update script for a line
+# of the dynamic rules $3 (as "proto port host" lines)? Its protocol, port and
+# host (the comment) must all match exactly.
+_primer_step_dynufw_is_dynamic() {
+    _dyn_comment=$2
+    _dyn_list=$3
+    _dyn_proto=
+    _dyn_port=
+    # Split the rule into words, without expanding globs, and pick the values
+    # after the proto and port keywords.
+    set -f
+    # shellcheck disable=SC2086
+    set -- $1
+    set +f
+    while [ "$#" -gt 1 ]; do
+        case "$1" in
+            proto) _dyn_proto=$2;;
+            port) _dyn_port=$2;;
+        esac
+        shift
+    done
+    [ -n "$_dyn_list" ] \
+        && printf '%s\n' "$_dyn_list" | grep -qxF "$_dyn_proto $_dyn_port $_dyn_comment"
+}
+
+# Print the rules added to ufw, one per line, as action|rule|comment, where
+# rule is in the syntax used by "ufw show added", e.g. 22/tcp or "from
+# 10.0.0.0/8 to any port 22 proto tcp", and comment is empty when the rule has
+# none.
+_primer_step_dynufw_rules() {
+    $PRIMER_OS_SUDO ufw show added | while IFS= read -r _line; do
+        case "$_line" in
+            "ufw "*) ;;
+            *) continue;;
+        esac
+        _rule=${_line#ufw }
+        _action=${_rule%% *}
+        _rule=${_rule#* }
+        _comment=
+        case "$_rule" in
+            *" comment '"*)
+                _comment=${_rule#* comment \'}
+                _comment=${_comment%\'}
+                _rule=${_rule%% comment \'*}
+                ;;
+        esac
+        printf '%s|%s|%s\n' "$_action" "$_rule" "$_comment"
+    done
+}
+
+# Allow the traffic described by the arguments (as for ufw allow) and mark the
+# rule as belonging to dynufw, with a comment, unless a rule for the same
+# traffic already exists. $1 is that rule as listed by "ufw show added", e.g.
+# "from 10.0.0.0/8 to any port 22 proto tcp" for "proto tcp from 10.0.0.0/8 to
+# any port 22". Existing rules are never modified: ufw would otherwise replace
+# their action (e.g. limit) or comment, and cleaning would remove them, e.g. a
+# rule for SSH added by hand.
+_primer_step_dynufw_allow() {
+    _dyn_tuple=$1
+    shift
+    _dyn_existing=$(_primer_step_dynufw_rules | while IFS='|' read -r _action _rule _comment; do
+        if [ "$_rule" = "$_dyn_tuple" ]; then
+            printf '%s|%s\n' "$_action" "$_comment"
+        fi
+    done)
+    if [ -z "$_dyn_existing" ]; then
+        $PRIMER_OS_SUDO ufw allow "$@" comment "$PRIMER_STEP_DYNUFW_COMMENT"
+        # Verify that the rule is listed as expected, i.e. that the check for
+        # existing rules above works with this version of ufw.
+        if ! _primer_step_dynufw_rules | grep -qxF "allow|${_dyn_tuple}|${PRIMER_STEP_DYNUFW_COMMENT}"; then
+            yush_warn "Rule for $_dyn_tuple is not listed as expected by ufw, check it is not one of yours before cleaning"
+        fi
+    elif [ "$_dyn_existing" = "allow|$PRIMER_STEP_DYNUFW_COMMENT" ]; then
+        yush_debug "Rule for $_dyn_tuple already present"
+    else
+        yush_notice "A rule for $_dyn_tuple already exists (${_dyn_existing%%|*}), keeping it as is: it is yours and will not be removed when cleaning"
     fi
 }
 
@@ -216,7 +287,7 @@ _primer_step_dynufw_install_static() {
                 # is the format supported by UFW)
                 port=$(printf %s\\n "$port" | sed 's/-/:/g')
                 yush_notice "Opening firewall for all incoming traffic on port ${port}/${proto}"
-                $PRIMER_OS_SUDO ufw allow "${port}/${proto}" comment "$PRIMER_STEP_DYNUFW_COMMENT"
+                _primer_step_dynufw_allow "${port}/${proto}" "${port}/${proto}"
             elif [ -n "$dyn" ]; then
                 # Add an entry to the main dynamic rules file, the update
                 # script creates the rule. Removal happens with the file.
@@ -240,7 +311,8 @@ _primer_step_dynufw_install_static() {
                 if [ -n "$ip" ]; then
                     yush_debug "One time resolution of $host led to $ip"
                     yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${ip}"
-                    $PRIMER_OS_SUDO ufw allow proto "$proto" from "$ip" to any port "$port" comment "$PRIMER_STEP_DYNUFW_COMMENT"
+                    _primer_step_dynufw_allow "from $ip to any port $port proto $proto" \
+                        proto "$proto" from "$ip" to any port "$port"
                 else
                     yush_warn "Could not resolve $host, skipping rule!"
                 fi

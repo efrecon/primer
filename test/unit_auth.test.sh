@@ -201,10 +201,13 @@ _AUTH_MOD='
     assert_equal /bin/sh "$(echo "$entry" | cut -d: -f7)"
     assert_equal wonder "$(id -gn alice)"
     assert_equal "$mode" "$(stat -c "%a %U %G" /etc/passwd)"
-    # Options default to current settings, an empty shell keeps it
+    # Options default to current settings, empty values keep them
     primer_auth_user_mod alice --gecos "Alice" --shell ""
     assert_equal wonder "$(id -gn alice)"
     assert_equal /bin/sh "$(getent passwd alice | cut -d: -f7)"
+    primer_auth_user_mod alice --group "" --gecos "" --shell ""
+    assert_equal wonder "$(id -gn alice)"
+    assert_equal Alice "$(getent passwd alice | cut -d: -f5)"
     # Backslashes are kept as-is
     primer_auth_user_mod alice --gecos "Dr\\tAlice"
     assert_equal "Dr\\tAlice" "$(getent passwd alice | cut -d: -f5)"

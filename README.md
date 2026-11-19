@@ -455,9 +455,8 @@ Primer accepts a number of aliases to those commands:
 * `env`, `environment`: List all known and accessible steps,
   together with the options and
   environment variables that can be used to modify their behaviour.
-* This also prints out host information, e.g. hostname,
-  MAC address (of the primary ethernet interface), name of distribution, version,
-  etc.
+* This also prints out host information, e.g. hostname, MAC address (of the
+  primary ethernet interface), name of distribution, version, etc.
 * `info`: List all options and
   environment variables that can be used to modify the behaviour of the steps to
   be run.
@@ -501,7 +500,8 @@ For example, the following command would download release `v0.2.0` and
 show the help message.
 
 ```bash
-curl -sSL https://github.com/efrecon/primer/releases/download/v0.2.0/primer-v0.2.0.sh |
+curl -sSL \
+  https://github.com/efrecon/primer/releases/download/v0.2.0/primer-v0.2.0.sh |
   sh -s - --help
 ```
 

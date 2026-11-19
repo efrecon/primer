@@ -95,6 +95,40 @@ test_disk_partition_table() {
         assert_true grep -q " /data ext4 " /etc/fstab'
 }
 
+# Encrypted volumes, swap and other non-filesystems are never formatted or
+# mounted, unless overwriting. Blank devices are formatted without forcing.
+test_disk_keeps_non_filesystems() {
+    in_container "$IMG_ALPINE" '
+        . test/data/disk/setup.sh
+        apk add -q cryptsetup >/dev/null
+        printf secretpassphrase | cryptsetup luksFormat --batch-mode --pbkdf pbkdf2 \
+            --pbkdf-force-iterations 1000 /dev/fakedisk - >/dev/null
+        mkswap /dev/fakedisk2 >/dev/null
+        printf "fakedisk:ext4:/secret\nfakedisk2:ext4:/swap\n" > /tmp/disks.db
+        primer_run -s disk --disk:db /tmp/disks.db install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_contains "contains crypto_LUKS, which is not a filesystem, not touching it" "$PRIMER_ERR"
+        assert_contains "contains swap, which is not a filesystem, not touching it" "$PRIMER_ERR"
+        assert_match "TYPE=.crypto_LUKS." "$(blkid /dev/fakedisk)" "LUKS kept"
+        assert_match "TYPE=.swap." "$(blkid /dev/fakedisk2)" "swap kept"
+        assert_false grep -qE " /(secret|swap) " /etc/fstab
+        primer_run -s disk --disk:db /tmp/disks.db --disk:overwrite 1 install
+        assert_equal 0 "$PRIMER_RC" "overwrite status"
+        assert_contains "already formatted as crypto_LUKS, overwriting" "$PRIMER_ERR"
+        assert_contains "with options: -F" "$PRIMER_ERR" "forced when overwriting"
+        assert_match "TYPE=.ext4." "$(blkid /dev/fakedisk)"
+        # Blank devices are not forced
+        dd if=/dev/zero of=/dev/fakedisk2 bs=1M count=1 conv=notrunc 2>/dev/null
+        umount /secret
+        umount /swap
+        printf "fakedisk2:ext4:/blank\n" > /tmp/disks.db
+        primer_run -s disk --disk:db /tmp/disks.db install
+        assert_equal 0 "$PRIMER_RC" "blank status"
+        assert_contains "Formatting /dev/fakedisk2 as ext4" "$PRIMER_ERR"
+        assert_not_contains "-F" "$(echo "$PRIMER_ERR" | grep Formatting)" "not forced on blank devices"
+        assert_match "TYPE=.ext4." "$(blkid /dev/fakedisk2)"'
+}
+
 test_disk_missing_device() {
     in_container "$IMG_ALPINE" '
         . test/data/disk/setup.sh

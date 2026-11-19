@@ -202,8 +202,8 @@ primer_auth_user_password() {
 }
 
 # Modify existing user $1. Options are the same as for primer_auth_user_add,
-# their defaults are the current settings of the user. An empty shell keeps the
-# current shell.
+# their defaults are the current settings of the user. Empty values (group,
+# shell, GECOS) keep the current settings.
 primer_auth_user_mod() {
     if [ "$#" -gt "0" ]; then
         _username="$1"
@@ -220,12 +220,14 @@ primer_auth_user_mod() {
         while [ $# -gt 0 ]; do
             case "$1" in
                 --group)
-                    _group=$2; shift 2;;
+                    if [ -n "$2" ]; then _group=$2; fi
+                    shift 2;;
                 --shell)
                     if [ -n "$2" ]; then _shell=$2; fi
                     shift 2;;
                 --gecos | --details | --comment)
-                    _gecos=$2; shift 2;;
+                    if [ -n "$2" ]; then _gecos=$2; fi
+                    shift 2;;
                 --pass*)
                     _password=$2; shift 2;;
                 -*)

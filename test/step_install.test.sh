@@ -158,6 +158,43 @@ test_install_directory_clean_keeps_modified_copy() {
         assert_true [ -f /opt/existing/data/added ]'
 }
 
+# Downloads replace the target only when they succeed: a failed download keeps
+# the existing target as is. Served by a local web server.
+test_install_download() {
+    in_container "$IMG_ALPINE" '
+        apk add -q busybox-extras >/dev/null
+        mkdir -p /www && echo "new content" > /www/conf.txt
+        httpd -p 127.0.0.1:8080 -h /www
+        echo old > /tmp/conf
+        chmod 0640 /tmp/conf
+        primer_run -s install --install:target "http%3A%2F%2F127.0.0.1%3A8080%2Fmissing.txt:/tmp/conf:::0640" install
+        assert_equal 0 "$PRIMER_RC" "failed download status"
+        assert_contains "Could not download http://127.0.0.1:8080/missing.txt, /tmp/conf left untouched" "$PRIMER_ERR"
+        assert_equal old "$(cat /tmp/conf)" "content after failed download"
+        primer_run -s install --install:target "http%3A%2F%2F127.0.0.1%3A8080%2Fconf.txt:/tmp/conf:::0640" install
+        assert_equal 0 "$PRIMER_RC" "download status"
+        assert_equal "new content" "$(cat /tmp/conf)"
+        assert_equal -rw-r----- "$(stat -c %A /tmp/conf)"'
+}
+
+# Installing a directory again refreshes the copy, rather than copying the
+# directory into it, also when the source has new files.
+test_install_directory_reinstall() {
+    in_container "$IMG_ALPINE" '
+        mkdir -p /src/app/sub && echo a > /src/app/a && echo b > /src/app/sub/b
+        primer_run -s install --install:target "/src/app:/opt/app" install
+        primer_run -s install --install:target "/src/app:/opt/app" install
+        assert_equal 0 "$PRIMER_RC"
+        assert_false [ -e /opt/app/app ]
+        echo c > /src/app/c
+        primer_run -s install --install:target "/src/app:/opt/app" install
+        assert_false [ -e /opt/app/app ]
+        assert_equal c "$(cat /opt/app/c)"
+        assert_equal "./a ./c ./sub ./sub/b" "$(cd /opt/app && find . -mindepth 1 | sort | tr "\n" " " | sed "s/ $//")"
+        primer_run -s install --install:target "/src/app:/opt/app" clean
+        assert_false [ -e /opt/app ]'
+}
+
 # Specifications without any colon have no destination: they are skipped, and
 # the source is left untouched.
 test_install_spec_without_destination() {

@@ -99,6 +99,9 @@ _primer_step_disk_install() {
     elif [ -z "$current" ]; then
         yush_warn "/dev/$dev has a $pttype partition table, not formatting it! Use one of its partitions, or overwrite."
         return 0
+    elif ! _primer_step_disk_mountable "$current"; then
+        yush_warn "/dev/$dev contains $current, which is not a filesystem, not touching it! Overwrite to format it."
+        return 0
     else
         if [ "$current" != "$fmt" ]; then
             yush_notice "/dev/$dev already formatted as $current, keeping it (and not $fmt)"
@@ -123,13 +126,15 @@ _primer_step_disk_install() {
         if primer_utils_var_exists "$varname"; then
             mkfs_opts=$(primer_utils_var_value "$varname")
         fi
-        # Force creation, as we have decided to (re)format: this also avoids
-        # questions when the device is not a partition (whole disks, image
-        # files). Mounted devices are still protected, see above.
-        case "$fmt" in
-            ext*) mkfs_opts="-F $mkfs_opts";;
-            xfs|btrfs) mkfs_opts="-f $mkfs_opts";;
-        esac
+        # Force creation only when overwriting existing content, so mkfs
+        # keeps its own safety checks otherwise. Mounted devices are still
+        # protected, see above.
+        if [ -n "$current" ] || [ -n "$pttype" ]; then
+            case "$fmt" in
+                ext*) mkfs_opts="-F $mkfs_opts";;
+                xfs|btrfs) mkfs_opts="-f $mkfs_opts";;
+            esac
+        fi
 
         # Format with requested filesystem
         yush_notice "Formatting /dev/$dev as $fmt with options: $mkfs_opts"
@@ -254,6 +259,18 @@ _primer_step_disk_field() {
     printf %s\\n "$2" | awk -F: -v f="$1" '{ print $f }'
 }
 
+# Print the value of the blkid field $1, e.g. TYPE, from the blkid output on
+# stdin. Values can contain any character but quotes, e.g. crypto_LUKS.
 _primer_step_disk_blkid_val() {
-    grep -Eo "[[:space:]]${1}=\"[[:alnum:]-]+\"" | sed -E "s/[[:space:]]${1}=\"([[:alnum:]-]+)\"/\1/"
+    grep -Eo "[[:space:]]${1}=\"[^\"]*\"" | sed -E "s/[[:space:]]${1}=\"([^\"]*)\"/\1/"
+}
+
+# Can the content type $1, as reported by blkid, be mounted? Encrypted
+# volumes, LVM, RAID or ZFS members and swap are containers or special areas,
+# not filesystems.
+_primer_step_disk_mountable() {
+    case "$1" in
+        crypto_*|*_member|*_raid*|swap|zfs*|bcache*|BitLocker) return 1;;
+        *) return 0;;
+    esac
 }

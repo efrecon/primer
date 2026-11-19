@@ -59,6 +59,9 @@ primer_step_users() {
                 if yush_is_true "$PRIMER_STEP_USERS_PWSAVE"; then
                     _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
                     yush_notice "Will store cleartext passwords in $_pwstore"
+                    # Make the store private before anything is written to it.
+                    ( umask 077 && touch "$_pwstore" )
+                    chmod go-rwx "$_pwstore"
                 fi
                 while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
@@ -83,8 +86,10 @@ primer_step_users() {
                                 else
                                     yush_info "Creating user $username with password $password Copy password, cannot be recovered!"
                                 fi
+                            elif [ -n "$password" ]; then
+                                yush_notice "Creating user $username with password from $PRIMER_STEP_USERS_DB, this is insecure!"
                             else
-                                yush_notice "Creating user $username with password from $USERS, this is insecure!"
+                                yush_notice "Creating user $username without password"
                             fi
                             primer_auth_user_add "$username" \
                                                     --group "$group" \

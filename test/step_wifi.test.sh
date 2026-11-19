@@ -100,6 +100,23 @@ test_wifi_install_replaces_changed_settings() {
         assert_equal 640 "$(stat -c %a /etc/network/interfaces)" "mode kept"'
 }
 
+# A block without its end marker (e.g. edited by hand) is never removed, as
+# that would remove everything after it: the file is left untouched.
+test_wifi_damaged_block() {
+    in_container "$IMG_ALPINE" '
+        . test/data/wifi/setup.sh
+        printf "\n# primer autoadd wifi settings: wlan0\nauto wlan0\n\nauto eth1\niface eth1 inet dhcp\n" >> /etc/network/interfaces
+        cp /etc/network/interfaces /tmp/before
+        primer_run -s wifi --wifi:essid IEEE --wifi:psk password install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_contains "have no end marker, leaving the file untouched" "$PRIMER_ERR"
+        assert_equal "$(cat /tmp/before)" "$(cat /etc/network/interfaces)" "after install"
+        primer_run -s wifi clean
+        assert_equal 0 "$PRIMER_RC" "clean status"
+        assert_contains "have no end marker, leaving the file untouched" "$PRIMER_ERR"
+        assert_equal "$(cat /tmp/before)" "$(cat /etc/network/interfaces)" "after clean"'
+}
+
 test_wifi_clean_keeps_other_content() {
     in_container "$IMG_ALPINE" '
         . test/data/wifi/setup.sh

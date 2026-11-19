@@ -15,6 +15,9 @@ or new installation steps:
 + Do not expect GNU utilities installed, instead code for [busybox], alt. for
   both when the busybox implementation would be more complex or slower.
 + Document your code!
++ Write in British English: documentation, comments and messages, e.g.
+  behaviour, colour, initialise, licence (the noun). Names from code, options,
+  commands or external projects are kept as they are, e.g. `--color`.
 
   [shellcheck]: https://www.shellcheck.net/
   [busybox]: https://busybox.net/
@@ -78,3 +81,10 @@ or new installation steps:
   `# shellcheck disable=SC2016` to keep [shellcheck] quiet about this.
 + When a test exposes a bug, fix the code, not the test.
 
+## Documentation
+
++ Keep Markdown lines at 80 characters at most: wrap paragraphs and list items,
+  without splitting inline code or links across lines. Split long commands in
+  code blocks with `\` continuations.
++ Only lines that cannot be wrapped may be longer: verbatim program output in
+  code blocks, and link reference definitions whose URL alone is too long.

@@ -13,8 +13,13 @@ the time of writing.
 The `ssh-keygen` program is installed when missing, from the package providing
 it on the distribution (e.g. `openssh-client` on Debian derivatives,
 `openssh-keygen` on Alpine). On generation, the keys are created in the `.ssh`
-subdirectory of the home directory, which is created when missing, and will be named with `id_` followed by the type of the key, i.e. as
-of the current default for the `ssh-keygen` program.
+subdirectory of the home directory, which is created when missing, and will be
+named with `id_` followed by the type of the key, i.e. as of the current default
+for the `ssh-keygen` program. Existing keys are kept.
+
+Generated keys have a comment ending with `(primer)`. When cleaning, only keys
+carrying this marker are removed: keys that existed before, or were created by
+other means, are kept.
 
 ## Options
 

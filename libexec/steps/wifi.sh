@@ -98,8 +98,9 @@ _primer_step_wifi_install() {
                 yush_debug "Information for $PRIMER_STEP_WIFI_ESSID already present at $PRIMER_STEP_WIFI_IFLIST"
             else
                 yush_notice "Replacing wifi settings for $PRIMER_STEP_WIFI_INTERFACE at $PRIMER_STEP_WIFI_IFLIST"
-                _primer_step_wifi_remove
-                printf '\n%s\n' "$_block" | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
+                if _primer_step_wifi_remove; then
+                    printf '\n%s\n' "$_block" | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
+                fi
             fi
         else
             $PRIMER_OS_SUDO mkdir -p "$(dirname "$PRIMER_STEP_WIFI_IFLIST")"
@@ -120,7 +121,7 @@ _primer_step_wifi_clean() {
         $PRIMER_OS_SUDO ifdown --force -v "$PRIMER_STEP_WIFI_INTERFACE"
     fi
 
-    _primer_step_wifi_remove
+    _primer_step_wifi_remove || true
 }
 
 # Print the marker comment of type $1 (autoadd or endof) for the interface.
@@ -146,37 +147,65 @@ _primer_step_wifi_block() {
 
 # Print the block for the interface currently in the list of interfaces.
 _primer_step_wifi_current() {
-    awk -v start="$(_primer_step_wifi_marker autoadd)" \
-        -v end="$(_primer_step_wifi_marker endof)" '
-        $0 == start { cut=1 }
-        cut == 1 { print }
-        $0 == end { cut=0 }
-    ' "$PRIMER_STEP_WIFI_IFLIST"
+    _cur_start=$(_primer_step_wifi_marker autoadd)
+    _cur_end=$(_primer_step_wifi_marker endof)
+    _cur_in=0
+    while IFS= read -r _cur_line || [ -n "$_cur_line" ]; do
+        if [ "$_cur_line" = "$_cur_start" ]; then _cur_in=1; fi
+        if [ "$_cur_in" = "1" ]; then printf '%s\n' "$_cur_line"; fi
+        if [ "$_cur_line" = "$_cur_end" ]; then _cur_in=0; fi
+    done < "$PRIMER_STEP_WIFI_IFLIST"
 }
 
 # Remove the block for the interface from the list of interfaces. This needs
 # to match against the lines that are added as comments when installing,
-# including the empty line that precedes the block.
+# including the empty line that precedes the block. A block without its end
+# marker (e.g. after a manual edit) is never removed, as everything after it
+# would go: the file is left untouched, with a warning, and this returns 1.
 _primer_step_wifi_remove() {
     if ! [ -f "$PRIMER_STEP_WIFI_IFLIST" ]; then
         yush_debug "No $PRIMER_STEP_WIFI_IFLIST, nothing to remove"
         return 0
     fi
 
+    # Copy all lines but the block to a temporary file. An empty line is held
+    # back until the next line is known not to start the block. The loop reads
+    # from a redirection, so it runs in this shell and its state is known
+    # after it.
+    _rm_start=$(_primer_step_wifi_marker autoadd)
+    _rm_end=$(_primer_step_wifi_marker endof)
+    _rm_cut=0
+    _rm_held=0
     _iface=$(mktemp)
-    if awk -v start="$(_primer_step_wifi_marker autoadd)" \
-        -v end="$(_primer_step_wifi_marker endof)" '
-        $0 == start { cut=1; held=0; next }
-        $0 == end { cut=0; next }
-        cut == 1 { next }
-        held == 1 { print ""; held=0 }
-        $0 == "" { held=1; next }
-        { print }
-        END { if (held == 1) print "" }
-    ' "$PRIMER_STEP_WIFI_IFLIST" > "$_iface"; then
-        # Replace atomically, keeping the owner and permissions of the file.
-        primer_utils_sysfile_replace "$PRIMER_STEP_WIFI_IFLIST" < "$_iface"
+    while IFS= read -r _rm_line || [ -n "$_rm_line" ]; do
+        if [ "$_rm_line" = "$_rm_start" ]; then
+            _rm_cut=1
+            _rm_held=0
+        elif [ "$_rm_line" = "$_rm_end" ]; then
+            _rm_cut=0
+        elif [ "$_rm_cut" = "0" ]; then
+            if [ "$_rm_held" = "1" ]; then
+                echo ""
+                _rm_held=0
+            fi
+            if [ -z "$_rm_line" ]; then
+                _rm_held=1
+            else
+                printf '%s\n' "$_rm_line"
+            fi
+        fi
+    done < "$PRIMER_STEP_WIFI_IFLIST" > "$_iface"
+
+    if [ "$_rm_cut" = "1" ]; then
+        rm -f "$_iface"
+        yush_warn "Wifi settings for $PRIMER_STEP_WIFI_INTERFACE at $PRIMER_STEP_WIFI_IFLIST have no end marker, leaving the file untouched: fix it manually!"
+        return 1
     fi
+    if [ "$_rm_held" = "1" ]; then
+        echo "" >> "$_iface"
+    fi
+    # Replace atomically, keeping the owner and permissions of the file.
+    primer_utils_sysfile_replace "$PRIMER_STEP_WIFI_IFLIST" < "$_iface"
     rm -f "$_iface"
 }
 

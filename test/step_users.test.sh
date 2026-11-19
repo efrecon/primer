@@ -64,6 +64,36 @@ test_users_save_passwords() {
         assert_match "^\\$" "$hash" "password hash set"'
 }
 
+# The password store is private from the start: an abort (here, an invalid
+# shell) does not leave passwords readable by others.
+test_users_save_passwords_private() {
+    in_container "$IMG_ALPINE" '
+        umask 022
+        printf "anna:x:::\nbert:x:::/bin/nope\n" > /tmp/u.db
+        primer_run -s users --users:db /tmp/u.db --users:save 1 install
+        assert_false [ "$PRIMER_RC" = 0 ] "invalid shell aborts"
+        assert_true grep -q "^anna:" /tmp/u.pwd
+        assert_equal -rw------- "$(stat -c %A /tmp/u.pwd)"'
+}
+
+# Lines with empty fields, explicit or empty passwords work, also when run
+# again: empty fields keep the current settings of existing users.
+test_users_empty_fields() {
+    in_container "$IMG_ALPINE" '
+        printf "carol:x:::\ndave:pass1234:staff:Dave:\nerin::::\n" > /tmp/u.db
+        primer_run -s users --users:db /tmp/u.db install
+        assert_equal 0 "$PRIMER_RC" "first install"
+        assert_contains "Creating user dave with password from /tmp/u.db" "$PRIMER_ERR"
+        assert_contains "Creating user erin without password" "$PRIMER_ERR"
+        assert_equal staff "$(id -gn dave)"
+        assert_equal Dave "$(getent passwd dave | cut -d: -f5)"
+        sed -i "s|^carol:\([^:]*:[^:]*:[^:]*:\)[^:]*:|carol:\1Carol C:|" /etc/passwd
+        primer_run -s users --users:db /tmp/u.db install
+        assert_equal 0 "$PRIMER_RC" "second install"
+        assert_equal carol "$(id -gn carol)"
+        assert_equal "Carol C" "$(getent passwd carol | cut -d: -f5)" "GECOS kept"'
+}
+
 test_users_extra_groups() {
     in_container "$IMG_ALPINE" '
         primer_run -s users --users:db /primer/test/data/users.db --users:groups "extra1,extra2" install

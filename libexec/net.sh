@@ -159,7 +159,9 @@ _primer_net_curlopts() {
                     # respecting the ORS and OFS variables of awk.
                     _opts=$(    printf %s\\n "$line" |
                                 awk '{for(i=2;i<=NF;i++){ printf("%s",( (i>2) ? OFS : "" ) $i) } ; printf("%s",ORS);}' )
-                    yush_info "Picked these curl options for accessing $1: $_opts"
+                    # Options are not logged, as they often carry secrets,
+                    # e.g. tokens.
+                    yush_debug "Using curl options from $PRIMER_CURL_OPTIONS for accessing $1"
                     printf %s\\n "$_opts"
                     break
                 fi

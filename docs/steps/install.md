@@ -37,7 +37,9 @@ specification that will be overwritten for a given host.
 
 The `install` step uses `curl` when downloading remote resources. To access
 protected resources, you can match these to the relevant curl [options] using
-the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`)
+the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`). Downloads are
+first made to a temporary file: when they fail, existing destinations are left
+untouched.
 
 When a source is empty, the `install` step will either create an empty directory
 or an empty file. In that special case, directory names should end with a slash
@@ -46,8 +48,11 @@ directories. All intermediate directories will be created, if necessary.
 
 When the destination of a local file or directory is an existing directory, or
 ends with a slash, the source is copied into it, under its own name. Otherwise,
-the destination is a copy of the source. Ownership and permissions are only
-applied to what was installed, never to the directory it was copied into.
+the destination is a copy of the source. An existing destination directory that
+only contains files of the source directory is a copy made by an earlier run: it
+is refreshed, so running the step again does not nest copies. Ownership and
+permissions are only applied to what was installed, never to the directory it
+was copied into.
 
 When cleaning, what was installed is removed: files, and directories copied from
 a local source directory (recursively). Nothing records what was installed, so a

@@ -27,9 +27,12 @@ with `sdb` only formats `/dev/sdb` as `ext4` and mounts it at `/mnt/disks/sdb`.
 
 Devices that are already mounted are left untouched. Devices that already
 contain a filesystem are not reformatted, unless [`--overwrite`](#--overwrite)
-is set: they are mounted using their existing filesystem type. Whole disks with a
-partition table, but no filesystem, are neither formatted nor mounted, unless
-[`--overwrite`](#--overwrite) is set: use one of their partitions instead. Devices are
+is set: they are mounted using their existing filesystem type. Whole disks with
+a partition table, but no filesystem, are neither formatted nor mounted, unless
+[`--overwrite`](#--overwrite) is set: use one of their partitions instead. The
+same goes for devices holding something else than a filesystem, e.g. encrypted
+(LUKS) volumes, LVM, RAID or ZFS members, or swap. Formatting is only forced
+when overwriting, so `mkfs` keeps its own safety checks otherwise. Devices are
 mounted at boot through their UUID in `/etc/fstab`, replacing any previous entry
 for the same mount point. When cleaning, devices are unmounted, their entries
 removed from `/etc/fstab` and their (empty) mount points removed. Disks are not

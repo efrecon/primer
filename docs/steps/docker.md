@@ -29,10 +29,10 @@ installed, so that `docker compose` is available and `docker build` uses
 [BuildKit]. When a plugin is not already present, e.g. installed by the
 convenience [script], the step prefers distribution packages and falls back to
 installing the binary from the official releases at github ([compose][github]
-and [buildx][buildx-github]) into `/usr/local/lib/docker/cli-plugins`. Downloaded
-binaries are always verified against their sha256 sum. On Debian derivatives,
-the native `docker-compose` package is only used when it is the v2 plugin.
-Specifying a version or a sha256 sum forces installation from the binary
+and [buildx][buildx-github]) into `/usr/local/lib/docker/cli-plugins`.
+Downloaded binaries are always verified against their sha256 sum. On Debian
+derivatives, the native `docker-compose` package is only used when it is the v2
+plugin. Specifying a version or a sha256 sum forces installation from the binary
 releases.
 
   [compose]: https://docs.docker.com/compose/
@@ -46,7 +46,8 @@ releases.
 ### `--registry`
 
 This option can be specified several times, if necessary. It should point to a
-remote [registry] at which to login. The format of the value should be `username:password@host`.
+remote [registry] at which to login. The format of the value should be
+`username:password@host`.
 
 ### `--sha256`
 
@@ -72,8 +73,8 @@ This is the sha256 sum of the binary release of the [compose] plugin available
 at [github]. When the downloaded file does not match, the plugin will not be
 installed. This option is best used in combination with a specific
 [`--compose-version`](#--compose-version). When empty, the default, the sum is
-read from the `checksums.txt` file of the release instead, so downloaded binaries
-are always verified.
+read from the `checksums.txt` file of the release instead, so downloaded
+binaries are always verified.
 
 ### `--buildx-version`
 
@@ -84,12 +85,12 @@ the latest release at [github][buildx-github] otherwise.
 
 ### `--buildx-sha256`
 
-This is the sha256 sum of the binary release of the [buildx] plugin available
-at [github][buildx-github]. When the downloaded file does not match, the plugin
+This is the sha256 sum of the binary release of the [buildx] plugin available at
+[github][buildx-github]. When the downloaded file does not match, the plugin
 will not be installed. This option is best used in combination with a specific
 [`--buildx-version`](#--buildx-version). When empty, the default, the sum is
-read from the `checksums.txt` file of the release instead, so downloaded binaries
-are always verified.
+read from the `checksums.txt` file of the release instead, so downloaded
+binaries are always verified.
 
 ## Environment Variables
 

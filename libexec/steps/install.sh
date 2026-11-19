@@ -98,9 +98,17 @@ _primer_step_install() {
                     yush_debug "Target $tgt already exists!"
                     do_perms=0
                 else
+                    # Download to a temporary file first, so a failed download
+                    # never truncates an existing target.
                     yush_info "Downloading $src into $tgt"
-                    # shellcheck disable=SC2086
-                    primer_net_curl "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
+                    _download=$(mktemp)
+                    if primer_net_curl "$src" > "$_download"; then
+                        primer_utils_sysfile_replace "$tgt" < "$_download"
+                    else
+                        yush_warn "Could not download $src, $tgt left untouched"
+                        do_perms=0
+                    fi
+                    rm -f "$_download"
                 fi
             elif [ -z "$src" ]; then
                 # When the source is empty, we have a special case and simply
@@ -133,8 +141,14 @@ _primer_step_install() {
                 # so we consider it a local file or directory. When the target
                 # is an existing directory, or ends with a slash, the source is
                 # copied into it. The effective target is then the copy, so
-                # that permissions only apply to what was installed.
-                if [ -d "$tgt" ] || yush_glob '*/' "$tgt"; then
+                # that permissions only apply to what was installed. A target
+                # directory (without a slash) that only contains files from
+                # the source directory is the copy made by an earlier
+                # installation: it is refreshed rather than copied into.
+                if [ -d "$src" ] && ! yush_glob '*/' "$tgt" \
+                        && _primer_step_install_within "$src" "$tgt"; then
+                    yush_debug "$tgt is a copy of $src"
+                elif [ -d "$tgt" ] || yush_glob '*/' "$tgt"; then
                     [ -d "$tgt" ] || $PRIMER_OS_SUDO mkdir -p "$tgt"
                     tgt=${tgt%/}/$(yush_basename "${src%/}")
                 fi
@@ -234,6 +248,22 @@ _primer_step_install_rm_file() {
 _primer_step_install_tree() {
     _root=${1%/}
     $PRIMER_OS_SUDO find "$_root/" -mindepth 1 | cut -c "$(( ${#_root} + 2 ))-" | sort
+}
+
+# Does the non-empty directory at $2 only contain paths that also exist in the
+# (source) directory at $1? This is the case for a copy of $1, even when files
+# have been added to $1 since. Links to directories are never copies.
+_primer_step_install_within() {
+    if [ -d "$2" ] && ! [ -L "$2" ] && [ -d "$1" ]; then
+        _within_src=$(mktemp)
+        _primer_step_install_tree "$1" > "$_within_src"
+        _within_tgt=$(_primer_step_install_tree "$2")
+        _within_extra=$(printf %s\\n "$_within_tgt" | grep -vxF -f "$_within_src" || true)
+        rm -f "$_within_src"
+        [ -n "$_within_tgt" ] && [ -z "$_within_extra" ]
+    else
+        return 1
+    fi
 }
 
 # Is the directory at $2 a copy of the (source) directory at $1, i.e. do they

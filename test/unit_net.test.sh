@@ -251,6 +251,11 @@ test__primer_net_curlopts() {
         assert_equal "-u x-access-token:secret" "$(_primer_net_curlopts https://api.github.com/repos/a/b)"
         assert_equal "--retry 3 -H X-Test:1" "$(_primer_net_curlopts https://example.com/private/file)"
         assert_equal "--catch-all" "$(_primer_net_curlopts https://example.com/public)"
+        # Options are never logged, even at the debug level, as they carry
+        # secrets
+        YUSH_LOG_LEVEL=debug
+        assert_not_contains "secret" "$(_primer_net_curlopts https://api.github.com/x 2>&1 >/dev/null)"
+        YUSH_LOG_LEVEL=warn
         # No options file, or a missing one: no options
         PRIMER_CURL_OPTIONS=
         assert_equal "" "$(_primer_net_curlopts https://api.github.com/)"
