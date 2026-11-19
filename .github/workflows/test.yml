@@ -7,17 +7,16 @@ on:
       - master
 
 jobs:
-  shellspec:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Install shellspec
-        run: |
-          curl -fsSL https://git.io/shellspec | sh -s -- --yes
-          echo "$HOME/.local/lib/shellspec" >> "$GITHUB_PATH"
-
       - name: Run tests
-        run: shellspec -f tap
+        env:
+          # Authenticated GitHub API calls from within the test containers,
+          # to avoid anonymous rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./test/run.sh -t -j 4

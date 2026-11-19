@@ -44,6 +44,17 @@ or an empty file. In that special case, directory names should end with a slash
 in order for the `install` step to make the difference between files and
 directories. All intermediate directories will be created, if necessary.
 
+When the destination of a local file or directory is an existing directory, or
+ends with a slash, the source is copied into it, under its own name. Otherwise,
+the destination is a copy of the source. Ownership and permissions are only
+applied to what was installed, never to the directory it was copied into.
+
+When cleaning, what was installed is removed: files, and directories copied from
+a local source directory (recursively). Existing directories are never removed.
+Directories created from an empty source are only removed when they are empty.
+Use a trailing slash on the destination to copy a directory into an existing
+directory, so cleaning is unambiguous.
+
   [options]: https://curl.haxx.se/docs/manpage.html#OPTIONS
 
 ## Options

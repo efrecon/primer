@@ -24,9 +24,11 @@ for Windows clients.
 
 ### `--method`
 
-Add a single announcement method to the set of methods to enable. This option
-can be specified several times to accumulate methods. Recognised values are
-`mDNS` and `NetBIOS` (case-insensitive).
+Add a single announcement method to the set of methods to enable. The first
+occurrence of this option replaces the default set of methods, further
+occurrences add to it, without duplicates. In other words, `--method mDNS`
+enables mDNS only. Recognised values are `mDNS` and `NetBIOS`
+(case-insensitive).
 
 ### `--methods`
 
@@ -40,5 +42,5 @@ disables all announcements.
 
 This environment variable controls the set of DNS announcement methods to
 install and enable. It is a space-separated list of method names and defaults
-to `mDNS NetBIOS`. The [`--method`](#--method) option appends to it, while
-[`--methods`](#--methods) replaces it entirely.
+to `mDNS NetBIOS`. The [`--method`](#--method) option replaces it at first, then
+appends to it, while [`--methods`](#--methods) replaces it entirely.

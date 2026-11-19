@@ -53,3 +53,28 @@ or new installation steps:
   + All exported variables should start with `PRIMER_STEP_XXX_`. The `XXX` is
     the same as the name of the module, though in uppercase.
   + There should be as little exported variables as possible, preferably none.
+
+## Tests
+
++ Tests live in `test/`, in files named `<name>.test.sh`. Each test is a
+  function whose name starts with `test_`. `test/run.sh` discovers and runs
+  them, see the [README](../README.md#testing).
++ Every function of a library module in `libexec/` has at least one unit test
+  in `test/unit_<module>.test.sh`, named `test_<function>`, optionally followed
+  by a suffix, e.g. `test_primer_os_packages_alpine`.
++ Every step has tests in `test/step_<step>.test.sh`.
++ Tests always run in containers, using the helpers from `test/lib.sh`:
+  `in_container`, `primer_in` (the CLI) and `unit` (primer sourced in library
+  mode). Images are fully qualified, e.g. `docker.io/library/alpine:3.23`, so
+  they work with both docker and podman.
++ Assertions (`assert_equal`, `assert_match`, ...) run inside the containers.
+  Replace external commands with `mock` (shell functions, or executables for
+  names that are not valid function names) or `stub_bin` (executables, visible
+  to child processes).
++ Tests that need privileged containers call `require_privileged` first, and
+  `skip` explains why a test cannot run.
++ Snippets passed to the container helpers are single-quoted on purpose, as
+  they expand inside the containers. Start test files with
+  `# shellcheck disable=SC2016` to keep [shellcheck] quiet about this.
++ When a test exposes a bug, fix the code, not the test.
+

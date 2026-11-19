@@ -44,7 +44,7 @@ primer_auth_group_add() {
 # Add user $1 to group $2
 primer_auth_group_membership() {
     if [ "$#" -gt "1" ] && [ -n "$1" ] && [ -n "$2" ]; then
-        if id -Gn "$1" | grep -q "$2"; then
+        if id -Gn "$1" | tr ' ' '\n' | grep -qx "$2"; then
             yush_debug "$1 already in group $2"
         else
             yush_info "Adding $1 to group $2"
@@ -57,13 +57,25 @@ primer_auth_group_membership() {
     fi
 }
 
+# Return success when the shell passed as an argument is a valid login shell.
+_primer_auth_valid_shell() {
+    [ -f /etc/shells ] && grep -qxF "$1" /etc/shells
+}
+
+# Create user $1. Options are:
+# --group     Main group of the user, created if necessary (default: the name
+#             of the user)
+# --shell     Login shell (default: the shell of the caller, or /bin/sh)
+# --gecos     GECOS details, also --details or --comment
+# --password  Password of the user, no password when empty (the default)
 primer_auth_user_add() {
     if [ "$#" -gt "0" ]; then
         _username="$1"
         shift
-        _group="$1"
+        _group=
         _caller=$(id -un)
-        _shell=$(getent passwd | grep -q "^$_caller:" | cut -d ":" -f 7)
+        _shell=$(getent passwd "$_caller" | cut -d ":" -f 7)
+        [ -z "$_shell" ] && _shell=/bin/sh
         _gecos=""
         _password=""
         while [ $# -gt 0 ]; do
@@ -82,9 +94,10 @@ primer_auth_user_add() {
                     break;;
             esac
         done
+        [ -z "$_group" ] && _group=$_username
 
         # Validate shell
-        if ! grep -q "$_shell" /etc/shells; then
+        if ! _primer_auth_valid_shell "$_shell"; then
             yush_warn "$_shell is not a valid login shell!"
             return 1
         fi
@@ -94,8 +107,8 @@ primer_auth_user_add() {
             primer_auth_group_add "$_group"
         fi
 
-        # Create the user, coping with the nightmare of the varioud adduser and
-        # useradd and their varying options...
+        # Create the user, without password, coping with the nightmare of the
+        # various adduser and useradd and their varying options...
         if primer_utils_syscmd_exists useradd; then
             $PRIMER_OS_SUDO useradd \
                             --create-home \
@@ -103,64 +116,58 @@ primer_auth_user_add() {
                             --comment "$_gecos" \
                             --shell "$_shell" \
                         "$_username"
-            if [ -n "$_password" ]; then
-                primer_auth_user_password "$_username" "$_password"
-            fi
         elif primer_utils_syscmd_exists adduser; then
             if adduser -h 2>&1 | grep -iq busybox; then
-                if [ -z "$_password" ]; then
-                    $PRIMER_OS_SUDO adduser \
-                                    -G "$_group" \
-                                    -g "$_gecos" \
-                                    -s "$_shell" \
-                                    -D \
-                                "$_username"
-                else
-                    printf %s\\n%s\\n "$_password" "$_password" |
-                        $PRIMER_OS_SUDO adduser \
-                                    -G "$_group" \
-                                    -g "$_gecos" \
-                                    -s "$_shell" \
-                                "$_username"
-                fi
+                $PRIMER_OS_SUDO adduser \
+                                -G "$_group" \
+                                -g "$_gecos" \
+                                -s "$_shell" \
+                                -D \
+                            "$_username"
             else
-                if [ -z "$_password" ]; then
-                    $PRIMER_OS_SUDO adduser \
-                                    --ingroup "$_group" \
-                                    --gecos "$_gecos" \
-                                    --shell "$_shell" \
-                                    --disabled-password \
-                                "$_username"
-                else
-                    printf %s\\n%s\\n "$_password" "$_password" |
-                        $PRIMER_OS_SUDO adduser \
-                                    --ingroup "$_group" \
-                                    --gecos "$_gecos" \
-                                    --shell "$_shell" \
-                                "$_username"
-                fi
+                $PRIMER_OS_SUDO adduser \
+                                --ingroup "$_group" \
+                                --gecos "$_gecos" \
+                                --shell "$_shell" \
+                                --disabled-password \
+                            "$_username"
             fi
+        else
+            yush_error "Neither useradd nor adduser available, cannot create $_username"
+            return 1
+        fi
+
+        # Set the password, if any.
+        if [ -n "$_password" ]; then
+            primer_auth_user_password "$_username" "$_password"
         fi
     fi
 }
 
-
+# Set the password of user $1 to $2, does nothing when $2 is empty.
 primer_auth_user_password() {
-    if [ -n "$2" ]; then
-        printf %s\\n%s\\n "$2" "$2" | $PRIMER_OS_SUDO passwd "$1"
+    if [ -n "${2:-}" ]; then
+        if primer_utils_syscmd_exists chpasswd; then
+            printf '%s:%s\n' "$1" "$2" | $PRIMER_OS_SUDO chpasswd
+        else
+            printf %s\\n%s\\n "$2" "$2" | $PRIMER_OS_SUDO passwd "$1"
+        fi
     fi
 }
 
+# Modify existing user $1. Options are the same as for primer_auth_user_add,
+# their defaults are the current settings of the user.
 primer_auth_user_mod() {
     if [ "$#" -gt "0" ]; then
         _username="$1"
         shift
-        _group=$(id -Gn "$_username")
-        _entry=$(getent passwd | grep "^$_username:")
-        _uid=$(printf %s\\n "$_entry" | cut -d ":" -f 3)
-        _gid=$(printf %s\\n "$_entry" | cut -d ":" -f 4)
+        _entry=$(getent passwd "$_username" || true)
+        if [ -z "$_entry" ]; then
+            yush_warn "User $_username does not exist!"
+            return 1
+        fi
+        _group=$(id -gn "$_username")
         _gecos=$(printf %s\\n "$_entry" | cut -d ":" -f 5)
-        _home=$(printf %s\\n "$_entry" | cut -d ":" -f 6)
         _shell=$(printf %s\\n "$_entry" | cut -d ":" -f 7)
         _password=
         while [ $# -gt 0 ]; do
@@ -181,7 +188,7 @@ primer_auth_user_mod() {
         done
 
         # Validate shell
-        if ! grep -q "$_shell" /etc/shells; then
+        if ! _primer_auth_valid_shell "$_shell"; then
             yush_warn "$_shell is not a valid login shell!"
             return 1
         fi
@@ -198,19 +205,16 @@ primer_auth_user_mod() {
                             --shell "$_shell" \
                         "$_username"
         else
-            yush_error "Modifying /etc/passwd does not work!"
-            return 1
+            # No usermod (e.g. busybox): rewrite the entry of the user in
+            # /etc/passwd. Writing through tee keeps the owner and mode of the
+            # file (busybox cp would copy the mode of the temporary file).
+            _gid=$(getent group "$_group" | cut -d ":" -f 3)
             _tmp=$(mktemp)
-            while IFS= read -r line; do
-                echo "<< $line"
-                if grep -qE "^${_username}:"; then
-                    printf %s:x:%d:%d:%s:%s:%s\\n "$_username" "$_uid" "$_gid" "$_gecos" "$_home" "$_shell" >> "$_tmp"
-                else
-                    printf %s\\n "$line" >> "$_tmp"
-                fi
-            done </etc/passwd
-            primer_utils_path_ownership "$_tmp" --as /etc/passwd
-            $PRIMER_OS_SUDO mv -f "$_tmp" /etc/passwd
+            awk -F ":" -v OFS=":" \
+                -v u="$_username" -v g="$_gid" -v c="$_gecos" -v s="$_shell" \
+                '$1 == u { $4 = g; $5 = c; $7 = s } { print }' /etc/passwd > "$_tmp"
+            $PRIMER_OS_SUDO tee /etc/passwd < "$_tmp" > /dev/null
+            rm -f "$_tmp"
         fi
         if [ -n "$_password" ]; then
             primer_auth_user_password "$_username" "$_password"

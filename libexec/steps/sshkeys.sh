@@ -22,8 +22,22 @@ primer_step_sshkeys() {
             done
             ;;
         "install")
-            primer_os_dependency "" openssh
+            lsb_dist=$(primer_os_distribution)
+            case "$lsb_dist" in
+                *buntu|*bian)
+                    primer_os_dependency ssh-keygen openssh-client;;
+                alpine*)
+                    primer_os_dependency ssh-keygen openssh-keygen;;
+                fedora*)
+                    primer_os_dependency ssh-keygen openssh-clients;;
+                *)
+                    primer_os_dependency ssh-keygen openssh;;
+            esac
             yush_info "Creating password-less SSH $PRIMER_STEP_SSHKEYS_TYPE key pairs"
+            if ! [ -d "$HOME/.ssh" ]; then
+                mkdir -p "$HOME/.ssh"
+                chmod 700 "$HOME/.ssh"
+            fi
             if ! [ -f "$HOME/.ssh/id_$PRIMER_STEP_SSHKEYS_TYPE" ]; then
                 case "$PRIMER_STEP_SSHKEYS_TYPE" in
                     rsa)

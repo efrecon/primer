@@ -51,7 +51,7 @@ primer_step_machine() {
             fi
             ;;
         "clean")
-            yush_info "Removing Docker Compose and bash completion"
+            yush_info "Removing Docker machine and bash completion"
             if [ -f "${PRIMER_BINDIR%%/}/docker-machine" ]; then
                 $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/docker-machine"
             fi
@@ -112,9 +112,11 @@ _primer_step_machine_install() {
 
     yush_debug "Installing bash completions"
     _completion_dir=$(primer_os_bash_completion_dir)
-    ! [ -d "$_completion_dir" ] && \
-            $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
-    ! [ -f "${_completion_dir}/docker-machine" ] && \
-            primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
-                $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
+    if ! [ -d "$_completion_dir" ]; then
+        $PRIMER_OS_SUDO mkdir -p "$_completion_dir"
+    fi
+    if ! [ -f "${_completion_dir}/docker-machine" ]; then
+        primer_net_curl https://raw.githubusercontent.com/docker/machine/v"$PRIMER_STEP_MACHINE_VERSION"/contrib/completion/bash/docker-machine.bash |
+            $PRIMER_OS_SUDO tee "${_completion_dir}/docker-machine" > /dev/null
+    fi
 }

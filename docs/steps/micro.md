@@ -19,7 +19,7 @@ Version of `micro` to install. This defaults to an empty string, in which case
 the step will detect the latest semantic version from the releases available at
 [github].
 
-  [github]: https://github.com/zyedidia/micro/releases
+  [github]: https://github.com/micro-editor/micro/releases
 
 ## Environment Variables
 

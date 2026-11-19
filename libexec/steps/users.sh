@@ -3,7 +3,7 @@
 # Path to users database, a file modelled after the /etc/password file, 5
 # colon-separated fields. When the password is the letter x, one will be
 # generated. The file must end with an empty line. See
-# spec/support/data/users.db for an example file with more details on the
+# test/data/users.db for an example file with more details on the
 # format.
 PRIMER_STEP_USERS_DB=${PRIMER_STEP_USERS_DB:-}
 
@@ -71,7 +71,8 @@ primer_step_users() {
                         shell=$(printf %s::::::\\n "$line" | cut -d ":" -f "5")
                         ghusers=$(printf %s::::::\\n "$line" | cut -d ":" -f "6")
                         _caller=$(id -un)
-                        [ -z "$shell" ] && shell=$(getent passwd | grep -q "^$_caller:" | cut -d ":" -f 7)
+                        [ -z "$shell" ] && shell=$(getent passwd "$_caller" | cut -d ":" -f 7)
+                        [ -z "$shell" ] && shell=/bin/sh
 
                         if [ -z "$(getent passwd "$username")" ]; then
                             if [ "$password" = "x" ]; then
@@ -148,7 +149,11 @@ primer_step_users() {
                         username=$(printf %s\\n "$line" | cut -d ":" -f "1")
                         if [ -n "$(getent passwd "$username")" ] && [ "$username" != "$REALUSER" ]; then
                             yush_debug "Removing user $username"
-                            $PRIMER_OS_SUDO deluser "$username"
+                            if primer_utils_syscmd_exists userdel; then
+                                $PRIMER_OS_SUDO userdel "$username"
+                            else
+                                $PRIMER_OS_SUDO deluser "$username"
+                            fi
                         fi
                     fi
                 done < "${PRIMER_STEP_USERS_DB}"

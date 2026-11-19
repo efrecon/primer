@@ -226,7 +226,7 @@ primer_step_docker() {
 
             # Stop docker and remove from autostart.
             if primer_utils_syscmd_exists dockerd; then
-                if docker info; then
+                if docker info >/dev/null 2>&1; then
                     yush_info "Stopping Docker daemon"
                     primer_os_service stop docker
                 fi
@@ -260,12 +260,26 @@ _primer_step_docker_uninstall_debian() {
     if dpkg -L docker-compose 2>/dev/null | grep -q 'cli-plugins/docker-compose$'; then
         primer_os_packages del docker-compose
     fi
-    primer_os_packages del docker-ce-cli docker-ce docker.io
-    dkey_present=$(apt-key list | grep -e "Docker" -e "docker\.com" -B 1)
-    if [ -n "$dkey_present" ]; then
-        yush_info "Removing docker GPG key"
-        dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
-        $PRIMER_OS_SUDO apt-key del "$dkey"
+    # Only remove the packages that are installed, apt fails on others.
+    _primer_step_docker_uninstall_packages \
+        docker-ce-cli docker-ce docker-ce-rootless-extras containerd.io docker.io
+
+    # Remove the key of the Docker repository: in a keyring file with recent
+    # versions of the convenience script, through apt-key with older ones (when
+    # apt-key and gpg are still around, apt-key is gone since Debian 13).
+    for _keyring in /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg; do
+        if [ -f "$_keyring" ]; then
+            yush_info "Removing docker GPG keyring $_keyring"
+            $PRIMER_OS_SUDO rm -f "$_keyring"
+        fi
+    done
+    if command -v apt-key >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
+        dkey_present=$(apt-key list 2>/dev/null | grep -e "Docker" -e "docker\.com" -B 1 || true)
+        if [ -n "$dkey_present" ]; then
+            yush_info "Removing docker GPG key"
+            dkey=$(echo "$dkey_present" | head -1 | awk '{print $9$10}')
+            $PRIMER_OS_SUDO apt-key del "$dkey"
+        fi
     fi
 
     if [ -f "/etc/apt/sources.list.d/docker.list" ]; then
@@ -273,10 +287,10 @@ _primer_step_docker_uninstall_debian() {
         $PRIMER_OS_SUDO rm -f /etc/apt/sources.list.d/docker.list
     fi
 
-    if grep -q docker /etc/apt/sources.list; then
+    if [ -f /etc/apt/sources.list ] && grep -q docker /etc/apt/sources.list; then
         yush_info "Removing docker from main repo list at /etc/apt/sources.list"
         listtemp=$(mktemp)
-        grep -v "docker" /etc/apt/sources.list > "$listtemp"
+        grep -v "docker" /etc/apt/sources.list > "$listtemp" || true
         primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
         $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
     fi

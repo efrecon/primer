@@ -27,8 +27,8 @@ primer_step_machinery() {
                 [ -z "$PRIMER_STEP_MACHINERY_BRANCH" ] && PRIMER_STEP_MACHINERY_BRANCH=master
                 lsb_dist=$(primer_os_distribution)
                 case "$lsb_dist" in
-                    alpine)
-                        primer_os_packages add tcl tclx tcl-tls tcllib;;
+                    alpine*)
+                        primer_os_packages add tcl tclx tcl-tls tcl-lib;;
                     clear*linux*)
                         primer_os_packages add tcl-basic;;
                     *buntu)
@@ -50,18 +50,21 @@ primer_step_machinery() {
                                 "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH"
                 yush_debug "Installing as ${PRIMER_BINDIR%%/}/machinery"
                 $PRIMER_OS_SUDO chmod a+x "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH/machinery"
-                $PRIMER_OS_SUDO ln -s "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH/machinery" "${PRIMER_BINDIR%%/}/machinery"
+                [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+                $PRIMER_OS_SUDO ln -sf "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH/machinery" "${PRIMER_BINDIR%%/}/machinery"
                 yush_debug "Installed machinery version $("${PRIMER_BINDIR%%/}/machinery" version)"
             fi
             ;;
         "clean")
-            if [ -f "${PRIMER_BINDIR%%/}/machinery" ]; then
+            if [ -L "${PRIMER_BINDIR%%/}/machinery" ] || [ -f "${PRIMER_BINDIR%%/}/machinery" ]; then
                 yush_info "Removing ${PRIMER_BINDIR%%/}/machinery"
                 $PRIMER_OS_SUDO rm -f "${PRIMER_BINDIR%%/}/machinery"
             fi
             if [ -d "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH" ]; then
                 yush_info "Removing ${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH"
-                $PRIMER_OS_SUDO rm -f "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH"
+                $PRIMER_OS_SUDO rm -rf "${PRIMER_OPTDIR%%/}/machinery/$PRIMER_STEP_MACHINERY_BRANCH"
+                # Remove the parent directory when it is empty
+                rmdir "${PRIMER_OPTDIR%%/}/machinery" 2>/dev/null || true
             fi
             ;;
     esac

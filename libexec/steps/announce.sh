@@ -3,6 +3,10 @@
 # Announce methods
 PRIMER_STEP_ANNOUNCE_METHODS=${PRIMER_STEP_ANNOUNCE_METHODS:-"mDNS NetBIOS"}
 
+# Set once --method has been used: the first --method replaces the default set
+# of methods, further ones are added to it.
+_PRIMER_STEP_ANNOUNCE_METHOD_SET=0
+
 primer_step_announce() {
     case "$1" in
         "option")
@@ -11,9 +15,19 @@ primer_step_announce() {
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --method)
-                        PRIMER_STEP_ANNOUNCE_METHODS="$PRIMER_STEP_ANNOUNCE_METHODS $2"; shift 2;;
+                        if [ "$_PRIMER_STEP_ANNOUNCE_METHOD_SET" = "0" ]; then
+                            PRIMER_STEP_ANNOUNCE_METHODS=
+                            _PRIMER_STEP_ANNOUNCE_METHOD_SET=1
+                        fi
+                        # shellcheck disable=SC2086 # Split methods, one per line
+                        if ! printf '%s\n' $PRIMER_STEP_ANNOUNCE_METHODS | grep -qixF -- "$2"; then
+                            PRIMER_STEP_ANNOUNCE_METHODS="${PRIMER_STEP_ANNOUNCE_METHODS:+$PRIMER_STEP_ANNOUNCE_METHODS }$2"
+                        fi
+                        shift 2;;
                     --methods)
-                        PRIMER_STEP_ANNOUNCE_METHODS=$2; shift 2;;
+                        PRIMER_STEP_ANNOUNCE_METHODS=$2
+                        _PRIMER_STEP_ANNOUNCE_METHOD_SET=1
+                        shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)

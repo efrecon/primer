@@ -22,7 +22,7 @@ under the `bin` directory of `primer`.
 
 ## Options
 
-### `--bramch`
+### `--branch`
 
 Version of machinery to install. This defaults to the master branch.
 

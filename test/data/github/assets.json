@@ -1,0 +1,32 @@
+[
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/assets/9000",
+    "id": 9000,
+    "name": "checksums.txt",
+    "uploader": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/checksums.txt"
+  },
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/assets/9001",
+    "id": 9001,
+    "name": "tool_1.2.3_Linux_x86_64.tar.gz",
+    "uploader": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/tool_1.2.3_Linux_x86_64.tar.gz"
+  },
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/assets/9002",
+    "id": 9002,
+    "name": "toolctl-linux-amd64",
+    "uploader": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/toolctl-linux-amd64"
+  }
+]

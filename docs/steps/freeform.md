@@ -9,7 +9,8 @@ The `freeform` step executes all matching executable files under a root
 directory, in alphabetical order to perform freeform operations. The root
 directory should have two sub-directories, called `install` and `clean` and
 executable files will be searched for directly under these during installation
-or cleaning. By default, executables are run with administrative privileges as
+or cleaning. Executables are run with their standard input closed (redirected
+from `/dev/null`) and the first one to fail stops the step, and primer. By default, executables are run with administrative privileges as
 this is meant for installation/removal of system components.
 
 ## Options

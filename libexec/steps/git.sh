@@ -59,8 +59,10 @@ primer_step_git() {
                 _os=$(uname -s | tr '[:upper:]' '[:lower:]')
                 _platform=
                 case $(primer_os_platform) in
-                    x86_64) _platform=amd64;;
-                    x86) _platform=386;;
+                    x86_64|amd64) _platform=amd64;;
+                    x86|i?86) _platform=386;;
+                    aarch64|arm64) _platform=arm64;;
+                    armv7*|armv6*|arm) _platform=arm;;
                 esac
                 if [ -n "$_platform" ]; then
                     _tar=git-lfs-${_os}-${_platform}-v${PRIMER_STEP_GIT_LFS_VERSION}.tar.gz
@@ -102,7 +104,7 @@ primer_step_git() {
                             fi
                         fi
                     else
-                        yush_warn "No binary at ${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/$PRIMER_STEP_GIT_LFS_VERSION/${_tar}"
+                        yush_warn "No binary at ${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v$PRIMER_STEP_GIT_LFS_VERSION/${_tar}"
                     fi
                 else
                     yush_warn "Cannot download for this platform!"
@@ -110,8 +112,10 @@ primer_step_git() {
                 rm -rf "$tmpdir"
                 # Check version
                 yush_debug "Verifying installed version against $PRIMER_STEP_GIT_LFS_VERSION"
-                if ! git-lfs --version | grep -q "$PRIMER_STEP_GIT_LFS_VERSION"; then
-                    yush_warn "Installed git-lfs version mismatch: $(git-lfs --version||true|grep -E -o '[0-9]+(\.[0-9]+)*'|head -1)"
+                if ! command -v "git-lfs" >/dev/null 2>&1; then
+                    yush_warn "git-lfs could not be installed!"
+                elif ! git-lfs --version | grep -q "$PRIMER_STEP_GIT_LFS_VERSION"; then
+                    yush_warn "Installed git-lfs version mismatch: $(git-lfs --version | grep -E -o '[0-9]+(\.[0-9]+)*' | head -1)"
                 fi
             fi
 

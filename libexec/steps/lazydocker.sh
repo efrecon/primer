@@ -61,8 +61,10 @@ _primer_step_lazydocker_install_download() {
     tmpdir=$(mktemp -d)
     _arch=$(uname -m)
     case "$_arch" in
+        aarch64|arm64) _arch=arm64;;
         armv7*) _arch=armv7;;
         armv6*) _arch=armv6;;
+        i?86) _arch=x86;;
     esac
     tar_file="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_${_arch}.tar.gz"
     if primer_net_curl "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
@@ -75,6 +77,7 @@ _primer_step_lazydocker_install_download() {
             tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
             if [ -f "$tmpdir/lazydocker" ]; then
                 chmod a+x "$tmpdir/lazydocker"
+                [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
                 $PRIMER_OS_SUDO mv -f "$tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
             fi
         fi

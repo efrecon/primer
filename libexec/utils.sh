@@ -26,7 +26,9 @@ primer_utils_var_exists() {
     return $?  # Pedantic.
 }
 
-primer_utils_var_value() { eval printf %s "\"\$$1\""; }
+# Print the value of the variable which name is passed as an argument, empty
+# when unset (also under set -u).
+primer_utils_var_value() { eval printf %s "\"\${$1:-}\""; }
 
 primer_utils_load() {
     _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
@@ -76,9 +78,15 @@ primer_utils_sysfile_append() {
 # Remove all lines matching $2 from (not only system) file at $1
 primer_utils_sysfile_clip() {
     _tmp=$(mktemp)
-    grep -v "$2" "$1" > "$_tmp"
-    primer_utils_path_ownership "$_tmp" --as "$1"
-    $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
+    # grep returns 1 when all lines are removed, which is not an error, but 2
+    # on errors, e.g. a missing file.
+    if grep -v "$2" "$1" > "$_tmp" || [ "$?" = "1" ]; then
+        primer_utils_path_ownership "$_tmp" --as "$1"
+        $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
+    else
+        rm -f "$_tmp"
+        return 1
+    fi
 }
 
 
@@ -106,7 +114,7 @@ primer_utils_path_ownership() {
             --as*)
                 _username=$(stat -c "%U" "$2")
                 _group=$(stat -c "%G" "$2")
-                _perms=$(stat -c "%A" "$2")
+                _perms=$(stat -c "%a" "$2")
                 shift 2
                 ;;
             -*)

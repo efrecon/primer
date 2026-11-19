@@ -11,16 +11,27 @@ mark `#` and empty lines are ignored. Otherwise, each line should contain a
 number of fields separated by the `:` (colon) sign. These fields are, in order:
 
 - Device to be formatted and mounted, e.g. `sdb`. This should not contain the
-  leading `/dev`.
+  leading `/dev`. Symbolic links, e.g. `disk/by-label/data`, are resolved.
 - Filesystem to use on the disk, e.g. `ext4` (the default, see below). Support
   for this filesystem should be present within the OS and can be arranged
   through the [packages] step if necessary.
 - Directory where to mount, defaults to `/mnt/disks/` followed by the name of
   the device.
-- Colon separated mount options, defaults to `defaults,discard,nofail`.
+- Comma separated mount options, defaults to `defaults,nofail`.
 - Name of user owning the mount point, defaults to `root`.
 - Group owning the mount point, defaults to `root`.
 - Permissions for the mount point, defaults to `a+w`.
+
+Empty fields, or missing trailing fields, take their default value, e.g. a line
+with `sdb` only formats `/dev/sdb` as `ext4` and mounts it at `/mnt/disks/sdb`.
+
+Devices that are already mounted are left untouched. Devices that already
+contain a filesystem are not reformatted, unless [`--overwrite`](#--overwrite)
+is set: they are mounted using their existing filesystem type. Devices are
+mounted at boot through their UUID in `/etc/fstab`, replacing any previous entry
+for the same mount point. When cleaning, devices are unmounted, their entries
+removed from `/etc/fstab` and their (empty) mount points removed. Disks are not
+erased.
 
 ## Options
 
@@ -37,7 +48,10 @@ it already contains a filesystem.
 ### `--ext4`
 
 Options to give to `mkfs.ext4`, these defaults to
-`-m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard`.
+`-m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard`. The step always adds
+the option forcing filesystem creation (`-F` for ext filesystems, `-f` for xfs
+and btrfs), as it only formats devices that are empty or when asked to
+overwrite.
 
 ## Environment Variables
 

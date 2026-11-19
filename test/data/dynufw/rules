@@ -1,0 +1,3 @@
+# Dynamic rules used by the tests: protocol:port:host. localhost resolves
+# without DNS, through /etc/hosts.
+tcp:8443:localhost

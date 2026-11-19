@@ -107,7 +107,7 @@ EOF
                     if [ -n "$line" ]; then
                         _primer_step_github_parse "$line"
                         yush_debug "Looking for executable matching $bin under $PRIMER_BINDIR"
-                        find "${PRIMER_BINDIR}" -name "$bin" -perm -a=x |
+                        find "${PRIMER_BINDIR}" -mindepth 1 -maxdepth 1 -name "$bin" -perm -a=x |
                         while IFS= read -r fpath; do
                             yush_notice "Removing $fpath"
                             $PRIMER_OS_SUDO rm -f "$fpath"
@@ -154,6 +154,12 @@ _primer_step_github_latest() {
     r_id=
     r_tag=
     while IFS= read -r line; do
+        # Only consider lines at the first level of indentation of the object
+        # returned, i.e. 2 spaces. Nested objects, e.g. the author of the
+        # release, also have an "id" and a "name".
+        if ! printf %s\\n "$line" | grep -Eq '^[[:space:]]{2}"'; then
+            continue
+        fi
         if printf %s\\n "$line" | grep -Eq '"name"[[:space:]]*:'; then
             r_name=$(printf %s\\n "$line" | sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/g')
         fi
@@ -191,7 +197,7 @@ _primer_step_github_by_version() {
         # Only consider lines at the first level of identation in the objects of
         # the array returned, i.e. 2x2spaces: 2 spaces of indentation, two
         # levels.
-        if printf %s\\n "$line" | grep -Eq '^\s{4}"'; then
+        if printf %s\\n "$line" | grep -Eq '^[[:space:]]{4}"'; then
             if printf %s\\n "$line" | grep -Eq '"name"[[:space:]]*:'; then
                 r_name=$(printf %s\\n "$line" | sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/g')
             fi
@@ -254,14 +260,24 @@ _primer_step_github_install_download() {
             unzip "${tmpdir}/$_fname" -d "$tmpdir"
             rm -f "${tmpdir}/$_fname"; # Remove ZIP file at once, we are done
             ;;
-        default)
-            yush_warn "Does not recognise archive type of $_fname";;
+        *)
+            # Not an archive: a binary released as-is. Name it after the binary
+            # to install, unless that is a glob-filter.
+            _dst=$_fname
+            case "$2" in
+                *[\*\?\[]*) ;;
+                *) _dst=$2;;
+            esac
+            primer_net_curl "$1" > "${tmpdir}/${_dst}"
+            chmod a+x "${tmpdir}/${_dst}"
+            ;;
     esac
 
     # Find something that is executable by everybody and matches the filter
     # passed as $2. For all matching binaries, install them to $PRIMER_BINDIR,
     # e.g. /usr/local/bin in most cases.
-    find "$tmpdir" -name "$2" -perm -a=x |
+    [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+    find "$tmpdir" -type f -name "$2" -perm -a=x |
     while IFS= read -r fpath; do
         yush_notice "Installing $(yush_basename "$fpath") to $PRIMER_BINDIR"
         $PRIMER_OS_SUDO mv -f "$fpath" "${PRIMER_BINDIR}"

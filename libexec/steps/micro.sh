@@ -6,10 +6,10 @@ PRIMER_STEP_MICRO_VERSION=${PRIMER_STEP_MICRO_VERSION:-}
 
 # URL to JSON file where to find the list of releases of micro. The code only
 # supports github API.
-PRIMER_STEP_MICRO_RELEASES=https://api.github.com/repos/zyedidia/micro/releases
+PRIMER_STEP_MICRO_RELEASES=https://api.github.com/repos/micro-editor/micro/releases
 
 # Root URL to download location
-PRIMER_STEP_MICRO_DOWNLOAD=https://github.com/zyedidia/micro/releases/download
+PRIMER_STEP_MICRO_DOWNLOAD=https://github.com/micro-editor/micro/releases/download
 
 primer_step_micro() {
     case "$1" in
@@ -59,13 +59,13 @@ _primer_step_micro_install_download() {
     tmpdir=$(mktemp -d)
     ostype=$(printf %s\\n "$(uname -s)" | tr '[:upper:]' '[:lower:]')
     case "$(uname -m)" in
-        x86_64)
-            tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}$(getconf LONG_BIT)-static.tar.gz";;
-        x86)
-            tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}$(getconf LONG_BIT).tar.gz";;
+        x86_64|amd64)
+            tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}64-static.tar.gz";;
+        i?86|x86)
+            tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}32.tar.gz";;
         armv8*|aarch*)
             tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}-arm64.tar.gz";;
-        armv7*)
+        armv7*|armv6*)
             tar_file="micro-${PRIMER_STEP_MICRO_VERSION}-${ostype}-arm.tar.gz";;
         *)
             yush_error "No known binaries on this platform"; return;;
@@ -74,6 +74,7 @@ _primer_step_micro_install_download() {
     if primer_net_curl "${PRIMER_STEP_MICRO_DOWNLOAD%%/}/v$PRIMER_STEP_MICRO_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
         tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
         if [ -f "$tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" ]; then
+            [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
             $PRIMER_OS_SUDO mv -f "$tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"
         else
             yush_error "No micro binary found in tar file!"

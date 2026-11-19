@@ -6,9 +6,10 @@
 #   * root user (i.e. sudo not used)
 PRIMER_OS_SUDO=''
 primer_os_sudo() {
+    PRIMER_OS_SUDO=''
     if [ "$(id -u)" -ne "0" ]; then
         # verify that 'sudo' is present before assuming we can use it
-        if ! [ -x "$(which sudo 2>/dev/null)" ]; then
+        if ! command -v sudo >/dev/null 2>&1; then
             primer_abort "Cannot find sudo"
         fi
 
@@ -16,13 +17,14 @@ primer_os_sudo() {
     fi
 }
 
-# Get platform, this supposes linux and intel
+# Get the hardware platform, i.e. the machine name as reported by uname -m,
+# e.g. x86_64, aarch64 or armv7l. All 32-bit Intel variants are reported as x86.
 primer_os_platform() {
-    if [ "$(getconf LONG_BIT)" = "64" ]; then
-        echo "x86_64"
-    else
-        echo "x86"
-    fi
+    _machine=$(uname -m)
+    case "$_machine" in
+        i?86) echo "x86";;
+        *) printf %s\\n "$_machine";;
+    esac
 }
 
 PRIMER_OS_DISTRO=""
@@ -91,7 +93,7 @@ PRIMER_OS_UPGRADED=${PRIMER_OS_UPGRADED:-"0"}
 primer_os_upgrade() {
     # Update indices
     primer_os_update
-    if [ "$PRIMER_OS_UPGRADED" = "0" ] || [ "$1" = "-f" ] || [ "$1" = "--force" ]; then
+    if [ "$PRIMER_OS_UPGRADED" = "0" ] || [ "${1:-}" = "-f" ] || [ "${1:-}" = "--force" ]; then
         yush_info "Unattended upgrade of the OS (this might take time!)"
         lsb_dist=$(primer_os_distribution)
         case "$lsb_dist" in
@@ -217,7 +219,9 @@ primer_os_packages() {
                     $PRIMER_OS_SUDO dpkg --get-selections | grep -v deinstall | awk '{print $1}'
                     ;;
                 alpine*)
-                    _primer_os_apk list -I 2>/dev/null | awk '{print $1}'
+                    # apk info lists the names of installed packages only,
+                    # independently of the log level.
+                    apk info 2>/dev/null
                     ;;
                 clear*linux*)
                     $PRIMER_OS_SUDO swupd bundle-list --status | grep installed | awk '{print $2}'
@@ -230,9 +234,24 @@ primer_os_packages() {
             esac
             ;;
         installed)
-            # Is package passed as argument installed
+            # Is the package passed as argument installed? This is an exact
+            # match on the name of the package.
             shift
-            primer_os_packages list | grep -q "^$1"
+            case "$lsb_dist" in
+                *buntu|*bian)
+                    # shellcheck disable=SC2016
+                    dpkg-query -W -f='${Status}\n' "$1" 2>/dev/null | grep -q 'install ok installed'
+                    ;;
+                alpine*)
+                    apk info -e "$1" >/dev/null 2>&1
+                    ;;
+                fedora*)
+                    rpm -q "$1" >/dev/null 2>&1
+                    ;;
+                *)
+                    primer_os_packages list | grep -qx "$1"
+                    ;;
+            esac
             ;;
         search)
             shift
@@ -248,7 +267,8 @@ primer_os_packages() {
                         grep "^$1\$"
                     ;;
                 alpine*)
-                    _primer_os_apk search -x "$1"
+                    # Quiet mode prints names only, as for other distros.
+                    apk search -q -x "$1"
                     ;;
                 clear*linux*)
                     _primer_os_swupd search "$1" |
@@ -297,6 +317,9 @@ primer_os_in_container() {
 }
 
 primer_os_service() {
+    # The name of the service is optional for list, default to empty so that
+    # this works under set -u.
+    set -- "${1:-}" "${2:-}"
     if printf %s\\n "$1" | grep -qE '(start|stop|enable|disable|restart|list)'; then
         if primer_os_in_container; then
             yush_notice "Service $2 $1 is not relevant in a container"

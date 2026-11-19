@@ -4,7 +4,8 @@
 set -eu
 
 # Root directory of the script
-PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
+# (can be set from the outside when sourcing primer, as $0 is then the shell).
+[ -z "${PRIMER_ROOT_DIR:-}" ] && PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
 ### AMLG_START
 # Our library for scripts and dependencies.
 PRIMER_LIB_DIR=
@@ -89,6 +90,12 @@ done
 
 ### AMLG_START ./libexec/steps/*.sh
 ### AMLG_END
+
+# Library mode: when sourced with PRIMER_LIBRARY=1, stop here. All modules (and
+# steps in the amalgamation) are loaded, but no option is parsed and nothing
+# runs. This is used by the test suite.
+# shellcheck disable=SC2317
+[ "${PRIMER_LIBRARY:-0}" = "1" ] && return 0
 
 # Print usage on stderr and exit
 usage() {

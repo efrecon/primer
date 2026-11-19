@@ -199,7 +199,7 @@ docker run \
   -v $(pwd):/primer:ro \
   --entrypoint /primer/primer \
   ubuntu \
-  --users:db /primer/spec/support/data/users.db \
+  --users:db /primer/test/data/users.db \
   --docker:access ".*"
 ```
 
@@ -525,21 +525,47 @@ chmod a+x ./primer.sh
 
 ## Testing
 
-Primer comes with a test suite, based on [shellspec].
-Provided you have installed [shellspec] and it is in your path,
-run the following command from the main directory of the project to run the test
-suite.
-The test suite requires that you have [docker] installed on your machine and
-that your user is able to call the `docker` client without elevated privileges.
-Running inside [docker] allows to perform OS-wide modifications in the context
-of containers so as to not pollute your main system.
+Primer comes with a test suite written in plain POSIX shell, so it needs no
+other tool than [docker] or [podman]. All tests run in throwaway containers, so
+they can modify the system freely without touching your host. The suite uses the
+first of `docker` and `podman` that is installed and working. Set
+`PRIMER_TEST_RUNTIME`, or use `-r`, to pick one explicitly. Run it from the
+main directory of the project:
 
 ```shell
-shellspec
+./test/run.sh
 ```
 
-  [shellspec]: https://shellspec.info/
+The suite contains:
+
++ Unit tests for every function of the library modules in [libexec](./libexec/),
+  in `test/unit_<module>.test.sh`. They source primer in library mode, call the
+  functions directly in a container and replace external commands with mocks
+  when needed, e.g. to emulate firewalls or services.
++ Tests for every installation [step](#steps), in `test/step_<step>.test.sh`.
+  Most run primer for real in Alpine and Debian containers and verify the
+  resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
+  tested with mocks. Some tests, e.g. `docker` and `firewall`, need privileged
+  containers; they are skipped, with a reason, under rootless podman.
++ Tests of the command-line interface, in `test/primer.test.sh`.
+
+Tests are named `file:function`. Any argument to `run.sh` is an extended regular
+expression that selects tests by name, and `-l` lists them. When run without
+patterns, the suite also checks that every library function and every step has
+tests. Run `./test/run.sh -h` for all options:
+
+```shell
+./test/run.sh -l                     # List all tests
+./test/run.sh '^unit_'               # Only unit tests
+./test/run.sh step_docker -j 8       # Docker step tests, 8 in parallel
+./test/run.sh -t                     # TAP output, as in CI
+```
+
+Some steps download releases from GitHub. Set `GITHUB_TOKEN` to make these
+calls authenticated and avoid anonymous rate limits.
+
   [docker]: https://docker.com/
+  [podman]: https://podman.io/
 
 ## Contributing
 

@@ -55,19 +55,23 @@ primer_step_install() {
 }
 
 _primer_step_install() {
-    src=$(printf %s\\n "$2" | cut -d ":" -f "1" | primer_net_urldec)
-    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | primer_net_urldec)
-    user=$(printf %s\\n "$2" | cut -d ":" -f "3")
+    src=$(_primer_step_install_field "$2" 1 | primer_net_urldec)
+    tgt=$(_primer_step_install_field "$2" 2 | primer_net_urldec)
+    if [ -z "$tgt" ]; then
+        yush_warn "No destination in installation specification $2, skipping"
+        return 0
+    fi
+    user=$(_primer_step_install_field "$2" 3)
     if [ -z "$user" ]; then
         user=$(id -un)
         yush_debug "$tgt will be owned by user: $user"
     fi
-    group=$(printf %s\\n "$2" | cut -d ":" -f "4")
+    group=$(_primer_step_install_field "$2" 4)
     if [ -z "$group" ]; then
         group=$(id -gn)
         yush_debug "$tgt will be owned by group: $group"
     fi
-    perms=$(printf %s\\n "$2" | cut -d ":" -f "5")
+    perms=$(_primer_step_install_field "$2" 5)
     if [ -z "$perms" ]; then
         perms=u+rw,g+r,g-w,o-rw
         yush_debug "Permissions for $tgt will be: $perms"
@@ -126,24 +130,27 @@ _primer_step_install() {
                 fi
             else
                 # When here, the source is neither empty, nor a remote resource,
-                # so we consider it a local resource. We copy recursively or
-                # just the file depending on the target type.
-                if [ -d "$tgt" ]; then
-                    if yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
-                        yush_info "Recursively copying $src into $tgt"
-                        $PRIMER_OS_SUDO cp -R "$src" "$tgt"
+                # so we consider it a local file or directory. When the target
+                # is an existing directory, or ends with a slash, the source is
+                # copied into it. The effective target is then the copy, so
+                # that permissions only apply to what was installed.
+                if [ -d "$tgt" ] || yush_glob '*/' "$tgt"; then
+                    [ -d "$tgt" ] || $PRIMER_OS_SUDO mkdir -p "$tgt"
+                    tgt=${tgt%/}/$(yush_basename "${src%/}")
+                fi
+                if { [ -e "$tgt" ] || [ -L "$tgt" ]; } && ! yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
+                    yush_debug "Target $tgt already exists!"
+                    do_perms=0
+                elif [ -d "$src" ]; then
+                    yush_info "Recursively copying $src to $tgt"
+                    if [ -d "$tgt" ]; then
+                        $PRIMER_OS_SUDO cp -R "${src%/}/." "$tgt"
                     else
-                        yush_debug "Target directory $tgt already exists!"
-                        do_perms=0
+                        $PRIMER_OS_SUDO cp -R "$src" "$tgt"
                     fi
                 else
-                    if [ -f "$tgt" ] && ! yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
-                        yush_debug "Target $tgt already exists!"
-                        do_perms=0
-                    else
-                        yush_info "Copying $src into $tgt"
-                        $PRIMER_OS_SUDO cp "$src" "$tgt"
-                    fi
+                    yush_info "Copying $src to $tgt"
+                    $PRIMER_OS_SUDO cp "$src" "$tgt"
                 fi
             fi
 
@@ -156,26 +163,53 @@ _primer_step_install() {
             fi
             ;;
         "clean")
-            if printf %s\\n "$src" | grep -Eq '^https?://'; then
+            if [ -z "$src" ] && yush_glob '*/' "$tgt"; then
+                # Directories created from an empty source are only removed
+                # when empty, they might have been populated since.
                 if [ -d "$tgt" ]; then
-                    tgt=${tgt%/}/$(yush_basename "$src")
+                    if [ -z "$(ls -A "$tgt")" ]; then
+                        yush_info "Removing directory $tgt"
+                        $PRIMER_OS_SUDO rmdir "$tgt"
+                    else
+                        yush_warn "Directory $tgt is not empty, keeping it"
+                    fi
                 fi
-            fi
-            if [ -d "$tgt" ]; then
-                # If the source was a directory, remove the entire directory
-                # destination. Otherwise, only remove the file that it created.
-                if [ -d "$src" ]; then
-                    yush_info "Recursively removing $tgt"
-                    $PRIMER_OS_SUDO rm -rf "$tgt"
-                else
-                    tgt=${tgt%/}/$(yush_basename "$src")
+            else
+                # Find out the effective target, as when installing: sources
+                # are copied into target directories.
+                if printf %s\\n "$src" | grep -Eq '^https?://'; then
+                    if [ -d "$tgt" ]; then
+                        tgt=${tgt%/}/$(yush_basename "$src")
+                    fi
+                elif [ -n "$src" ]; then
+                    _into=${tgt%/}/$(yush_basename "${src%/}")
+                    if yush_glob '*/' "$tgt"; then
+                        tgt=$_into
+                    elif [ -d "$tgt" ] && { ! [ -d "$src" ] || [ -e "$_into" ]; }; then
+                        tgt=$_into
+                    fi
+                fi
+                if [ -d "$tgt" ] && ! [ -L "$tgt" ]; then
+                    # Only remove directories that were copied from a
+                    # directory, never existing directories.
+                    if [ -d "$src" ]; then
+                        yush_info "Recursively removing $tgt"
+                        $PRIMER_OS_SUDO rm -rf "$tgt"
+                    else
+                        yush_warn "Not removing directory $tgt"
+                    fi
+                elif [ -e "$tgt" ] || [ -L "$tgt" ]; then
                     yush_info "Removing $tgt"
                     $PRIMER_OS_SUDO rm -f "$tgt"
                 fi
-            else
-                yush_info "Removing $tgt"
-                $PRIMER_OS_SUDO rm -f "$tgt"
             fi
             ;;
     esac
+}
+
+# Print field number $2 of the colon-separated specification $1, empty when the
+# specification has less fields (cut would print the whole line when there is
+# no colon at all).
+_primer_step_install_field() {
+    printf %s\\n "$1" | awk -F: -v n="$2" '{print $n}'
 }
