@@ -238,3 +238,32 @@ test_primer_auth_user_mod_debian() {
         bob=$(getent passwd bob)
         '"$_AUTH_MOD"
 }
+
+# The busybox path rewrites /etc/passwd: it must refuse to write when the
+# group cannot be resolved, and only touch the exact user. Passes now.
+test_primer_auth_user_mod_alpine_guards() {
+    unit "$IMG_ALPINE" 'adduser -D al; adduser -D alice
+        before=$(cat /etc/passwd)
+        alice=$(getent passwd alice)
+        # Group creation silently does nothing: no gid, no change
+        addgroup() { :; }
+        assert_exit 1 primer_auth_user_mod al --group ghost
+        assert_equal "$before" "$(cat /etc/passwd)" "passwd untouched"
+        unset -f addgroup
+        # A user named as a prefix of another one
+        primer_auth_user_mod al --gecos "Al"
+        assert_equal Al "$(getent passwd al | cut -d: -f5)"
+        assert_equal "$alice" "$(getent passwd alice)"
+        assert_equal "$(printf "%s\n" "$before" | wc -l)" "$(wc -l < /etc/passwd)"'
+}
+
+# login.defs without UID_MIN/UID_MAX (they are optional): use the defaults.
+# FAILS NOW: the list is empty.
+test_primer_auth_user_list_logindefs() {
+    unit "$IMG_ALPINE" "$_AUTH_USERS_ALPINE"'
+        printf "PASS_MAX_DAYS 99999\n" > /etc/login.defs
+        run primer_auth_user_list
+        assert_equal "alice
+bob" "$RUN_OUT"
+        assert_equal "" "$RUN_ERR"'
+}

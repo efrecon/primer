@@ -267,3 +267,44 @@ test_primer_utils_path_ownership_alpine() {
 test_primer_utils_path_ownership_debian() {
     unit "$IMG_TRIXIE" 'useradd -m -U bob'"$UTILS_OWNERSHIP_TEST"
 }
+
+# Replacing a file through a symbolic link updates the target and keeps the
+# link. FAILS NOW: the link becomes a regular file with mode 777.
+test_primer_utils_sysfile_replace_symlink() {
+    unit "$IMG_ALPINE" '
+        mkdir -p /tmp/real
+        printf "old\n" > /tmp/real/conf
+        chmod 640 /tmp/real/conf
+        ln -s /tmp/real/conf /tmp/link
+        printf "new\n" | primer_utils_sysfile_replace /tmp/link
+        assert_true test -L /tmp/link
+        assert_equal new "$(cat /tmp/real/conf)"
+        assert_equal 640 "$(stat -c %a /tmp/real/conf)"
+        assert_equal "" "$(ls -A /tmp /tmp/real | grep -E "^\.(link|conf)\.")" "no temporary file left"'
+}
+
+# The system file helpers as a non-root user with real sudo, as on most hosts.
+# Needs network (apk add sudo). FAILS NOW on clip: grep reads the file
+# without sudo.
+test_primer_utils_sysfile_clip_sudo() {
+    unit "$IMG_ALPINE" '
+        apk add -q sudo >/dev/null
+        adduser -D op
+        echo "op ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/op
+        printf "old\nkeep\n" > /etc/primer.conf
+        chmod 640 /etc/primer.conf
+        cat > /tmp/as-op.sh <<"EOF"
+. /primer/test/lib.sh
+unit_load
+primer_os_sudo
+assert_equal sudo "$PRIMER_OS_SUDO"
+printf "new\nkeep\n" | primer_utils_sysfile_replace /etc/primer.conf
+printf "more\n" | primer_utils_sysfile_append /etc/primer.conf
+primer_utils_sysfile_clip /etc/primer.conf "^new"
+EOF
+        run su op -s /bin/sh -c "sh /tmp/as-op.sh"
+        assert_equal 0 "$RUN_RC" "$RUN_ERR"
+        assert_equal "keep
+more" "$(cat /etc/primer.conf)"
+        assert_equal "640 root root" "$(stat -c "%a %U %G" /etc/primer.conf)"'
+}

@@ -288,7 +288,12 @@ systemctl enable docker
 systemctl disable docker
 systemctl mask docker" "$(mock_calls)"
         assert_equal "docker
-ssh" "$(primer_os_service list)"'
+ssh" "$(primer_os_service list)"
+        mock_reset
+        primer_os_service list docker >/dev/null
+        primer_os_service list >/dev/null
+        assert_equal "systemctl --no-pager --no-legend list-units docker.service
+systemctl --no-pager --no-legend list-units *.service" "$(mock_calls)"'
 }
 
 test_primer_os_service_service() {
@@ -400,4 +405,17 @@ test_primer_os_service_list_without_name() {
         run primer_os_service list
         assert_equal 0 "$RUN_RC"
         assert_contains "not relevant in a container" "$RUN_ERR"'
+}
+
+# Package names with characters other than letters, digits, - and _. No
+# network: apt-cache is stubbed. FAILS NOW on g++.
+test_primer_os_packages_search_names() {
+    unit "$IMG_TRIXIE" '
+        printf "%s\n" "g++ - GNU C++ compiler" "g++-14 - GNU C++ compiler" \
+            "libstdc++6 - GNU Standard C++ Library v3" \
+            "python3.13 - Interactive high-level language" > /tmp/apt-cache.out
+        stub_bin apt-cache "cat /tmp/apt-cache.out"
+        assert_equal "g++" "$(primer_os_packages search g++)"
+        assert_equal "libstdc++6" "$(primer_os_packages search libstdc++6)"
+        assert_equal "python3.13" "$(primer_os_packages search python3.13)"'
 }

@@ -79,28 +79,34 @@ primer_utils_sysfile_append() {
 # from stdin, keeping the owner and access rights of the file (a new file is
 # made readable by all). The content is first written to a temporary file in
 # the same directory, which is then moved in place: the file is replaced
-# atomically and never left truncated or half-written.
+# atomically and never left truncated or half-written. When $1 is a symbolic
+# link, the file it points to is replaced, and the link kept.
 primer_utils_sysfile_replace() {
-    _rpl_tmp=$($PRIMER_OS_SUDO mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")
+    _rpl_path=$1
+    if [ -L "$_rpl_path" ]; then
+        _rpl_path=$($PRIMER_OS_SUDO readlink -f "$1")
+    fi
+    _rpl_tmp=$($PRIMER_OS_SUDO mktemp "$(dirname "$_rpl_path")/.$(basename "$_rpl_path").XXXXXX")
     if $PRIMER_OS_SUDO tee "$_rpl_tmp" > /dev/null; then
-        if [ -e "$1" ]; then
-            primer_utils_path_ownership "$_rpl_tmp" --as "$1"
+        if [ -e "$_rpl_path" ]; then
+            primer_utils_path_ownership "$_rpl_tmp" --as "$_rpl_path"
         else
             $PRIMER_OS_SUDO chmod 644 "$_rpl_tmp"
         fi
-        $PRIMER_OS_SUDO mv -f "$_rpl_tmp" "$1"
+        $PRIMER_OS_SUDO mv -f "$_rpl_tmp" "$_rpl_path"
     else
         $PRIMER_OS_SUDO rm -f "$_rpl_tmp"
         return 1
     fi
 }
 
-# Remove all lines matching $2 from (not only system) file at $1
+# Remove all lines matching the basic regular expression $2 from (not only
+# system) file at $1. The file is read with sudo, as only root might be able to.
 primer_utils_sysfile_clip() {
     _clip_tmp=$(mktemp)
     # grep returns 1 when all lines are removed, which is not an error, but 2
     # on errors, e.g. a missing file.
-    if grep -v "$2" "$1" > "$_clip_tmp" || [ "$?" = "1" ]; then
+    if $PRIMER_OS_SUDO grep -v -e "$2" "$1" > "$_clip_tmp" || [ "$?" = "1" ]; then
         primer_utils_sysfile_replace "$1" < "$_clip_tmp"
         rm -f "$_clip_tmp"
     else

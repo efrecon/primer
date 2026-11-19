@@ -5,10 +5,11 @@ primer_auth_user_list() {
     if [ "$#" -gt "0" ] && { [ "$1" = "-a" ] || [ "$1" = "--all" ]; }; then
         getent passwd | cut -d ":" -f "1"
     elif [ -f "/etc/login.defs" ]; then
-        # Only regular users
-        _min=$(grep -E ^UID_MIN /etc/login.defs | awk '{print $2}')
-        _max=$(grep -E ^UID_MAX /etc/login.defs | awk '{print $2}')
-        _primer_auth_getent_passwd "$_min" "$_max"
+        # Only regular users. Both settings are optional, use the defaults
+        # otherwise.
+        _min=$(awk '$1 == "UID_MIN" { print $2; exit }' /etc/login.defs)
+        _max=$(awk '$1 == "UID_MAX" { print $2; exit }' /etc/login.defs)
+        _primer_auth_getent_passwd "${_min:-1000}" "${_max:-60000}"
     else
         yush_debug "No /etc/login.defs, using defaults"
         _primer_auth_getent_passwd "1000" "60000"

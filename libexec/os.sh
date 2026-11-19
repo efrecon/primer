@@ -258,13 +258,13 @@ primer_os_packages() {
             case "$lsb_dist" in
                 *buntu)
                     $PRIMER_OS_SUDO apt-cache search "$1" |
-                        sed -E 's/([[:alnum:]\-_]+)\s+-\s*.*/\1/' |
-                        grep "^$1\$"
+                        sed -E 's/^([[:alnum:]_.+-]+)[[:space:]]+-.*/\1/' |
+                        grep -xF -e "$1"
                     ;;
                 *bian)
                     $PRIMER_OS_SUDO apt-cache search "$1" |
-                        sed -E 's/([[:alnum:]\-_]+)\s+-\s*.*/\1/' |
-                        grep "^$1\$"
+                        sed -E 's/^([[:alnum:]_.+-]+)[[:space:]]+-.*/\1/' |
+                        grep -xF -e "$1"
                     ;;
                 alpine*)
                     # Quiet mode prints names only, as for other distros.

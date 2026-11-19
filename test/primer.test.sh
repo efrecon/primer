@@ -96,8 +96,14 @@ test_cli_info_lists_step_options() {
 }
 
 test_cli_env_lists_steps_and_host() {
-    primer_in "$IMG_ALPINE" -s packages env -- '
+    primer_in -h primer-env "$IMG_ALPINE" -s packages env -- '
         assert_equal 0 "$PRIMER_RC"
+        assert_match "^_hostinfo:$" "$PRIMER_OUT"
+        assert_match "^[[:space:]]+distribution: alpine$" "$PRIMER_OUT"
+        assert_match "^[[:space:]]+version: $(cat /etc/alpine-release)$" "$PRIMER_OUT"
+        assert_match "^[[:space:]]+hostname: primer-env$" "$PRIMER_OUT"
+        assert_match "^[[:space:]]+mac: ([0-9a-f]{2}:){5}[0-9a-f]{2}$" "$PRIMER_OUT"
+        assert_match "^packages: " "$PRIMER_OUT"
         assert_contains "PRIMER_STEP_PACKAGES_PACKAGES" "$PRIMER_OUT"'
 }
 
@@ -199,4 +205,33 @@ test_primer_hostinfo() {
         assert_match "^	distribution: alpine$" "$out"
         assert_match "^	version: $(cat /etc/alpine-release)$" "$out"
         assert_match "^	hostname: primer-host$" "$out"'
+}
+
+# The default configuration is ./primer.env, then ./primer_<mac>.env (MAC of
+# the primary interface, lowercase, no separators). Command-line options win.
+# Passes now.
+test_cli_config_mac_file() {
+    in_container "$IMG_ALPINE" '
+        mac=$(unit_load; primer_net_macaddr "$(primer_net_primary_interface)" | tr -d :)
+        assert_match "^[0-9a-f]{12}$" "$mac"
+        mkdir -p /tmp/cfg && cd /tmp/cfg
+        printf "PRIMER_STEPS=test\nTEST_TEST=variable\nTEST_VARIABLE=generic\n" > primer.env
+        printf "TEST_VARIABLE=host-%s\n" "$mac" > "primer_${mac}.env"
+        primer_run -v error
+        assert_equal 0 "$PRIMER_RC"
+        assert_equal "host-$mac" "$PRIMER_OUT"
+        primer_run -v error --test:variable fromCli
+        assert_equal fromCli "$PRIMER_OUT"'
+}
+
+# Unknown steps abort before later steps run, failing steps fail primer.
+# Passes now.
+test_cli_failing_steps() {
+    in_container "$IMG_ALPINE" '
+        primer_run -v error -s "nosuchstep test" --test:test variable --test:variable ran
+        assert_equal 1 "$PRIMER_RC"
+        assert_contains "primer_step_nosuchstep not implemented" "$PRIMER_ERR"
+        assert_not_contains ran "$PRIMER_OUT"
+        primer_run -v error -s test --test:test os_nosuchfunction
+        assert_false [ "$PRIMER_RC" = 0 ]'
 }
