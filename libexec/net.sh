@@ -183,8 +183,9 @@ primer_net_curl() {
     # Construct a curl command, forcing some decent options first, then the one
     # that could be specific for that (group of) URLs, last from the caller.
     yush_trace "Downloading $_url"
-    # Always fail on HTTP errors, and show progress at the info level and below.
-    if yush_loglevel_le info; then
+    # Always fail on HTTP errors, and only show progress at the debug level
+    # and below.
+    if yush_loglevel_le debug; then
         _copts="-fSL --progress-bar"
     else
         _copts=-fsSL

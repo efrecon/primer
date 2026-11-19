@@ -21,13 +21,28 @@ _users_db_verify='
     assert_equal /bin/sh "$(getent passwd manu | cut -d: -f7)"
     assert_equal "Leunamme Nocerf,Super Vilain,+46457678," "$(getent passwd manu | cut -d: -f5)"
     assert_match "^Emmanuel Frecon" "$(getent passwd emmanuel | cut -d: -f5)"
-    # No shell in the DB: the shell of the caller (root)
-    assert_equal "$(getent passwd root | cut -d: -f7)" "$(getent passwd emmanuel | cut -d: -f7)"
+    # No shell in the DB: the default login shell of the platform
+    case "$(. /etc/os-release && echo "$ID")" in
+        debian) assert_equal /bin/bash "$(getent passwd emmanuel | cut -d: -f7)";;
+        *) assert_equal /bin/sh "$(getent passwd emmanuel | cut -d: -f7)";;
+    esac
     assert_true [ -d /home/emmanuel ]
 '
 
 test_users_db_alpine() {
     primer_in "$IMG_ALPINE" -s users --users:db /primer/test/data/users.db install -- "$_users_db_verify"
+}
+
+# Existing users without a shell in the DB keep their shell.
+test_users_db_keeps_shell() {
+    in_container "$IMG_ALPINE" '
+        primer_run -s users --users:db /primer/test/data/users.db install
+        assert_equal 0 "$PRIMER_RC" "first install"
+        sed -i "s|^\(emmanuel:.*\):[^:]*$|\1:/bin/ash|" /etc/passwd
+        assert_equal /bin/ash "$(getent passwd emmanuel | cut -d: -f7)"
+        primer_run -s users --users:db /primer/test/data/users.db install
+        assert_equal 0 "$PRIMER_RC" "second install"
+        assert_equal /bin/ash "$(getent passwd emmanuel | cut -d: -f7)"'
 }
 
 test_users_db_debian() {

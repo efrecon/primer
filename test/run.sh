@@ -13,7 +13,7 @@ export TEST_ROOT
 # shellcheck source=/dev/null
 . "$TEST_ROOT/test/lib.sh"
 
-JOBS=4
+JOBS=
 TAP=0
 KEEP=0
 LIST=0
@@ -29,7 +29,8 @@ expressions matched against test names, formatted as file:function, e.g.
 tests run, together with a coverage check.
 
 Options:
-  -j N        Number of tests to run in parallel (default: $JOBS)
+  -j N        Number of tests to run in parallel (default: number of CPUs of
+              the container runtime, at least 2)
   -t          Output results in TAP format
   -k          Keep the directory with test logs, even on success
   -l          List matching tests and exit
@@ -38,6 +39,8 @@ Options:
 
 Environment:
   PRIMER_TEST_RUNTIME  Same as -r
+  PRIMER_TEST_WARM     Set to 0 to use the official Debian images instead of
+                       warm copies (see warm_image in test/lib.sh)
   GITHUB_TOKEN         When set, used for GitHub API calls in containers
   YUSH_LOG_LEVEL       Log level of primer in unit tests (default: warn)
 USAGE
@@ -129,6 +132,19 @@ if ! container_runtime >/dev/null; then
 fi
 export PRIMER_TEST_RUNTIME PRIMER_TEST_ROOTLESS
 
+# Default parallelism: as many tests as the container runtime has CPUs. Most
+# of the time goes to installing packages, so running more only slows down all
+# of them.
+if [ -z "$JOBS" ]; then
+    case "$(basename "$PRIMER_TEST_RUNTIME")" in
+        podman) JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.Host.CPUs}}' 2>/dev/null || true);;
+        *) JOBS=$("$PRIMER_TEST_RUNTIME" info --format '{{.NCPU}}' 2>/dev/null || true);;
+    esac
+    case "$JOBS" in
+        ''|*[!0-9]*|0|1) JOBS=2;;
+    esac
+fi
+
 LOGS=$(mktemp -d "${TMPDIR:-/tmp}/primer-tests.XXXXXX")
 TOTAL=$(printf %s\\n "$TESTS" | wc -l | tr -d ' ')
 [ "$#" = "0" ] && TOTAL=$((TOTAL + 1))
@@ -144,6 +160,26 @@ fi
 for _img in "$IMG_ALPINE" "$IMG_TRIXIE" "$IMG_BOOKWORM"; do
     "$PRIMER_TEST_RUNTIME" pull -q "$_img" >/dev/null 2>&1 || true
 done
+
+# Use warm copies of the Debian images, when the selected tests use them.
+if [ "${PRIMER_TEST_WARM:-1}" != "0" ]; then
+    for _var in IMG_TRIXIE IMG_BOOKWORM; do
+        for _file in $(printf %s\\n "$TESTS" | cut -d: -f1 | sort -u); do
+            if grep -qF -e "\$$_var" -e "\${$_var}" "$TEST_ROOT/test/${_file}.test.sh"; then
+                eval "_img=\$$_var"
+                if [ "$TAP" = "1" ]; then
+                    echo "# Preparing warm copy of $_img"
+                else
+                    echo "Preparing warm copy of $_img"
+                fi
+                _warm=$(warm_image "$_img")
+                eval "$_var=\$_warm"
+                break
+            fi
+        done
+    done
+fi
+export IMG_ALPINE IMG_TRIXIE IMG_BOOKWORM
 
 NUM=0
 PASSED=0

@@ -52,3 +52,17 @@ test_freeform_missing_directory() {
         primer_run -s freeform --freeform:root /tmp/nonexisting install
         assert_equal 0 "$PRIMER_RC"'
 }
+
+# Links to executable files run, links to directories are skipped.
+test_freeform_runs_symlinks() {
+    in_container "$IMG_ALPINE" '
+        mkdir -p /tmp/ff/install /tmp/scripts/dir
+        printf "#!/bin/sh\necho linked >> /tmp/ff.log\n" > /tmp/scripts/linked.sh
+        printf "#!/bin/sh\necho plain >> /tmp/ff.log\n" > /tmp/ff/install/1.sh
+        chmod a+x /tmp/scripts/linked.sh /tmp/ff/install/1.sh
+        ln -s /tmp/scripts/linked.sh /tmp/ff/install/2.sh
+        ln -s /tmp/scripts/dir /tmp/ff/install/3.sh
+        primer_run -s freeform --freeform:root /tmp/ff install
+        assert_equal 0 "$PRIMER_RC"
+        assert_equal "plain linked" "$(tr "\n" " " < /tmp/ff.log | sed "s/ $//")"'
+}

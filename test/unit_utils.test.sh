@@ -159,6 +159,36 @@ b
 c" "$(cat /tmp/sysfile)"'
 }
 
+# The replacement keeps ownership and access rights, happens through a rename
+# (a new inode, so never a truncated file), and leaves no temporary file.
+UTILS_REPLACE_TEST='
+    mkdir -p /tmp/dir
+    printf "old\n" > /tmp/dir/sysfile
+    chown nobody /tmp/dir/sysfile
+    chmod 604 /tmp/dir/sysfile
+    inode=$(stat -c %i /tmp/dir/sysfile)
+    printf "new 1\nnew 2\n" | primer_utils_sysfile_replace /tmp/dir/sysfile
+    assert_equal "new 1
+new 2" "$(cat /tmp/dir/sysfile)"
+    assert_equal "604 nobody" "$(stat -c "%a %U" /tmp/dir/sysfile)"
+    assert_false [ "$inode" = "$(stat -c %i /tmp/dir/sysfile)" ]
+    assert_equal "sysfile" "$(ls -A /tmp/dir)" "no temporary file left"
+    # Empty content
+    primer_utils_sysfile_replace /tmp/dir/sysfile < /dev/null
+    assert_false [ -s /tmp/dir/sysfile ]
+    # New files are readable by all
+    printf "x\n" | primer_utils_sysfile_replace /tmp/dir/newfile
+    assert_equal "x" "$(cat /tmp/dir/newfile)"
+    assert_equal "644" "$(stat -c %a /tmp/dir/newfile)"'
+
+test_primer_utils_sysfile_replace_alpine() {
+    unit "$IMG_ALPINE" "$UTILS_REPLACE_TEST"
+}
+
+test_primer_utils_sysfile_replace_debian() {
+    unit "$IMG_TRIXIE" "$UTILS_REPLACE_TEST"
+}
+
 # The clip keeps ownership and access rights of the original file, and works
 # also when all lines are removed.
 UTILS_CLIP_TEST='
@@ -220,7 +250,15 @@ UTILS_OWNERSHIP_TEST='
     assert_equal "604 bob users" "$(stat -c "%a %U %G" /tmp/target)"
     chmod 2750 /tmp/reference
     primer_utils_path_ownership /tmp/target --as /tmp/reference
-    assert_equal "2750 bob users" "$(stat -c "%a %U %G" /tmp/target)"'
+    assert_equal "2750 bob users" "$(stat -c "%a %U %G" /tmp/target)"
+    # Owners without names
+    chown 4242:4343 /tmp/reference
+    primer_utils_path_ownership /tmp/target --as /tmp/reference
+    assert_equal "4242 4343" "$(stat -c "%u %g" /tmp/target)"
+    # Variables of the caller are kept
+    _username=caller _group=callers
+    primer_utils_path_ownership /tmp/target --as /tmp/reference
+    assert_equal "caller callers" "$_username $_group"'
 
 test_primer_utils_path_ownership_alpine() {
     unit "$IMG_ALPINE" 'adduser -D bob'"$UTILS_OWNERSHIP_TEST"

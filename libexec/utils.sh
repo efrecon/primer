@@ -75,16 +75,36 @@ primer_utils_sysfile_append() {
     $PRIMER_OS_SUDO tee -a "$1" > /dev/null
 }
 
+# Replace the content of the (not only system) file at $1 with what comes in
+# from stdin, keeping the owner and access rights of the file (a new file is
+# made readable by all). The content is first written to a temporary file in
+# the same directory, which is then moved in place: the file is replaced
+# atomically and never left truncated or half-written.
+primer_utils_sysfile_replace() {
+    _rpl_tmp=$($PRIMER_OS_SUDO mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")
+    if $PRIMER_OS_SUDO tee "$_rpl_tmp" > /dev/null; then
+        if [ -e "$1" ]; then
+            primer_utils_path_ownership "$_rpl_tmp" --as "$1"
+        else
+            $PRIMER_OS_SUDO chmod 644 "$_rpl_tmp"
+        fi
+        $PRIMER_OS_SUDO mv -f "$_rpl_tmp" "$1"
+    else
+        $PRIMER_OS_SUDO rm -f "$_rpl_tmp"
+        return 1
+    fi
+}
+
 # Remove all lines matching $2 from (not only system) file at $1
 primer_utils_sysfile_clip() {
-    _tmp=$(mktemp)
+    _clip_tmp=$(mktemp)
     # grep returns 1 when all lines are removed, which is not an error, but 2
     # on errors, e.g. a missing file.
-    if grep -v "$2" "$1" > "$_tmp" || [ "$?" = "1" ]; then
-        primer_utils_path_ownership "$_tmp" --as "$1"
-        $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
+    if grep -v "$2" "$1" > "$_clip_tmp" || [ "$?" = "1" ]; then
+        primer_utils_sysfile_replace "$1" < "$_clip_tmp"
+        rm -f "$_clip_tmp"
     else
-        rm -f "$_tmp"
+        rm -f "$_clip_tmp"
         return 1
     fi
 }
@@ -98,23 +118,27 @@ primer_utils_sysfile_clip() {
 # --perm   chmod compatible access rights
 # --as     Take ownership and access rights from this file/dir instead
 primer_utils_path_ownership() {
-    _path="$1"
+    # Variables are prefixed, as callers might use the same names (shell
+    # variables are global).
+    _po_path="$1"
     shift
-    _username=$(id -un)
-    _group=$(id -gn)
-    _perms="u+rw,go-rw"
+    _po_user=$(id -un)
+    _po_group=$(id -gn)
+    _po_perms="u+rw,go-rw"
     while [ $# -gt 0 ]; do
         case "$1" in
             --user*)
-                _username=$2; _group=$(id -gn "$2");  shift 2;;
+                _po_user=$2; _po_group=$(id -gn "$2");  shift 2;;
             --group*)
-                _group=$2;  shift 2;;
+                _po_group=$2;  shift 2;;
             --perm*)
-                _perms=$2; shift 2;;
+                _po_perms=$2; shift 2;;
             --as*)
-                _username=$(stat -c "%U" "$2")
-                _group=$(stat -c "%G" "$2")
-                _perms=$(stat -c "%a" "$2")
+                # Numeric ids, as the reference might be owned by ids without
+                # names.
+                _po_user=$(stat -c "%u" "$2")
+                _po_group=$(stat -c "%g" "$2")
+                _po_perms=$(stat -c "%a" "$2")
                 shift 2
                 ;;
             -*)
@@ -124,6 +148,6 @@ primer_utils_path_ownership() {
         esac
     done
 
-    $PRIMER_OS_SUDO chown -R "${_username}:${_group}" "$_path"
-    $PRIMER_OS_SUDO chmod -R "$_perms" "$_path"
+    $PRIMER_OS_SUDO chown -R "${_po_user}:${_po_group}" "$_po_path"
+    $PRIMER_OS_SUDO chmod -R "$_po_perms" "$_po_path"
 }

@@ -79,6 +79,27 @@ test_wifi_already_connected() {
         assert_not_contains "ifup" "$(mock_calls)"'
 }
 
+# Changing network or passphrase replaces the block, keeping the rest.
+test_wifi_install_replaces_changed_settings() {
+    in_container "$IMG_ALPINE" '
+        . test/data/wifi/setup.sh
+        chmod 640 /etc/network/interfaces
+        primer_run -s wifi --wifi:essid IEEE --wifi:psk password install
+        assert_equal 0 "$PRIMER_RC" "first install"
+        primer_run -s wifi --wifi:essid IEEE --wifi:psk password install
+        assert_not_contains "Replacing wifi settings" "$PRIMER_ERR" "unchanged settings"
+        primer_run -s wifi --wifi:essid Other --wifi:psk "another secret" install
+        assert_equal 0 "$PRIMER_RC" "second install"
+        assert_contains "Replacing wifi settings for wlan0" "$PRIMER_ERR"
+        ifs=$(cat /etc/network/interfaces)
+        assert_equal 1 "$(grep -c "^# primer autoadd wifi settings: wlan0$" /etc/network/interfaces)" "blocks"
+        assert_contains "wpa-ssid \"Other\"" "$ifs"
+        assert_not_contains "IEEE" "$ifs"
+        assert_not_contains "'"$WIFI_IEEE_PSK"'" "$ifs"
+        assert_contains "$(cat test/data/wifi/interfaces)" "$ifs" "original content kept"
+        assert_equal 640 "$(stat -c %a /etc/network/interfaces)" "mode kept"'
+}
+
 test_wifi_clean_keeps_other_content() {
     in_container "$IMG_ALPINE" '
         . test/data/wifi/setup.sh

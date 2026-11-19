@@ -37,11 +37,14 @@ primer_step_freeform() {
                     find "${PRIMER_STEP_FREEFORM_ROOT%/}/$1" \
                             -maxdepth 1 \
                             -mindepth 1 \
-                            -type f \
+                            ! -type d \
                             -executable \
                             -name "$PRIMER_STEP_FREEFORM_FILTER" |
                         sort |
                         while IFS= read -r fpath || [ -n "$fpath" ]; do
+                            # Files and links to files only: find does not
+                            # follow links, -f does.
+                            [ -f "$fpath" ] || continue
                             yush_info "${1}ing $fpath"
                             if yush_is_true "$PRIMER_STEP_FREEFORM_SUDO"; then
                                 yush_info "Running $fpath as administrator"

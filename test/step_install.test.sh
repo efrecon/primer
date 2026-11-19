@@ -107,6 +107,57 @@ test_install_into_existing_directory() {
         assert_true [ -d /srv/data ]'
 }
 
+# A directory copied into an existing directory: cleaning removes the copy, and
+# never the existing directory, even when cleaning twice or before installing.
+test_install_directory_clean_keeps_target() {
+    in_container "$IMG_ALPINE" '
+        mkdir -p /srv/data/sub /opt/keep
+        echo hi > /srv/data/sub/f
+        echo precious > /opt/keep/file
+        spec="/srv/data:/opt"
+        primer_run -s install --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC" "clean before install"
+        assert_equal precious "$(cat /opt/keep/file)"
+        primer_run -s install --install:target "$spec" install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_equal hi "$(cat /opt/data/sub/f)"
+        primer_run -s install --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC" "first clean"
+        assert_false [ -e /opt/data ]
+        primer_run -s install --install:target "$spec" clean
+        assert_equal 0 "$PRIMER_RC" "second clean"
+        assert_equal precious "$(cat /opt/keep/file)"
+        # Same, with a target ending with a slash and an empty target
+        rm -rf /opt/keep
+        primer_run -s install --install:target "/srv/data:/opt/" install
+        primer_run -s install --install:target "/srv/data:/opt/" clean
+        primer_run -s install --install:target "/srv/data:/opt/" clean
+        primer_run -s install --install:target "/srv/data:/opt" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_true [ -d /opt ]'
+}
+
+# Copies that were modified after installation are kept.
+test_install_directory_clean_keeps_modified_copy() {
+    in_container "$IMG_ALPINE" '
+        mkdir -p /srv/data /opt/existing
+        echo hi > /srv/data/f
+        primer_run -s install --install:target "/srv/data:/opt/copy" install
+        primer_run -s install --install:target "/srv/data:/opt/existing" install
+        assert_true [ -f /opt/copy/f ]
+        assert_true [ -f /opt/existing/data/f ]
+        echo extra > /opt/copy/added
+        echo extra > /opt/existing/data/added
+        primer_run -s install --install:target "/srv/data:/opt/copy" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_contains "/opt/copy is not a copy of /srv/data" "$PRIMER_ERR"
+        assert_true [ -f /opt/copy/added ]
+        primer_run -s install --install:target "/srv/data:/opt/existing" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_contains "/opt/existing/data is not a copy of /srv/data (anymore)" "$PRIMER_ERR"
+        assert_true [ -f /opt/existing/data/added ]'
+}
+
 # Specifications without any colon have no destination: they are skipped, and
 # the source is left untouched.
 test_install_spec_without_destination() {

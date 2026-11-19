@@ -174,34 +174,39 @@ _primer_step_install() {
                         yush_warn "Directory $tgt is not empty, keeping it"
                     fi
                 fi
+            elif printf %s\\n "$src" | grep -Eq '^https?://'; then
+                # Downloads are placed into target directories.
+                if [ -d "$tgt" ]; then
+                    tgt=${tgt%/}/$(yush_basename "$src")
+                fi
+                _primer_step_install_rm_file "$tgt"
+            elif [ -d "$src" ]; then
+                # Directories are copied into existing target directories, or
+                # become the target. As nothing records which one happened,
+                # only remove directories that are (still) a copy of the
+                # source: the copy inside the target first, then the target
+                # itself, unless it ends with a slash, i.e. was meant as a
+                # parent directory. This never removes a directory that
+                # existed before installation, even when cleaning twice.
+                _into=${tgt%/}/$(yush_basename "${src%/}")
+                if _primer_step_install_is_copy "$src" "$_into"; then
+                    yush_info "Recursively removing $_into"
+                    $PRIMER_OS_SUDO rm -rf "$_into"
+                elif ! yush_glob '*/' "$tgt" && _primer_step_install_is_copy "$src" "$tgt"; then
+                    yush_info "Recursively removing $tgt"
+                    $PRIMER_OS_SUDO rm -rf "$tgt"
+                elif [ -e "$_into" ]; then
+                    yush_warn "$_into is not a copy of $src (anymore), not removing it"
+                elif [ -e "$tgt" ] && ! yush_glob '*/' "$tgt"; then
+                    yush_notice "$tgt is not a copy of $src, not removing it"
+                fi
             else
-                # Find out the effective target, as when installing: sources
-                # are copied into target directories.
-                if printf %s\\n "$src" | grep -Eq '^https?://'; then
-                    if [ -d "$tgt" ]; then
-                        tgt=${tgt%/}/$(yush_basename "$src")
-                    fi
-                elif [ -n "$src" ]; then
-                    _into=${tgt%/}/$(yush_basename "${src%/}")
-                    if yush_glob '*/' "$tgt"; then
-                        tgt=$_into
-                    elif [ -d "$tgt" ] && { ! [ -d "$src" ] || [ -e "$_into" ]; }; then
-                        tgt=$_into
-                    fi
+                # Files are copied into target directories, or become the
+                # target.
+                if [ -n "$src" ] && { yush_glob '*/' "$tgt" || [ -d "$tgt" ]; }; then
+                    tgt=${tgt%/}/$(yush_basename "$src")
                 fi
-                if [ -d "$tgt" ] && ! [ -L "$tgt" ]; then
-                    # Only remove directories that were copied from a
-                    # directory, never existing directories.
-                    if [ -d "$src" ]; then
-                        yush_info "Recursively removing $tgt"
-                        $PRIMER_OS_SUDO rm -rf "$tgt"
-                    else
-                        yush_warn "Not removing directory $tgt"
-                    fi
-                elif [ -e "$tgt" ] || [ -L "$tgt" ]; then
-                    yush_info "Removing $tgt"
-                    $PRIMER_OS_SUDO rm -f "$tgt"
-                fi
+                _primer_step_install_rm_file "$tgt"
             fi
             ;;
     esac
@@ -212,4 +217,33 @@ _primer_step_install() {
 # no colon at all).
 _primer_step_install_field() {
     printf %s\\n "$1" | awk -F: -v n="$2" '{print $n}'
+}
+
+# Remove the file (or link) at $1, never a directory.
+_primer_step_install_rm_file() {
+    if [ -d "$1" ] && ! [ -L "$1" ]; then
+        yush_warn "Not removing directory $1"
+    elif [ -e "$1" ] || [ -L "$1" ]; then
+        yush_info "Removing $1"
+        $PRIMER_OS_SUDO rm -f "$1"
+    fi
+}
+
+# Print the paths of all files and directories under directory $1, relative
+# to $1, sorted.
+_primer_step_install_tree() {
+    _root=${1%/}
+    $PRIMER_OS_SUDO find "$_root/" -mindepth 1 | cut -c "$(( ${#_root} + 2 ))-" | sort
+}
+
+# Is the directory at $2 a copy of the (source) directory at $1, i.e. do they
+# contain the same, non-empty, set of paths? Links to directories are never
+# copies.
+_primer_step_install_is_copy() {
+    if [ -d "$2" ] && ! [ -L "$2" ] && [ -d "$1" ]; then
+        _src_tree=$(_primer_step_install_tree "$1")
+        [ -n "$_src_tree" ] && [ "$_src_tree" = "$(_primer_step_install_tree "$2")" ]
+    else
+        return 1
+    fi
 }

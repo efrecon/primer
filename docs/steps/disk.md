@@ -27,7 +27,9 @@ with `sdb` only formats `/dev/sdb` as `ext4` and mounts it at `/mnt/disks/sdb`.
 
 Devices that are already mounted are left untouched. Devices that already
 contain a filesystem are not reformatted, unless [`--overwrite`](#--overwrite)
-is set: they are mounted using their existing filesystem type. Devices are
+is set: they are mounted using their existing filesystem type. Whole disks with a
+partition table, but no filesystem, are neither formatted nor mounted, unless
+[`--overwrite`](#--overwrite) is set: use one of their partitions instead. Devices are
 mounted at boot through their UUID in `/etc/fstab`, replacing any previous entry
 for the same mount point. When cleaning, devices are unmounted, their entries
 removed from `/etc/fstab` and their (empty) mount points removed. Disks are not
@@ -43,7 +45,7 @@ Specifies the path to the disk specification file.
 
 The value of this option should be a boolean (`yes`/`no`, `true`/`false`,
 `on`/`off`, an integer). When it is true, the disk will be reformatted even if
-it already contains a filesystem.
+it already contains a filesystem, or a partition table.
 
 ### `--ext4`
 

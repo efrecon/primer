@@ -260,16 +260,29 @@ _primer_step_github_install_download() {
             unzip "${tmpdir}/$_fname" -d "$tmpdir"
             rm -f "${tmpdir}/$_fname"; # Remove ZIP file at once, we are done
             ;;
+        *.gz)
+            # A single compressed binary.
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.gz}")
+            primer_net_curl "$1" | gzip -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
+        *.bz2)
+            primer_os_dependency bzip2
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.bz2}")
+            primer_net_curl "$1" | bzip2 -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
+        *.xz)
+            _primer_step_github_xz_dependency
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.xz}")
+            primer_net_curl "$1" | xz -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
         *)
-            # Not an archive: a binary released as-is. Name it after the binary
-            # to install, unless that is a glob-filter.
-            _dst=$_fname
-            case "$2" in
-                *[\*\?\[]*) ;;
-                *) _dst=$2;;
-            esac
+            # Not an archive: a binary released as-is.
+            _dst=$(_primer_step_github_binname "$2" "$_fname")
             primer_net_curl "$1" > "${tmpdir}/${_dst}"
-            chmod a+x "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
             ;;
     esac
 
@@ -290,9 +303,42 @@ _primer_step_github_install_download() {
 # (old-style) compress format, etc.
 _primer_step_github_untar() {
     primer_os_dependency tar
-    if yush_loglevel_le verbose; then
+    if yush_loglevel_le debug; then
         primer_net_curl "$1" | tar -C "$2" -"${3}xvf" -
     else
         primer_net_curl "$1" | tar -C "$2" -"${3}xf" -
+    fi
+}
+
+# Print the name to give to a downloaded binary: the binary to install ($1),
+# unless that is a glob-filter, in which case the name of the download ($2).
+_primer_step_github_binname() {
+    case "$1" in
+        *[\*\?\[]*) printf %s\\n "$2";;
+        *) printf %s\\n "$1";;
+    esac
+}
+
+# Make the downloaded file passed as an argument executable when it is a
+# binary (ELF) or a script. Remove it otherwise, e.g. for packages (.deb,
+# .rpm) or checksums, so that it is not installed.
+_primer_step_github_executable() {
+    # ELF binaries start with \177ELF, scripts with #!
+    if [ "$(head -c 4 "$1" | tail -c 3)" = "ELF" ] || [ "$(head -c 2 "$1")" = "#!" ]; then
+        chmod a+x "$1"
+    else
+        yush_warn "$(yush_basename "$1") is neither a binary nor a script, not installing it"
+        rm -f "$1"
+    fi
+}
+
+# Make sure xz can be used for decompression: busybox only provides unxz and
+# xzcat, and the package is called differently on Debian derivatives.
+_primer_step_github_xz_dependency() {
+    if ! primer_utils_syscmd_exists xz; then
+        case "$(primer_os_distribution)" in
+            *buntu|*bian) primer_os_packages add xz-utils;;
+            *) primer_os_packages add xz;;
+        esac
     fi
 }

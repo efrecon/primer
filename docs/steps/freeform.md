@@ -20,7 +20,7 @@ this is meant for installation/removal of system components.
 Path to root directory. This directory should have two sub-directories called
 `install` and `clean` under which executables will be searched for. Executable
 lookup is **not** recursive, they have to be found directly under the relevant
-directory at installation or clean time.
+directory at installation or clean time. Links to executables are followed.
 
 ### `--filter`
 

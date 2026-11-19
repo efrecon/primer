@@ -74,6 +74,27 @@ test_disk_overwrite() {
         assert_true grep -qxF "UUID=$new /data ext4 defaults,nofail 0 2" /etc/fstab'
 }
 
+# A whole disk with a partition table, but no filesystem of its own, is not
+# blank: it is only formatted when overwriting.
+test_disk_partition_table() {
+    in_container "$IMG_ALPINE" '
+        . test/data/disk/setup.sh
+        apk add -q sfdisk >/dev/null
+        printf "label: gpt\n,\n" | sfdisk -q /dev/fakedisk
+        echo "fakedisk:ext4:/data" > /tmp/disks.db
+        primer_run -s disk --disk:db /tmp/disks.db install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_contains "has a gpt partition table, not formatting it" "$PRIMER_ERR"
+        assert_match "PTTYPE=.gpt." "$(blkid /dev/fakedisk)" "partition table kept"
+        assert_false grep -q " /data " /etc/fstab
+        assert_not_contains "mount /data" "$(mock_calls)"
+        primer_run -s disk --disk:db /tmp/disks.db --disk:overwrite 1 install
+        assert_equal 0 "$PRIMER_RC" "overwrite status"
+        assert_contains "has a gpt partition table, overwriting" "$PRIMER_ERR"
+        assert_match "TYPE=.ext4." "$(blkid /dev/fakedisk)"
+        assert_true grep -q " /data ext4 " /etc/fstab'
+}
+
 test_disk_missing_device() {
     in_container "$IMG_ALPINE" '
         . test/data/disk/setup.sh

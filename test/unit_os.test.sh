@@ -62,8 +62,8 @@ test_primer_os_distribution_unknown() {
 }
 
 test_primer_os_version_alpine() {
-    unit docker.io/library/alpine:3.23.4 '
-        assert_equal 3.23.4 "$(primer_os_version)"
+    unit docker.io/library/alpine:3.24.4 '
+        assert_equal 3.24.4 "$(primer_os_version)"
         PRIMER_OS_VERSION=42
         assert_equal 42 "$(primer_os_version)"'
 }
@@ -79,7 +79,7 @@ test_primer_os_init() {
         primer_os_init
         assert_equal "" "$PRIMER_OS_SUDO"
         assert_equal alpine "$PRIMER_OS_DISTRO"
-        assert_match "^3\\.23" "$PRIMER_OS_VERSION"'
+        assert_equal "$(cat /etc/alpine-release)" "$PRIMER_OS_VERSION"'
 }
 
 test_primer_os_update_alpine() {

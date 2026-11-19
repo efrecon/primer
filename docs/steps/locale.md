@@ -12,7 +12,11 @@ is removed from `/etc/environment`, other lines are kept.
 When the distribution supports it, the locale is also generated:
 
 + On Debian, the `locales` package is installed, the locale is enabled in
-  `/etc/locale.gen` (added when it is not listed) and `locale-gen` is run.
+  `/etc/locale.gen` and `locale-gen` is run. Locales not listed in
+  `/etc/locale.gen` are added, with the charset from the list of supported
+  locales, or from their name, e.g. `UTF-8` for `sv_SE.UTF-8`; they are not
+  generated when the charset is unknown. The built-in `C` and `POSIX` locales
+  need no generation.
 + On Ubuntu, the `locales` package is installed and `locale-gen` is run with
   the locale.
 + On other distributions, `locale-gen` is run with the locale when it exists.

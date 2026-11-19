@@ -541,7 +541,12 @@ The suite contains:
 + Unit tests for every function of the library modules in [libexec](./libexec/),
   in `test/unit_<module>.test.sh`. They source primer in library mode, call the
   functions directly in a container and replace external commands with mocks
-  when needed, e.g. to emulate firewalls or services.
+  when needed, e.g. to emulate firewalls or services. In library mode, i.e.
+  when sourced with `PRIMER_LIBRARY=1`, primer loads all its modules and stops
+  before parsing options; `PRIMER_ROOT_DIR` can point to its installation
+  directory. Both variables are only for sourcing: when executed with
+  `PRIMER_LIBRARY=1`, primer refuses to run, and it always ignores
+  `PRIMER_ROOT_DIR`.
 + Tests for every installation [step](#steps), in `test/step_<step>.test.sh`.
   Most run primer for real in Alpine and Debian containers and verify the
   resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
@@ -563,6 +568,13 @@ tests. Run `./test/run.sh -h` for all options:
 
 Some steps download releases from GitHub. Set `GITHUB_TOKEN` to make these
 calls authenticated and avoid anonymous rate limits.
+
+Most of the time goes to installing packages, which is CPU-bound. By default,
+the suite runs as many tests in parallel as the container runtime has CPUs.
+Debian tests run in warm copies of the official images, built once a day: their
+package lists are fetched, apt keeps its caches, common packages are downloaded
+(not installed) and documentation is not installed. Primer still has to install
+everything it needs. Set `PRIMER_TEST_WARM=0` to use the official images.
 
   [docker]: https://docker.com/
   [podman]: https://podman.io/

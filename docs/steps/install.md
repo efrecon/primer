@@ -50,7 +50,11 @@ the destination is a copy of the source. Ownership and permissions are only
 applied to what was installed, never to the directory it was copied into.
 
 When cleaning, what was installed is removed: files, and directories copied from
-a local source directory (recursively). Existing directories are never removed.
+a local source directory (recursively). Nothing records what was installed, so a
+directory is only removed when it is still a copy of the source directory, i.e.
+contains the same files and sub-directories: the copy inside the destination
+first, then the destination itself. Existing directories, or copies modified
+since installation, are never removed, even when cleaning several times.
 Directories created from an empty source are only removed when they are empty.
 Use a trailing slash on the destination to copy a directory into an existing
 directory, so cleaning is unambiguous.

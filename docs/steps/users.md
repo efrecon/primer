@@ -26,7 +26,10 @@ the `:` (colon) sign. These fields are, in order:
   is the main group
 - [GECOS] fields (comma separated) for user
 - Login shell, ensure that the shell exists on the machine, empty for a good
-  default, i.e. the default shell on that distribution.
+  default, i.e. the default shell on that distribution: `/bin/bash` on Debian
+  derivatives (or the `DSHELL` setting of `adduser`), `/bin/sh` on Alpine, the
+  default of `useradd` elsewhere, e.g. `/bin/bash` on Fedora. Existing users
+  without a shell in the file keep their current shell.
 - A comma-separated list of GitHub usernames, the public keys of whom will be
   allowed to login as the user with ssh.
 

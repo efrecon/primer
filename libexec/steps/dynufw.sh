@@ -25,6 +25,10 @@ PRIMER_STEP_DYNUFW_DYNPATH=${PRIMER_STEP_DYNUFW_DYNPATH:-/etc/ufw-dynamic-hosts.
 # Regular expression for static openings: host.tld:port/proto/d, where host.tld
 # (or an IP address, with ~ instead of / for CIDR notations), proto and /d are
 # optional, and port can be a range, e.g. 8080-8090.
+# Comment of the static rules added by this step. It is how they are recognised
+# when cleaning, so that other rules are left untouched.
+PRIMER_STEP_DYNUFW_COMMENT=${PRIMER_STEP_DYNUFW_COMMENT:-"primer dynufw"}
+
 PRIMER_STEP_DYNUFW_STATIC_RX='^(([0-9a-zA-Z.~-]+):)?([0-9]+(-[0-9]+)?)(/(udp|tcp)(/d)?)?$'
 
 primer_step_dynufw() {
@@ -56,7 +60,7 @@ primer_step_dynufw() {
             else
                 $PRIMER_OS_SUDO touch "$PRIMER_STEP_DYNUFW_DYNPATH"
             fi
-            _primer_step_dynufw_static allow
+            _primer_step_dynufw_install_static
             # Run once to open all ports
             _primer_step_dynufw_update
             _primer_step_dynufw_install_cron
@@ -67,14 +71,13 @@ primer_step_dynufw() {
             ;;
         "clean")
             _primer_step_dynufw_clean_cron
+            # Only remove the rules of dynufw, the firewall stays as it is,
+            # i.e. enabled, with all other rules.
             if primer_utils_syscmd_exists ufw; then
-                _primer_step_dynufw_static delete
-                if [ -f "$PRIMER_STEP_DYNUFW_DYNPATH" ]; then
-                    _primer_step_dynufw_clean_dynamic
-                    $PRIMER_OS_SUDO rm -f "$PRIMER_STEP_DYNUFW_DYNPATH"
-                fi
-                yush_notice "Disabling firewall"
-                $PRIMER_OS_SUDO ufw --force disable
+                _primer_step_dynufw_clean_rules
+            fi
+            if [ -f "$PRIMER_STEP_DYNUFW_DYNPATH" ]; then
+                $PRIMER_OS_SUDO rm -f "$PRIMER_STEP_DYNUFW_DYNPATH"
             fi
             for _script in ufw-clean ufw-dynamic-host-update; do
                 if [ -L "${PRIMER_BINDIR%%/}/${_script}.sh" ]; then
@@ -144,30 +147,59 @@ _primer_step_dynufw_update() {
     fi
 }
 
-# Remove the ufw rules created for the dynamic rules file, i.e. the rules for
-# the port and protocol of each line, commented with the name of the host.
-_primer_step_dynufw_clean_dynamic() {
-    yush_info "Removing dynamic rules from $PRIMER_STEP_DYNUFW_DYNPATH"
-    sed -E -e '/^[[:space:]]*$/d' -e '/^[[:space:]]*#/d' "$PRIMER_STEP_DYNUFW_DYNPATH" |
-        while IFS=: read -r _proto _port _host; do
-            _port=$(printf %s\\n "$_port" | sed 's/-/:/g')
-            for _ip in $($PRIMER_OS_SUDO ufw status |
-                            grep -F "# $_host" |
-                            grep -F "${_port}/${_proto}" |
-                            awk '{print $3}'); do
-                yush_debug "Removing rule for $_host on ${_port}/${_proto} from $_ip"
-                $PRIMER_OS_SUDO ufw delete allow proto "$_proto" from "$_ip" to any port "$_port" < /dev/null
-            done
+# Remove the ufw rules that belong to dynufw: the static rules, recognised by
+# their comment, and the rules created by the update script for the lines of
+# the dynamic rules file, recognised by their comment (the host), port and
+# protocol, which must all match exactly. The added rules are listed in the
+# syntax of the ufw command, independently of the status of the firewall.
+_primer_step_dynufw_clean_rules() {
+    # Dynamic rules as "proto port host" lines, with ranges in ufw format.
+    _dynamic=
+    if [ -f "$PRIMER_STEP_DYNUFW_DYNPATH" ]; then
+        _dynamic=$(sed -E -e '/^[[:space:]]*$/d' -e '/^[[:space:]]*#/d' "$PRIMER_STEP_DYNUFW_DYNPATH" |
+                    awk -F: 'NF >= 3 { gsub(/-/, ":", $2); print $1, $2, $3 }')
+    fi
+    _rules=$($PRIMER_OS_SUDO ufw show added |
+        PRIMER_DYNUFW_RULES=$_dynamic PRIMER_DYNUFW_COMMENT=$PRIMER_STEP_DYNUFW_COMMENT awk '
+            BEGIN {
+                n = split(ENVIRON["PRIMER_DYNUFW_RULES"], lines, "\n")
+                for (i = 1; i <= n; i++) {
+                    if (split(lines[i], f, " ") >= 3) dyn[f[1] " " f[2] " " f[3]] = 1
+                }
+            }
+            {
+                # Lines are: ufw <rule> comment \047<comment>\047
+                c = index($0, " comment \047")
+                if (substr($0, 1, 4) != "ufw " || c == 0) next
+                rule = substr($0, 5, c - 5)
+                comment = substr($0, c + 10)
+                sub(/\047$/, "", comment)
+                if (comment == ENVIRON["PRIMER_DYNUFW_COMMENT"]) { print rule; next }
+                port = ""; proto = ""
+                nw = split(rule, w, " ")
+                for (i = 1; i < nw; i++) {
+                    if (w[i] == "port") port = w[i + 1]
+                    if (w[i] == "proto") proto = w[i + 1]
+                }
+                if ((proto " " port " " comment) in dyn) print rule
+            }')
+    if [ -n "$_rules" ]; then
+        yush_info "Removing dynufw rules from firewall"
+        printf %s\\n "$_rules" | while IFS= read -r _rule; do
+            yush_debug "Removing rule: $_rule"
+            # shellcheck disable=SC2086 # The rule is made of several words.
+            $PRIMER_OS_SUDO ufw delete $_rule < /dev/null
         done
+    fi
 }
 
-# Add (when $1 is allow) or remove (when $1 is delete) static rules. This is for
-# opening the firewall for hostnames that will never change. rules are
-# yourhost.tld:22/tcp/d (where the port can be a range instead, e.g.
-# 8080-8090) tcp is default, when d is present, an extra entry will be added to
-# the dynamic rules files when allowing. This makes it easier to express the
-# rules without a rules configuration files when you only have a few rules.
-_primer_step_dynufw_static() {
+# Install static rules. This is for opening the firewall for hostnames that
+# will never change. rules are yourhost.tld:22/tcp/d (where the port can be a
+# range instead, e.g. 8080-8090) tcp is default, when d is present, an extra
+# entry will be added to the dynamic rules files. This makes it easier to
+# express the rules without a rules configuration files when you only have a
+# few rules. Rules are commented, so they can be recognised when cleaning.
+_primer_step_dynufw_install_static() {
     for opening in $PRIMER_STEP_DYNUFW_STATIC; do
         # Opening are in the form host.tld:80/tcp (where host.tld and tcp can be
         # omitted)
@@ -179,31 +211,26 @@ _primer_step_dynufw_static() {
             if [ -z "$proto" ]; then
                 proto="tcp";
             fi
-            # Convert dash separated port range to colon separated (which is
-            # the format supported by UFW)
-            port=$(printf %s\\n "$port" | sed 's/-/:/g')
             if [ -z "$host" ]; then
-                yush_notice "Firewall rule for all incoming traffic on port ${port}/${proto}: $1"
-                if [ "$1" = "allow" ]; then
-                    $PRIMER_OS_SUDO ufw allow "${port}/${proto}"
-                else
-                    $PRIMER_OS_SUDO ufw delete allow "${port}/${proto}"
-                fi
+                # Convert dash separated port range to colon separated (which
+                # is the format supported by UFW)
+                port=$(printf %s\\n "$port" | sed 's/-/:/g')
+                yush_notice "Opening firewall for all incoming traffic on port ${port}/${proto}"
+                $PRIMER_OS_SUDO ufw allow "${port}/${proto}" comment "$PRIMER_STEP_DYNUFW_COMMENT"
             elif [ -n "$dyn" ]; then
-                # Add an entry to the main dynamic rules file. Removal happens
-                # with the file.
-                if [ "$1" = "allow" ]; then
-                    port=$(printf %s\\n "$port" | sed 's/:/-/g')
-                    if ! grep -qxF "${proto}:${port}:${host}" "$PRIMER_STEP_DYNUFW_DYNPATH"; then
-                        yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${host} (dynamic)"
-                        printf '\n# Rule automatically added by primer\n%s:%s:%s\n' "$proto" "$port" "$host" |
-                            primer_utils_sysfile_append "$PRIMER_STEP_DYNUFW_DYNPATH"
-                    else
-                        yush_debug "Skipping adding existing rule on port ${port}/${proto} from ${host}!"
-                    fi
+                # Add an entry to the main dynamic rules file, the update
+                # script creates the rule. Removal happens with the file.
+                if ! grep -qxF "${proto}:${port}:${host}" "$PRIMER_STEP_DYNUFW_DYNPATH"; then
+                    yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${host} (dynamic)"
+                    printf '\n# Rule automatically added by primer\n%s:%s:%s\n' "$proto" "$port" "$host" |
+                        primer_utils_sysfile_append "$PRIMER_STEP_DYNUFW_DYNPATH"
+                else
+                    yush_debug "Skipping adding existing rule on port ${port}/${proto} from ${host}!"
                 fi
             else
-                # Convert ~ sign to / for CIDR notation support.
+                # Convert dash separated port range to colon separated, and ~
+                # sign to / for CIDR notation support.
+                port=$(printf %s\\n "$port" | sed 's/-/:/g')
                 host=$(printf %s\\n "$host" | sed 's/~/\//g')
                 if printf %s\\n "$host" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$'; then
                     ip=${host}
@@ -212,12 +239,8 @@ _primer_step_dynufw_static() {
                 fi
                 if [ -n "$ip" ]; then
                     yush_debug "One time resolution of $host led to $ip"
-                    yush_notice "Firewall rule for incoming traffic on port ${port}/${proto} from ${ip}: $1"
-                    if [ "$1" = "allow" ]; then
-                        $PRIMER_OS_SUDO ufw allow proto "$proto" from "$ip" to any port "$port"
-                    else
-                        $PRIMER_OS_SUDO ufw delete allow proto "$proto" from "$ip" to any port "$port"
-                    fi
+                    yush_notice "Opening firewall for incoming traffic on port ${port}/${proto} from ${ip}"
+                    $PRIMER_OS_SUDO ufw allow proto "$proto" from "$ip" to any port "$port" comment "$PRIMER_STEP_DYNUFW_COMMENT"
                 else
                     yush_warn "Could not resolve $host, skipping rule!"
                 fi

@@ -70,9 +70,9 @@ primer_step_users() {
                         details=$(printf %s::::::\\n "$line" | cut -d ":" -f "4")
                         shell=$(printf %s::::::\\n "$line" | cut -d ":" -f "5")
                         ghusers=$(printf %s::::::\\n "$line" | cut -d ":" -f "6")
-                        _caller=$(id -un)
-                        [ -z "$shell" ] && shell=$(getent passwd "$_caller" | cut -d ":" -f 7)
-                        [ -z "$shell" ] && shell=/bin/sh
+                        # An empty shell is the default login shell of the
+                        # platform for new users, and keeps the current shell
+                        # of existing users.
 
                         if [ -z "$(getent passwd "$username")" ]; then
                             if [ "$password" = "x" ]; then

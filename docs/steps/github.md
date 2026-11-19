@@ -33,9 +33,12 @@ the spaces. When they have defaults, empty fields can be specified with `""` or
   others) will be considered for installation.
 
 Assets can be archives (`.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`,
-`.tar.Z` or `.zip`), from which the binaries are extracted, or binaries released
-as-is. A binary released as-is is installed under the name of the binary, unless
-that name is a glob-filter, in which case the name of the asset is kept. When
+`.tar.Z` or `.zip`), from which the binaries are extracted, single compressed
+binaries (`.gz`, `.bz2` or `.xz`), which are uncompressed, or binaries released
+as-is. A single binary is installed under the name of the binary, unless that
+name is a glob-filter, in which case the name of the asset (without compression
+extension) is kept. Single files are only installed when they are binaries (ELF)
+or scripts (starting with `#!`), not e.g. packages or checksums. When
 cleaning, only binaries matching the name directly under the bin directory are
 removed.
 

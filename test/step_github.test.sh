@@ -15,6 +15,9 @@ printf "#!/bin/sh\necho tool 1.2.3\n" > /tmp/fake/tool-1.2.3/tool
 chmod a+x /tmp/fake/tool-1.2.3/tool
 tar -C /tmp/fake -czf /tmp/tool.tar.gz tool-1.2.3
 printf "#!/bin/sh\necho toolctl 1.2.3\n" > /tmp/toolctl
+printf "#!/bin/sh\necho toolgz 1.2.3\n" | gzip -c > /tmp/toolgz.gz
+printf "!<arch>\ndebian-binary\n" > /tmp/tool.deb
+printf "\177ELF\002\001\001\000" > /tmp/toolelf
 primer_net_curl() {
     mock_log primer_net_curl "$@"
     case "$1" in
@@ -23,6 +26,9 @@ primer_net_curl() {
         */repos/acme/tool/releases/*/assets) cat /primer/test/data/github/assets.json;;
         */tool_1.2.3_Linux_x86_64.tar.gz) cat /tmp/tool.tar.gz;;
         */toolctl-linux-amd64) cat /tmp/toolctl;;
+        */toolgz-linux-amd64.gz) cat /tmp/toolgz.gz;;
+        */tool_1.2.3_amd64.deb) cat /tmp/tool.deb;;
+        */toolelf-linux-amd64) cat /tmp/toolelf;;
         *) return 22;;
     esac
 }
@@ -68,6 +74,26 @@ EOF
         assert_false test -e /usr/local/bin/tool
         assert_false test -e /usr/local/bin/toolctl
         assert_true test -x /usr/local/bin/sub/tool'
+}
+
+# Single files: compressed binaries are uncompressed, binaries (ELF) and
+# scripts installed, anything else (e.g. packages) is not.
+test_github_install_single_files() {
+    unit "$IMG_ALPINE" "$GITHUB_FIXTURES"'
+        cat > /tmp/projects <<EOF
+acme/tool toolgz-linux-amd64.gz v1.2* toolgz
+acme/tool tool_1.2.3_amd64.deb v1.2* tool
+acme/tool toolelf-linux-amd64 v1.2* toolelf
+EOF
+        unit_step github
+        primer_step_github option --projects /tmp/projects
+        run primer_step_github install
+        assert_equal 0 "$RUN_RC"
+        assert_equal "toolgz 1.2.3" "$(/usr/local/bin/toolgz)"
+        assert_true test -x /usr/local/bin/toolelf
+        assert_true cmp /tmp/toolelf /usr/local/bin/toolelf
+        assert_contains "tool is neither a binary nor a script, not installing it" "$RUN_ERR"
+        assert_false test -e /usr/local/bin/tool'
 }
 
 test_github_unknown_release() {

@@ -90,6 +90,50 @@ test__primer_auth_valid_shell() {
         assert_false _primer_auth_valid_shell /bin/sh'
 }
 
+test__primer_auth_valid_gecos() {
+    unit "$IMG_ALPINE" '
+        assert_true _primer_auth_valid_gecos ""
+        assert_true _primer_auth_valid_gecos "Jane Doe,Room 1,+46 123"
+        assert_false _primer_auth_valid_gecos "Jane:Doe"
+        assert_false _primer_auth_valid_gecos "Jane
+Doe"
+        assert_exit 1 primer_auth_user_add jane --gecos "Jane:Doe"
+        assert_equal "" "$(getent passwd jane)"'
+}
+
+# Default login shells, as verified on the distributions: /bin/sh on Alpine
+# (busybox adduser, root), /bin/bash on Debian (adduser, installer), the
+# default of useradd elsewhere, e.g. /bin/bash on Fedora.
+test__primer_auth_default_shell_alpine() {
+    unit "$IMG_ALPINE" '
+        assert_equal /bin/sh "$(_primer_auth_default_shell)"
+        # The useradd of shadow (default /bin/ash) is ignored on Alpine...
+        useradd() { [ "$1" = "-D" ] && printf "GROUP=100\nSHELL=%s\nSKEL=/etc/skel\n" "$USERADD_SHELL"; }
+        USERADD_SHELL=/bin/ash
+        assert_equal /bin/sh "$(_primer_auth_default_shell)" "shadow on Alpine"
+        # ...but used elsewhere, when valid
+        primer_os_distribution() { echo fedora; }
+        assert_equal /bin/ash "$(_primer_auth_default_shell)"
+        USERADD_SHELL=/bin/nope
+        assert_equal /bin/sh "$(_primer_auth_default_shell)" "invalid useradd default"
+        unset -f useradd
+        assert_equal /bin/sh "$(_primer_auth_default_shell)" "no useradd"'
+}
+
+test__primer_auth_default_shell_debian() {
+    unit "$IMG_TRIXIE" '
+        assert_false [ -f /etc/adduser.conf ]
+        assert_equal /bin/bash "$(_primer_auth_default_shell)"
+        echo "#DSHELL=/usr/bin/dash" > /etc/adduser.conf
+        assert_equal /bin/bash "$(_primer_auth_default_shell)" "commented"
+        echo "DSHELL=/usr/bin/dash" > /etc/adduser.conf
+        assert_equal /usr/bin/dash "$(_primer_auth_default_shell)"
+        echo "DSHELL = \"/bin/sh\"  # quoted" > /etc/adduser.conf
+        assert_equal /bin/sh "$(_primer_auth_default_shell)" "quoted"
+        echo "DSHELL=/bin/dash" > /etc/adduser.conf
+        assert_equal /bin/sh "$(_primer_auth_default_shell)" "not in /etc/shells"'
+}
+
 # Verification snippet for jane, created with all options.
 _AUTH_JANE='
     entry=$(getent passwd jane)
@@ -104,10 +148,13 @@ test_primer_auth_user_add_alpine() {
     unit "$IMG_ALPINE" '
         primer_auth_user_add jane --group devs --gecos "Jane Doe" --shell /bin/sh --password s3cr3t
         '"$_AUTH_JANE"'
-        # Defaults: group named after the user, shell of the caller, no password
+        # Defaults: group named after the user, shell of the platform, no
+        # password
         primer_auth_user_add bob
         assert_equal bob "$(id -gn bob)"
-        assert_equal "$(getent passwd root | cut -d: -f7)" "$(getent passwd bob | cut -d: -f7)"
+        assert_equal /bin/sh "$(getent passwd bob | cut -d: -f7)"
+        primer_auth_user_add carol --shell ""
+        assert_equal /bin/sh "$(getent passwd carol | cut -d: -f7)"
         assert_false grep -q "^bob:\\$" /etc/shadow
         # Invalid shell
         assert_exit 1 primer_auth_user_add eve --shell /bin/nope
@@ -118,6 +165,7 @@ test_primer_auth_user_add_debian() {
     unit "$IMG_TRIXIE" '
         primer_auth_user_add jane --group devs --gecos "Jane Doe" --shell /bin/sh --password s3cr3t
         '"$_AUTH_JANE"'
+        # Default shell of the platform, not the one of useradd (/bin/sh)
         primer_auth_user_add bob
         assert_equal bob "$(id -gn bob)"
         assert_equal /bin/bash "$(getent passwd bob | cut -d: -f7)"
@@ -146,24 +194,32 @@ test_primer_auth_user_password_debian() {
 # must not change.
 _AUTH_MOD='
     mode=$(stat -c "%a %U %G" /etc/passwd)
+    root=$(grep "^root:" /etc/shadow)
     primer_auth_user_mod alice --gecos "Alice Liddell" --shell /bin/sh --group wonder
     entry=$(getent passwd alice)
     assert_equal "Alice Liddell" "$(echo "$entry" | cut -d: -f5)"
     assert_equal /bin/sh "$(echo "$entry" | cut -d: -f7)"
     assert_equal wonder "$(id -gn alice)"
     assert_equal "$mode" "$(stat -c "%a %U %G" /etc/passwd)"
-    # Options default to current settings
-    primer_auth_user_mod alice --gecos "Alice"
+    # Options default to current settings, an empty shell keeps it
+    primer_auth_user_mod alice --gecos "Alice" --shell ""
     assert_equal wonder "$(id -gn alice)"
     assert_equal /bin/sh "$(getent passwd alice | cut -d: -f7)"
+    # Backslashes are kept as-is
+    primer_auth_user_mod alice --gecos "Dr\\tAlice"
+    assert_equal "Dr\\tAlice" "$(getent passwd alice | cut -d: -f5)"
     # Other users are untouched
     assert_equal "$bob" "$(getent passwd bob)"
+    assert_equal "$mode" "$(stat -c "%a %U %G" /etc/passwd)"
     # Errors
+    assert_exit 1 primer_auth_user_mod alice --gecos "Alice:Liddell"
+    assert_equal "Dr\\tAlice" "$(getent passwd alice | cut -d: -f5)"
     assert_exit 1 primer_auth_user_mod alice --shell /bin/nope
     assert_exit 1 primer_auth_user_mod nosuchuser --shell /bin/sh
     # Password
     primer_auth_user_mod alice --password s3cr3t
     assert_match "^\\$" "$(grep "^alice:" /etc/shadow | cut -d: -f2)"
+    assert_equal "$root" "$(grep "^root:" /etc/shadow)" "root password untouched"
 '
 
 test_primer_auth_user_mod_alpine() {

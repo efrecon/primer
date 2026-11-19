@@ -30,6 +30,10 @@ _dynufw_real() {
         assert_true [ -L /usr/local/bin/ufw-clean.sh ]
         assert_contains "/usr/local/bin/ufw-dynamic-host-update.sh -q" "$(crontab -l)"
 
+        # Rules that do not belong to dynufw, one on the port of a dynamic rule
+        ufw allow 4444/tcp
+        ufw allow from 127.0.0.2 to any port 8443 proto tcp comment mine
+
         primer_run "$@" install
         assert_equal 0 "$PRIMER_RC" "second install status"
         assert_equal 1 "$(crontab -l | grep -c ufw-dynamic-host-update.sh)" "cron lines"
@@ -37,9 +41,13 @@ _dynufw_real() {
 
         primer_run "$@" clean
         assert_equal 0 "$PRIMER_RC" "clean status"
-        assert_contains "Status: inactive" "$(ufw status)"
+        assert_contains "Status: active" "$(ufw status)" "firewall left enabled"
         added=$(ufw show added)
         assert_not_contains "22" "$added" "rules left after clean"
+        assert_not_contains "localhost" "$added" "dynamic rules left after clean"
+        assert_not_contains "primer dynufw" "$added" "static rules left after clean"
+        assert_contains "ufw allow 4444/tcp" "$added" "other rules kept"
+        assert_contains "from 127.0.0.2 to any port 8443 proto tcp comment" "$added" "other rules kept"
         assert_not_contains "ufw-dynamic-host-update.sh" "$(crontab -l 2>/dev/null || true)"
         assert_false [ -e /usr/local/bin/ufw-dynamic-host-update.sh ]
         assert_false [ -e /usr/local/opt/dynufw ]
@@ -57,7 +65,13 @@ test_dynufw_alpine() {
 test_dynufw_mocked() {
     unit "$IMG_ALPINE" '
         unit_step dynufw
-        mock ufw
+        # ufw lists its added rules from /tmp/ufw.added
+        ufw() {
+            mock_log ufw "$@"
+            if [ "$1 $2" = "show added" ] && [ -f /tmp/ufw.added ]; then
+                cat /tmp/ufw.added
+            fi
+        }
         crontab() {
             case "$1" in
                 -l) [ -f /tmp/crontab ] && cat /tmp/crontab;;
@@ -83,9 +97,9 @@ test_dynufw_mocked() {
         assert_contains "80/icmp is not a valid port opening specification" "$RUN_ERR"
         calls=$(mock_calls)
         assert_contains "git clone https://github.com/efrecon/dynufw.git --recurse --branch master --depth 1 /usr/local/opt/dynufw/master" "$calls"
-        assert_contains "ufw allow 22/tcp" "$calls"
-        assert_contains "ufw allow 8080:8090/udp" "$calls"
-        assert_contains "ufw allow proto tcp from 10.0.0.0/8 to any port 2222" "$calls"
+        assert_contains "ufw allow 22/tcp comment primer dynufw" "$calls"
+        assert_contains "ufw allow 8080:8090/udp comment primer dynufw" "$calls"
+        assert_contains "ufw allow proto tcp from 10.0.0.0/8 to any port 2222 comment primer dynufw" "$calls"
         assert_contains "ufw-dynamic-host-update -q -s 1.1.1.1" "$calls"
         assert_equal "ufw --force enable" "$(grep "^ufw " "$MOCK_LOG" | tail -n 1)" "firewall enabled last"
         assert_true grep -qx "tcp:443:example.com" /etc/ufw-dynamic-hosts.allow
@@ -97,14 +111,35 @@ test_dynufw_mocked() {
         assert_equal 1 "$(grep -c "^tcp:443:example.com$" /etc/ufw-dynamic-hosts.allow)" "dynamic rules"
 
         echo "0 0 * * * /usr/bin/other" >> /tmp/crontab
+        printf "tcp:22:localhost\nudp:6000-6010:localhost\n" >> /etc/ufw-dynamic-hosts.allow
+        # Rules as listed by ufw: the ones of dynufw, and others that must
+        # be kept, even when similar to the dynamic ones.
+        cat > /tmp/ufw.added <<EOF
+Added user rules (see '"'"'ufw status'"'"' for running firewall):
+ufw allow 22/tcp comment '"'"'primer dynufw'"'"'
+ufw allow 8080:8090/udp comment '"'"'primer dynufw'"'"'
+ufw allow from 10.0.0.0/8 to any port 2222 proto tcp comment '"'"'primer dynufw'"'"'
+ufw allow from 93.184.215.14 to any port 443 proto tcp comment '"'"'example.com'"'"'
+ufw allow from 127.0.0.1 to any port 22 proto tcp comment '"'"'localhost'"'"'
+ufw allow from 127.0.0.1 to any port 6000:6010 proto udp comment '"'"'localhost'"'"'
+ufw allow from 93.184.215.14 to any port 4430 proto tcp comment '"'"'example.com'"'"'
+ufw allow from 127.0.0.1 to any port 2222 proto tcp comment '"'"'localhost'"'"'
+ufw allow from 127.0.0.1 to any port 22 proto udp comment '"'"'localhost'"'"'
+ufw allow 2200/tcp comment '"'"'primer dynufw too'"'"'
+ufw allow 4444/tcp
+EOF
         mock_reset
         run primer_step_dynufw clean
         assert_equal 0 "$RUN_RC" "clean status"
         calls=$(mock_calls)
         assert_contains "ufw delete allow 22/tcp" "$calls"
         assert_contains "ufw delete allow 8080:8090/udp" "$calls"
-        assert_contains "ufw delete allow proto tcp from 10.0.0.0/8 to any port 2222" "$calls"
-        assert_contains "ufw --force disable" "$calls"
+        assert_contains "ufw delete allow from 10.0.0.0/8 to any port 2222 proto tcp" "$calls"
+        assert_contains "ufw delete allow from 93.184.215.14 to any port 443 proto tcp" "$calls"
+        assert_contains "ufw delete allow from 127.0.0.1 to any port 22 proto tcp" "$calls"
+        assert_contains "ufw delete allow from 127.0.0.1 to any port 6000:6010 proto udp" "$calls"
+        assert_equal 6 "$(grep -c "^ufw delete " "$MOCK_LOG")" "deleted rules"
+        assert_not_contains "disable" "$calls" "firewall left enabled"
         assert_equal "0 0 * * * /usr/bin/other" "$(cat /tmp/crontab)" "other cron lines kept"
         assert_false [ -e /usr/local/bin/ufw-dynamic-host-update.sh ]
         assert_false [ -e /usr/local/opt/dynufw ]

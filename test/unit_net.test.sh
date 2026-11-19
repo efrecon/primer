@@ -271,14 +271,18 @@ test_primer_net_curl() {
         mock curl
         # Quiet: failures are errors, no progress
         primer_net_curl https://example.com/a -o /tmp/a
-        # Verbose: progress bar, failures still errors
+        # Info (the default): no progress either
         YUSH_LOG_LEVEL=info
+        primer_net_curl https://example.com/b0
+        # Debug: progress bar, failures still errors
+        YUSH_LOG_LEVEL=debug
         primer_net_curl https://example.com/b
         # Options from the options file come before the caller options
         YUSH_LOG_LEVEL=warn
         PRIMER_CURL_OPTIONS=/tmp/curl.opts
         primer_net_curl https://api.github.com/x --max-time 5
         assert_equal "curl -fsSL -o /tmp/a https://example.com/a
+curl -fsSL https://example.com/b0
 curl -fSL --progress-bar https://example.com/b
 curl -fsSL -u x-access-token:secret --max-time 5 https://api.github.com/x" "$(mock_calls)"'
 }

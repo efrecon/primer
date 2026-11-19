@@ -89,29 +89,21 @@ _primer_step_wifi_install() {
             primer_os_service disable wpa_supplicant
         fi
 
-        # Insert settings if we don't yet have them
+        # Insert settings if we don't yet have them, replace them when they
+        # have changed, e.g. another network or passphrase.
+        _block=$(_primer_step_wifi_block)
         if [ -f "$PRIMER_STEP_WIFI_IFLIST" ] \
-                && grep -qxF "# primer autoadd wifi settings: $PRIMER_STEP_WIFI_INTERFACE" "$PRIMER_STEP_WIFI_IFLIST"; then
-            yush_debug "Information for $PRIMER_STEP_WIFI_ESSID already present at $PRIMER_STEP_WIFI_IFLIST"
+                && grep -qxF "$(_primer_step_wifi_marker autoadd)" "$PRIMER_STEP_WIFI_IFLIST"; then
+            if [ "$(_primer_step_wifi_current)" = "$_block" ]; then
+                yush_debug "Information for $PRIMER_STEP_WIFI_ESSID already present at $PRIMER_STEP_WIFI_IFLIST"
+            else
+                yush_notice "Replacing wifi settings for $PRIMER_STEP_WIFI_INTERFACE at $PRIMER_STEP_WIFI_IFLIST"
+                _primer_step_wifi_remove
+                printf '\n%s\n' "$_block" | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
+            fi
         else
-            # We insert an interface block. The wpa- are parsed and
-            # understood by the wpa_supplicant package for its
-            # configuration.
             $PRIMER_OS_SUDO mkdir -p "$(dirname "$PRIMER_STEP_WIFI_IFLIST")"
-            {
-                echo "";
-                echo "# primer autoadd wifi settings: $PRIMER_STEP_WIFI_INTERFACE";
-                printf "auto %s\n" "$PRIMER_STEP_WIFI_INTERFACE";
-                printf "allow-hotplug %s\n" "$PRIMER_STEP_WIFI_INTERFACE";
-                printf "iface %s inet dhcp\n" "$PRIMER_STEP_WIFI_INTERFACE";
-                printf "    wpa-ssid \"%s\"\n" "$PRIMER_STEP_WIFI_ESSID";
-                if [ -z "$PRIMER_STEP_WIFI_PSK" ]; then
-                    echo "    wpa-key-mgmt NONE";
-                else
-                    printf "    wpa-psk %s\n" "$(_primer_step_wifi_psk_hex)";
-                fi
-                echo "# primer endof wifi settings: $PRIMER_STEP_WIFI_INTERFACE";
-            } | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
+            printf '\n%s\n' "$_block" | primer_utils_sysfile_append "$PRIMER_STEP_WIFI_IFLIST"
         fi
 
         # Bring up the interface (down first, as a security
@@ -128,17 +120,52 @@ _primer_step_wifi_clean() {
         $PRIMER_OS_SUDO ifdown --force -v "$PRIMER_STEP_WIFI_INTERFACE"
     fi
 
+    _primer_step_wifi_remove
+}
+
+# Print the marker comment of type $1 (autoadd or endof) for the interface.
+_primer_step_wifi_marker() {
+    printf '# primer %s wifi settings: %s\n' "$1" "$PRIMER_STEP_WIFI_INTERFACE"
+}
+
+# Print the interface block for the current settings. The wpa- are parsed and
+# understood by the wpa_supplicant package for its configuration.
+_primer_step_wifi_block() {
+    _primer_step_wifi_marker autoadd
+    printf "auto %s\n" "$PRIMER_STEP_WIFI_INTERFACE"
+    printf "allow-hotplug %s\n" "$PRIMER_STEP_WIFI_INTERFACE"
+    printf "iface %s inet dhcp\n" "$PRIMER_STEP_WIFI_INTERFACE"
+    printf "    wpa-ssid \"%s\"\n" "$PRIMER_STEP_WIFI_ESSID"
+    if [ -z "$PRIMER_STEP_WIFI_PSK" ]; then
+        echo "    wpa-key-mgmt NONE"
+    else
+        printf "    wpa-psk %s\n" "$(_primer_step_wifi_psk_hex)"
+    fi
+    _primer_step_wifi_marker endof
+}
+
+# Print the block for the interface currently in the list of interfaces.
+_primer_step_wifi_current() {
+    awk -v start="$(_primer_step_wifi_marker autoadd)" \
+        -v end="$(_primer_step_wifi_marker endof)" '
+        $0 == start { cut=1 }
+        cut == 1 { print }
+        $0 == end { cut=0 }
+    ' "$PRIMER_STEP_WIFI_IFLIST"
+}
+
+# Remove the block for the interface from the list of interfaces. This needs
+# to match against the lines that are added as comments when installing,
+# including the empty line that precedes the block.
+_primer_step_wifi_remove() {
     if ! [ -f "$PRIMER_STEP_WIFI_IFLIST" ]; then
         yush_debug "No $PRIMER_STEP_WIFI_IFLIST, nothing to remove"
         return 0
     fi
 
-    # Remove interface settings. This needs to match against the lines that
-    # are added as comments when installing, including the empty line that
-    # precedes the block.
     _iface=$(mktemp)
-    awk -v start="# primer autoadd wifi settings: $PRIMER_STEP_WIFI_INTERFACE" \
-        -v end="# primer endof wifi settings: $PRIMER_STEP_WIFI_INTERFACE" '
+    if awk -v start="$(_primer_step_wifi_marker autoadd)" \
+        -v end="$(_primer_step_wifi_marker endof)" '
         $0 == start { cut=1; held=0; next }
         $0 == end { cut=0; next }
         cut == 1 { next }
@@ -146,9 +173,10 @@ _primer_step_wifi_clean() {
         $0 == "" { held=1; next }
         { print }
         END { if (held == 1) print "" }
-    ' "$PRIMER_STEP_WIFI_IFLIST" > "$_iface"
-    # Write back in place, which keeps the owner and permissions of the file.
-    $PRIMER_OS_SUDO tee "$PRIMER_STEP_WIFI_IFLIST" < "$_iface" > /dev/null
+    ' "$PRIMER_STEP_WIFI_IFLIST" > "$_iface"; then
+        # Replace atomically, keeping the owner and permissions of the file.
+        primer_utils_sysfile_replace "$PRIMER_STEP_WIFI_IFLIST" < "$_iface"
+    fi
     rm -f "$_iface"
 }
 

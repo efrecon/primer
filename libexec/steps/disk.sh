@@ -81,14 +81,24 @@ _primer_step_disk_install() {
         return 0
     fi
 
-    # Check if device is already formatted.
-    current=$($PRIMER_OS_SUDO blkid "$_dev" | _primer_step_disk_blkid_val "TYPE" || true)
+    # Check if device is already formatted, or carries a partition table (a
+    # whole disk with partitions has no filesystem TYPE of its own).
+    _blkid=$($PRIMER_OS_SUDO blkid "$_dev" || true)
+    current=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "TYPE" || true)
+    pttype=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "PTTYPE" || true)
     format=0
-    if [ -z "$current" ]; then
+    if [ -z "$current" ] && [ -z "$pttype" ]; then
         format=1
     elif yush_is_true "$PRIMER_STEP_DISK_OVERWRITE"; then
         format=1
-        yush_warn "/dev/$dev already formatted as $current, overwriting with $fmt filesystem"
+        if [ -n "$current" ]; then
+            yush_warn "/dev/$dev already formatted as $current, overwriting with $fmt filesystem"
+        else
+            yush_warn "/dev/$dev has a $pttype partition table, overwriting with $fmt filesystem"
+        fi
+    elif [ -z "$current" ]; then
+        yush_warn "/dev/$dev has a $pttype partition table, not formatting it! Use one of its partitions, or overwrite."
+        return 0
     else
         if [ "$current" != "$fmt" ]; then
             yush_notice "/dev/$dev already formatted as $current, keeping it (and not $fmt)"
@@ -183,14 +193,15 @@ _primer_step_disk_fstab_has() {
 }
 
 # Remove all entries for the mount point passed as an argument from
-# /etc/fstab. The file is written back in place, so it keeps its owner and
+# /etc/fstab. The file is replaced atomically, keeping its owner and
 # permissions.
 _primer_step_disk_fstab_remove() {
     if _primer_step_disk_fstab_has "$1"; then
-        _tmp=$(mktemp)
-        awk -v m="$1" '$2 != m' /etc/fstab > "$_tmp"
-        $PRIMER_OS_SUDO tee /etc/fstab < "$_tmp" > /dev/null
-        rm -f "$_tmp"
+        _fstab=$(mktemp)
+        if awk -v m="$1" '$2 != m' /etc/fstab > "$_fstab"; then
+            primer_utils_sysfile_replace /etc/fstab < "$_fstab"
+        fi
+        rm -f "$_fstab"
     fi
 }
 

@@ -13,7 +13,7 @@
 # first, unless PRIMER_TEST_RUNTIME is set.
 
 # Fully qualified images, so they also work with podman.
-IMG_ALPINE=${IMG_ALPINE:-docker.io/library/alpine:3.23}
+IMG_ALPINE=${IMG_ALPINE:-docker.io/library/alpine:3.24}
 IMG_TRIXIE=${IMG_TRIXIE:-docker.io/library/debian:trixie}
 IMG_BOOKWORM=${IMG_BOOKWORM:-docker.io/library/debian:bookworm}
 
@@ -55,6 +55,48 @@ container_runtime() {
         fi
     fi
     printf %s\\n "$PRIMER_TEST_RUNTIME"
+}
+
+# Packages downloaded (not installed) in warm Debian images: the ones that
+# steps commonly install, so tests do not download them over and over again.
+WARM_PACKAGES=${WARM_PACKAGES:-"bash ca-certificates curl e2fsprogs git iproute2 iptables locales openssh-client tzdata ufw wpasupplicant"}
+
+# Print the name of the "warm" copy of the Debian image passed as an argument,
+# building it when it does not exist yet. Warm images are rebuilt every day and
+# differ from the official images in ways that make tests much faster, without
+# changing what primer has to do (no package is installed), and are closer to
+# a real Debian host:
+# - apt caches are kept: the official images remove them after every apt call
+#   (/etc/apt/apt.conf.d/docker-clean), so every call parses all package lists
+#   again, which is costly on small machines.
+# - Package lists are already fetched, so updating them only checks for changes.
+# - Common packages (WARM_PACKAGES) are downloaded, not installed.
+# - Documentation is not installed.
+# Prints the official image when building fails, e.g. offline.
+warm_image() {
+    _warm_tag=localhost/primer-test-$(printf %s "${1##*/}" | tr ':' '-'):$(date +%Y%m%d)
+    if ! "$PRIMER_TEST_RUNTIME" image inspect "$_warm_tag" >/dev/null 2>&1; then
+        _warm_dir=$(mktemp -d)
+        cat > "$_warm_dir/Dockerfile" <<EOF
+FROM $1
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \\
+    && printf 'path-exclude=/usr/share/doc/*\\npath-exclude=/usr/share/man/*\\npath-exclude=/usr/share/info/*\\n' > /etc/dpkg/dpkg.cfg.d/primer-test-nodoc \\
+    && apt-get update -qq \\
+    && for p in $WARM_PACKAGES; do apt-get install -y -qq --download-only "\$p" >/dev/null || true; done
+EOF
+        if "$PRIMER_TEST_RUNTIME" build -q -t "$_warm_tag" "$_warm_dir" >/dev/null 2>&1; then
+            # Remove the warm images of previous days.
+            "$PRIMER_TEST_RUNTIME" images --format '{{.Repository}}:{{.Tag}}' \
+                | grep -F "${_warm_tag%:*}:" | grep -vxF "$_warm_tag" \
+                | while IFS= read -r _old; do
+                    "$PRIMER_TEST_RUNTIME" rmi "$_old" >/dev/null 2>&1 || true
+                done
+        else
+            _warm_tag=$1
+        fi
+        rm -rf "$_warm_dir"
+    fi
+    printf %s\\n "$_warm_tag"
 }
 
 # Skip the current test when privileged containers cannot be relied upon, i.e.
@@ -188,12 +230,16 @@ $2"
 # Source primer in library mode. Logging defaults to warnings, and goes to
 # stderr as usual.
 unit_load() {
+    # Library mode is for this shell only, not exported: primer executed from
+    # tests would refuse to run.
+    # shellcheck disable=SC2034 # Used by primer, sourced below.
     PRIMER_ROOT_DIR=/primer
+    # shellcheck disable=SC2034
     PRIMER_LIBRARY=1
     YUSH_APPNAME=primer
     YUSH_LOG_LEVEL=${YUSH_LOG_LEVEL:-warn}
     YUSH_LOG_COLOUR=0
-    export PRIMER_ROOT_DIR PRIMER_LIBRARY YUSH_APPNAME YUSH_LOG_LEVEL YUSH_LOG_COLOUR
+    export YUSH_APPNAME YUSH_LOG_LEVEL YUSH_LOG_COLOUR
     # shellcheck disable=SC1091
     . /primer/primer
 }

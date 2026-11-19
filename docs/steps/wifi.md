@@ -17,8 +17,9 @@ instead. Networks without a passphrase are configured as open networks.
 When no interface is specified, the step picks the first interface which name
 starts with `wl`, e.g. `wlan0`, `wlp2s0` or `wlx00c0ca123456`. The step does
 nothing when there is no wifi interface, when no network is specified, or when
-the interface already has a global address. A block is only added once per
-interface. Once the block is added, the interface is brought down and up again,
+the interface already has a global address. There is one block per
+interface: it is replaced when the settings have changed, e.g. another network
+or passphrase. Once the block is added, the interface is brought down and up again,
 to verify the settings.
 
 When cleaning, the interface is brought down if connected, and the block is

@@ -51,6 +51,12 @@ _primer_step_locale_generate() {
     lsb_dist=$(primer_os_distribution)
     case "$lsb_dist" in
         *bian)
+            # C and POSIX locales are built-in, nothing to generate.
+            case "$1" in
+                C|POSIX|C.*)
+                    yush_debug "$1 is a built-in locale"
+                    return 0;;
+            esac
             primer_os_dependency locale-gen locales
             if [ -f /etc/locale.gen ]; then
                 _rx=$(yush_regex_escape "$1")
@@ -58,7 +64,18 @@ _primer_step_locale_generate() {
                     yush_debug "Enabling $1 in /etc/locale.gen"
                     $PRIMER_OS_SUDO sed -i -E "s/^#[[:space:]]*(${_rx}[[:space:]])/\\1/" /etc/locale.gen
                 elif ! grep -qE "^${_rx}[[:space:]]" /etc/locale.gen; then
-                    printf '%s %s\n' "$1" "${1#*.}" | primer_utils_sysfile_append /etc/locale.gen
+                    # Take the charset from the list of supported locales,
+                    # or from the name of the locale, e.g. sv_SE.UTF-8.
+                    _line=$(grep -E "^${_rx}[[:space:]]" /usr/share/i18n/SUPPORTED 2>/dev/null | head -n 1 || true)
+                    if [ -z "$_line" ]; then
+                        case "$1" in
+                            *.*) _line="$1 ${1#*.}";;
+                            *)
+                                yush_warn "Unknown charset for locale $1, cannot generate it!"
+                                return 0;;
+                        esac
+                    fi
+                    printf '%s\n' "$_line" | primer_utils_sysfile_append /etc/locale.gen
                 fi
             fi
             $PRIMER_OS_SUDO locale-gen

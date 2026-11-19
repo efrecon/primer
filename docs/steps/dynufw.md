@@ -30,8 +30,11 @@ happen every minute through cron (busybox `crond` on Alpine, `cron` on Debian
 derivatives, `cronie` on Fedora derivatives). Once all rules are in place,
 [ufw] is enabled.
 
-When cleaning, the static and dynamic rules are removed, together with the cron
-job, the rules file and the dynufw scripts, and [ufw] is disabled.
+Static rules are commented with `primer dynufw`. When cleaning, only the rules
+of dynufw are removed: static rules carrying that comment, and the rules created
+for the lines of the rules file, i.e. with the host as a comment and the exact
+same port and protocol. The cron job, the rules file and the dynufw scripts are
+removed as well. All other rules are kept, and [ufw] is left enabled.
 
   [dynufw]: https://github.com/efrecon/dynufw
 

@@ -40,8 +40,8 @@ test_cli_detects_distribution() {
 }
 
 test_cli_detects_version() {
-    primer_in docker.io/library/alpine:3.23.4 -v error -s test --test:test os_version -- '
-        assert_equal 3.23.4 "$PRIMER_OUT"'
+    primer_in docker.io/library/alpine:3.24.4 -v error -s test --test:test os_version -- '
+        assert_equal 3.24.4 "$PRIMER_OUT"'
 }
 
 test_cli_detects_container() {
@@ -106,6 +106,30 @@ test_cli_config_file() {
         primer_run -v error -c /tmp/primer.env
         assert_equal 0 "$PRIMER_RC"
         assert_equal fromConfig "$PRIMER_OUT"'
+}
+
+# Library mode is only for sourcing: executed, primer refuses to run rather
+# than silently doing nothing, and ignores PRIMER_ROOT_DIR from the
+# environment. Sourced, it loads everything and stops, also from a script.
+test_cli_library_mode() {
+    in_container "$IMG_TRIXIE" '
+        apt-get update -qq >/dev/null && apt-get install -y -qq bash >/dev/null 2>&1 || true
+        ./libexec/yu.sh/bin/amalgamation.sh primer > /tmp/primer.sh
+        chmod a+x /tmp/primer.sh
+        for p in ./primer /tmp/primer.sh; do
+            run env PRIMER_LIBRARY=1 "$p" --help
+            assert_equal 1 "$RUN_RC" "$p in library mode"
+            assert_contains "PRIMER_LIBRARY=1 is only for sourcing primer" "$RUN_ERR"
+            run env PRIMER_LIBRARY=1 bash "$p" --help
+            assert_equal 1 "$RUN_RC" "$p in library mode, with bash"
+            mkdir -p /tmp/elsewhere
+            run env PRIMER_ROOT_DIR=/tmp/elsewhere "$p" --help
+            assert_equal 0 "$RUN_RC" "$p with PRIMER_ROOT_DIR"
+            assert_contains "Accepted commands" "$RUN_ERR"
+        done
+        printf "PRIMER_LIBRARY=1\n. /tmp/primer.sh\nprimer_step_docker option | head -c 10\n" > /tmp/lib.sh
+        assert_equal "--registry" "$(sh /tmp/lib.sh)" "sourced amalgamation"
+        assert_equal "/primer" "$(cd /tmp && PRIMER_LIBRARY=1 PRIMER_ROOT_DIR=/primer sh -c ". /primer/primer; echo \$PRIMER_ROOT_DIR")"'
 }
 
 test_cli_amalgamation() {

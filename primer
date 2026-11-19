@@ -3,9 +3,20 @@
 # Shell sanity
 set -eu
 
-# Root directory of the script
-# (can be set from the outside when sourcing primer, as $0 is then the shell).
-[ -z "${PRIMER_ROOT_DIR:-}" ] && PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
+# Was primer executed or sourced? When executed, $0 is the script itself (or
+# its amalgamation), which defines primer_abort(). When sourced, $0 is the
+# shell, or the script that sources primer.
+_PRIMER_SOURCED=1
+if [ -f "$0" ] && grep -q '^primer_abort()' "$0" 2>/dev/null; then
+    _PRIMER_SOURCED=0
+fi
+
+# Root directory of the script. When sourced, $0 is not the script, so it can
+# be set from the outside instead. It is always computed when executed, so a
+# leftover value in the environment cannot point to another installation.
+if [ "$_PRIMER_SOURCED" = "0" ] || [ -z "${PRIMER_ROOT_DIR:-}" ]; then
+    PRIMER_ROOT_DIR=$( cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P )
+fi
 ### AMLG_START
 # Our library for scripts and dependencies.
 PRIMER_LIB_DIR=
@@ -93,9 +104,15 @@ done
 
 # Library mode: when sourced with PRIMER_LIBRARY=1, stop here. All modules (and
 # steps in the amalgamation) are loaded, but no option is parsed and nothing
-# runs. This is used by the test suite.
-# shellcheck disable=SC2317
-[ "${PRIMER_LIBRARY:-0}" = "1" ] && return 0
+# runs. This is used by the test suite. When executed, a top-level return would
+# silently exit with success in most shells (doing nothing): fail instead.
+if [ "${PRIMER_LIBRARY:-0}" = "1" ]; then
+    if [ "$_PRIMER_SOURCED" = "1" ]; then
+        # shellcheck disable=SC2317
+        return 0
+    fi
+    primer_abort "PRIMER_LIBRARY=1 is only for sourcing primer, unset it to run primer"
+fi
 
 # Print usage on stderr and exit
 usage() {

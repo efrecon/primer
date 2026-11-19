@@ -67,3 +67,23 @@ test_locale_generated_debian() {
         assert_true grep -qx "LC_ALL=sv_SE.UTF-8" /etc/environment
         assert_true grep -q "^sv_SE.UTF-8 UTF-8" /etc/locale.gen'
 }
+
+# On Debian, the charset of locales missing from /etc/locale.gen comes from
+# the list of supported locales. Built-in locales need no generation, and
+# locales with unknown charsets are not generated.
+test_locale_charset_debian() {
+    in_container "$IMG_TRIXIE" '
+        primer_run -s locale --locale:locale C.UTF-8 install
+        assert_equal 0 "$PRIMER_RC" "built-in locale"
+        assert_false command -v locale-gen
+        apt-get update -qq >/dev/null && apt-get install -y -qq locales >/dev/null 2>&1
+        sed -i "/sv_SE /d" /etc/locale.gen
+        primer_run -s locale --locale:locale sv_SE install
+        assert_equal 0 "$PRIMER_RC" "locale without charset"
+        assert_true grep -qx "sv_SE ISO-8859-1" /etc/locale.gen
+        assert_match "^sv_SE$" "$(locale -a)"
+        primer_run -s locale --locale:locale xx_YY install
+        assert_equal 0 "$PRIMER_RC" "unknown locale"
+        assert_contains "Unknown charset for locale xx_YY" "$PRIMER_ERR"
+        assert_false grep -q "^xx_YY" /etc/locale.gen'
+}

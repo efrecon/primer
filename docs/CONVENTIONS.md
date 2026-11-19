@@ -65,7 +65,7 @@ or new installation steps:
 + Every step has tests in `test/step_<step>.test.sh`.
 + Tests always run in containers, using the helpers from `test/lib.sh`:
   `in_container`, `primer_in` (the CLI) and `unit` (primer sourced in library
-  mode). Images are fully qualified, e.g. `docker.io/library/alpine:3.23`, so
+  mode). Images are fully qualified, e.g. `docker.io/library/alpine:3.24`, so
   they work with both docker and podman.
 + Assertions (`assert_equal`, `assert_match`, ...) run inside the containers.
   Replace external commands with `mock` (shell functions, or executables for
