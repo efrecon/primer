@@ -265,180 +265,188 @@ USAGE
     exit "$exitcode"
 }
 
-# Parse options
-PRIMER_STEP_OPTIONS= ; # --*:* options and their values will be saved here.
-OPT_STEPS=
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -s | --steps)
-            OPT_STEPS=$2; shift 2;;
-        --steps=*)
-            OPT_STEPS="${1#*=}"; shift 1;;
+# Parse the options, read the configuration and run the command on all steps.
+# Everything happens in this function, called on the last line: when primer
+# is piped from curl, the shell runs commands as soon as it reads them, and
+# nothing should run from a partial download.
+main() {
+    # Parse options
+    PRIMER_STEP_OPTIONS= ; # --*:* options and their values will be saved here.
+    OPT_STEPS=
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -s | --steps)
+                OPT_STEPS=$2; shift 2;;
+            --steps=*)
+                OPT_STEPS="${1#*=}"; shift 1;;
 
-        -p | --path)
-            PRIMER_PATH=$2; shift 2;;
-        --path=*)
-            PRIMER_PATH="${1#*=}"; shift 1;;
+            -p | --path)
+                PRIMER_PATH=$2; shift 2;;
+            --path=*)
+                PRIMER_PATH="${1#*=}"; shift 1;;
 
-        --*:*)
-            # Capture and makes the difference between options that look like
-            # --module:option and --module:option=value.
-            _val=${1#*=};  # The value, when present is everything after the =
-            _key=${1%%=*}; # This is everything before the first =, when present
-            if [ "$_key" = "$_val" ]; then
-                # This captures options that look like --module:option, where
-                # the value is the coming argument. We extract the different
-                # components using shell expansions and pass further a
-                # (reconstructed) option to the module.
-                _opt=${1#*:};  # Option is everything after the :
-                _tmp=${1%:*};  # Module is everything before the : sans -
-                _step=${_tmp##*-}
-                PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
+            --*:*)
+                # Capture and makes the difference between options that look like
+                # --module:option and --module:option=value.
+                _val=${1#*=};  # The value, when present is everything after the =
+                _key=${1%%=*}; # This is everything before the first =, when present
+                if [ "$_key" = "$_val" ]; then
+                    # This captures options that look like --module:option, where
+                    # the value is the coming argument. We extract the different
+                    # components using shell expansions and pass further a
+                    # (reconstructed) option to the module.
+                    _opt=${1#*:};  # Option is everything after the :
+                    _tmp=${1%:*};  # Module is everything before the : sans -
+                    _step=${_tmp##*-}
+                    PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
 $_step $_opt $2"
-                shift 2
-            else
-                # This captures options that look like --module:option=value. We
-                # extract the different components using shell expansions and
-                # pass further a (reconstructed) option to the module.
-                _opt=${_key#*:};  # Option is everything after the :
-                _tmp=${_key%:*};  # Module is everything before the : sans -
-                _step=${_tmp##*-}
-                PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
+                    shift 2
+                else
+                    # This captures options that look like --module:option=value. We
+                    # extract the different components using shell expansions and
+                    # pass further a (reconstructed) option to the module.
+                    _opt=${_key#*:};  # Option is everything after the :
+                    _tmp=${_key%:*};  # Module is everything before the : sans -
+                    _step=${_tmp##*-}
+                    PRIMER_STEP_OPTIONS="$PRIMER_STEP_OPTIONS
 $_step $_opt $_val"
-                shift 1
-            fi
-            ;;
+                    shift 1
+                fi
+                ;;
 
-        -c | --config)
-            PRIMER_CONFIG=$2; shift 2;;
-        --config=*)
-            PRIMER_CONFIG="${1#*=}"; shift 1;;
+            -c | --config)
+                PRIMER_CONFIG=$2; shift 2;;
+            --config=*)
+                PRIMER_CONFIG="${1#*=}"; shift 1;;
 
-        --curl)
-            PRIMER_CURL_OPTIONS=$2; shift 2;;
-        --curl=*)
-            PRIMER_CURL_OPTIONS="${1#*=}"; shift 1;;
+            --curl)
+                PRIMER_CURL_OPTIONS=$2; shift 2;;
+            --curl=*)
+                PRIMER_CURL_OPTIONS="${1#*=}"; shift 1;;
 
-        --no-subst)
-            PRIMER_SUBST=0; shift 1;;
+            --no-subst)
+                PRIMER_SUBST=0; shift 1;;
 
-        -v | --verbose)
-            YUSH_LOG_LEVEL=$2; shift 2;;
-        --verbose=*)
-            # shellcheck disable=SC2034
-            YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
+            -v | --verbose)
+                YUSH_LOG_LEVEL=$2; shift 2;;
+            --verbose=*)
+                # shellcheck disable=SC2034
+                YUSH_LOG_LEVEL="${1#*=}"; shift 1;;
 
-        -V | --version)
-            echo "$YUSH_APPNAME v${PRIMER_VERSION#v}"; exit 0;;
+            -V | --version)
+                echo "$YUSH_APPNAME v${PRIMER_VERSION#v}"; exit 0;;
 
-        --non-interactive | --no-colour | --no-color)
-            # shellcheck disable=SC2034
-            YUSH_LOG_COLOUR=0; shift 1;;
+            --non-interactive | --no-colour | --no-color)
+                # shellcheck disable=SC2034
+                YUSH_LOG_COLOUR=0; shift 1;;
 
-        -h | --help)
-            usage "" 0;;
-        --)
-            shift; break;;
-        -*)
-            usage "Unknown option: $1 !" 1;;
-        *)
-            break;;
-    esac
-done
+            -h | --help)
+                usage "" 0;;
+            --)
+                shift; break;;
+            -*)
+                usage "Unknown option: $1 !" 1;;
+            *)
+                break;;
+        esac
+    done
 
-# Discover OS type and how to run sudo.
-primer_os_init
+    # Discover OS type and how to run sudo.
+    primer_os_init
 
-# Read configuration from .env formatted file(s), local or remote
-for _cfg in $PRIMER_CONFIG; do
-    # Replace tokens if we have some
-    if printf %s\\n "$_cfg" | grep -Eq '%[[:alnum:]]+%'; then
-        # Note that this automagically installs the iproute2 package in a Ubuntu
-        # Docker container, as the ip command does not exists there...
-        _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
-        _hst=$(primer_net_hostname)
-        _cfg=$( printf %s\\n "$_cfg" |
-                sed -E  -e "s/%mac%/${_mac}/g" \
-                        -e "s/%host%/${_hst}/g" \
-                        -e "s/%hostname%/${_hst}/g" )
-    fi
-    if printf %s\\n "$_cfg" | grep -Eq '^http://'; then
-        # Anyone on the way could change the configuration, i.e. the commands
-        # run as root.
-        primer_abort "Configuration from $_cfg over plain HTTP refused, use https://"
-    elif printf %s\\n "$_cfg" | grep -Eq '^https://'; then
-        _tmp=$(mktemp)
-        primer_net_curl "$_cfg" > "$_tmp"
-        primer_config "$_tmp" "$_cfg"
-        rm -f "$_tmp"
-    else
-        primer_config "$_cfg"
-    fi
-done
-
-# Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
-# respective modules. This is because command-line options should have
-# precedence over environment variables (even if read from file).
-[ -n "$OPT_STEPS" ] && PRIMER_STEPS=$OPT_STEPS
-while IFS= read -r line; do
-    if [ -n "$line" ]; then
-        _step=$(printf %s\\n "$line" | cut -d " " -f 1)
-        _opt=$(printf %s\\n "$line" | cut -d " " -f 2)
-        # Take everything for the value in case it contains spaces.
-        _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
-        yush_info "Passing option --$_opt to $_step"
-        if primer_utils_loadif "$_step"; then
-            "primer_step_$_step" option "--$_opt" "$_val"
+    # Read configuration from .env formatted file(s), local or remote
+    for _cfg in $PRIMER_CONFIG; do
+        # Replace tokens if we have some
+        if printf %s\\n "$_cfg" | grep -Eq '%[[:alnum:]]+%'; then
+            # Note that this automagically installs the iproute2 package in a Ubuntu
+            # Docker container, as the ip command does not exists there...
+            _mac=$(primer_net_macaddr "$(primer_net_primary_interface)" | tr -d ':')
+            _hst=$(primer_net_hostname)
+            _cfg=$( printf %s\\n "$_cfg" |
+                    sed -E  -e "s/%mac%/${_mac}/g" \
+                            -e "s/%host%/${_hst}/g" \
+                            -e "s/%hostname%/${_hst}/g" )
         fi
-    fi
-done <<EOF
+        if printf %s\\n "$_cfg" | grep -Eq '^http://'; then
+            # Anyone on the way could change the configuration, i.e. the commands
+            # run as root.
+            primer_abort "Configuration from $_cfg over plain HTTP refused, use https://"
+        elif printf %s\\n "$_cfg" | grep -Eq '^https://'; then
+            _tmp=$(mktemp)
+            primer_net_curl "$_cfg" > "$_tmp"
+            primer_config "$_tmp" "$_cfg"
+            rm -f "$_tmp"
+        else
+            primer_config "$_cfg"
+        fi
+    done
+
+    # Pass command-line options that were saved in PRIMER_STEP_OPTIONS to their
+    # respective modules. This is because command-line options should have
+    # precedence over environment variables (even if read from file).
+    [ -n "$OPT_STEPS" ] && PRIMER_STEPS=$OPT_STEPS
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            _step=$(printf %s\\n "$line" | cut -d " " -f 1)
+            _opt=$(printf %s\\n "$line" | cut -d " " -f 2)
+            # Take everything for the value in case it contains spaces.
+            _val=$(printf %s\\n "$line" | cut -d " " -f 3-)
+            yush_info "Passing option --$_opt to $_step"
+            if primer_utils_loadif "$_step"; then
+                "primer_step_$_step" option "--$_opt" "$_val"
+            fi
+        fi
+    done <<EOF
 $(printf %s\\n "$PRIMER_STEP_OPTIONS")
 EOF
 
 
-# Default command is to install
-if [ "$#" -gt 0 ]; then
-    cmd=$1
-    shift
-else
-    cmd=install
-fi
+    # Default command is to install
+    if [ "$#" -gt 0 ]; then
+        cmd=$1
+        shift
+    else
+        cmd=install
+    fi
 
-# Pass the command to all relevant steps, in order.
-case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
-    install | up)
-        yush_notice "Installing steps: $PRIMER_STEPS"
-        for _step in $PRIMER_STEPS; do
-            if primer_utils_loadif "$_step"; then
-                yush_info "Primer step install>>> $(yush_green "$_step")"
-                "primer_step_$_step" install
-            fi
-        done
-        ;;
-    clean | remove | down)
-        yush_notice "Cleaning steps: $PRIMER_STEPS"
-        for _step in $PRIMER_STEPS; do
-            if primer_utils_loadif "$_step"; then
-                yush_info "Primer step <<<clean $(yush_red "$_step")"
-                "primer_step_$_step" clean
-            fi
-        done
-        ;;
-    env | environment)
-        primer_hostinfo
-        yush_info "Getting known accessible steps"
-        for _step in $(primer_steps | sort -u); do
-            primer_info "$_step"
-        done
-        ;;
-    info)
-        yush_info "Getting info for steps to run"
-        for _step in $PRIMER_STEPS; do
-            primer_info "$_step"
-        done
-        ;;
-    help)
-        usage "" 0;;
-    *)
-        usage "Unknown command: $cmd" 1;;
-esac
+    # Pass the command to all relevant steps, in order.
+    case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
+        install | up)
+            yush_notice "Installing steps: $PRIMER_STEPS"
+            for _step in $PRIMER_STEPS; do
+                if primer_utils_loadif "$_step"; then
+                    yush_info "Primer step install>>> $(yush_green "$_step")"
+                    "primer_step_$_step" install
+                fi
+            done
+            ;;
+        clean | remove | down)
+            yush_notice "Cleaning steps: $PRIMER_STEPS"
+            for _step in $PRIMER_STEPS; do
+                if primer_utils_loadif "$_step"; then
+                    yush_info "Primer step <<<clean $(yush_red "$_step")"
+                    "primer_step_$_step" clean
+                fi
+            done
+            ;;
+        env | environment)
+            primer_hostinfo
+            yush_info "Getting known accessible steps"
+            for _step in $(primer_steps | sort -u); do
+                primer_info "$_step"
+            done
+            ;;
+        info)
+            yush_info "Getting info for steps to run"
+            for _step in $PRIMER_STEPS; do
+                primer_info "$_step"
+            done
+            ;;
+        help)
+            usage "" 0;;
+        *)
+            usage "Unknown command: $cmd" 1;;
+    esac
+}
+
+main "$@"

@@ -156,6 +156,27 @@ test_cli_library_mode() {
         assert_equal "/primer" "$(cd /tmp && PRIMER_LIBRARY=1 PRIMER_ROOT_DIR=/primer sh -c ". /primer/primer; echo \$PRIMER_ROOT_DIR")"'
 }
 
+# Piped from curl, the shell runs commands as soon as it reads them: nothing
+# runs from a partial download, as everything happens in main, called last.
+test_main_piped() {
+    in_container "$IMG_ALPINE" '
+        ./libexec/yu.sh/bin/amalgamation.sh primer 2>/dev/null > /tmp/primer.sh
+        set -- -s timezone --timezone:location Europe/Stockholm install
+        # Cut in the middle of main, and right before calling it.
+        mid=$(grep -n "Pass the command to all relevant steps" /tmp/primer.sh | cut -d: -f1)
+        last=$(grep -n "^main \"\$@\"$" /tmp/primer.sh | cut -d: -f1)
+        assert_equal "$(wc -l < /tmp/primer.sh | tr -d " ")" "$last" "main called on the last line"
+        for n in "$mid" "$((last - 1))"; do
+            run sh -c "head -n $n /tmp/primer.sh | sh -s -- $*"
+            assert_not_contains "Installing steps" "$RUN_ERR" "cut at line $n"
+            assert_false test -e /etc/localtime
+        done
+        # The whole script runs.
+        run sh -c "cat /tmp/primer.sh | sh -s -- $*"
+        assert_equal 0 "$RUN_RC" "$RUN_ERR"
+        assert_equal /usr/share/zoneinfo/Europe/Stockholm "$(readlink /etc/localtime)"'
+}
+
 test_cli_amalgamation() {
     in_container "$IMG_ALPINE" '
         ./libexec/yu.sh/bin/amalgamation.sh primer > /tmp/primer.sh
