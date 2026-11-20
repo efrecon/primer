@@ -234,6 +234,8 @@ PASSED=0
 FAILED=0
 SKIPPED=0
 FAILURES=
+SKIPS=
+STARTED=$(date +%s)
 
 # Report the result of a test: report NAME STATUS SECONDS
 report() {
@@ -258,6 +260,8 @@ report() {
             fi
             NUM=$((NUM + 1))
             SKIPPED=$((SKIPPED + 1))
+            SKIPS="${SKIPS}${1}: ${_reason}
+"
             if [ "$TAP" = "1" ]; then
                 echo "ok $NUM - $1 # SKIP ${_reason}"
             else
@@ -359,6 +363,48 @@ while [ -n "$PENDING" ] || [ -n "$RUNNING" ]; do
     [ -n "$RUNNING" ] && sleep 1
 done
 wait
+
+# Print a summary of the results in Markdown, for the page of the run on GitHub
+# Actions: counts, failed tests with the end of their logs, skipped tests with
+# their reasons.
+github_summary() {
+    if [ "$FAILED" -gt 0 ]; then
+        echo "## ❌ Tests: $FAILED failed"
+    else
+        echo "## ✅ Tests passed"
+    fi
+    cat <<EOF
+
+| Passed | Failed | Skipped | Duration |
+|---:|---:|---:|---:|
+| $PASSED | $FAILED | $SKIPPED | $(( $(date +%s) - STARTED ))s |
+EOF
+    if [ "$FAILED" -gt 0 ]; then
+        printf '\n### Failed tests\n\n'
+        for _t in $FAILURES; do
+            _tail=$(tail -n "$TAIL" "$LOGS/$(printf %s "$_t" | tr ':' '.').log" 2>/dev/null || true)
+            # Backticks are escaped: the heredoc expands variables.
+            cat <<EOF
+<details><summary><code>$_t</code></summary>
+
+\`\`\`
+${_tail:-(no output)}
+\`\`\`
+
+</details>
+EOF
+        done
+    fi
+    if [ -n "$SKIPS" ]; then
+        printf '\n### Skipped tests\n\n'
+        printf %s "$SKIPS" | while IFS= read -r _line; do
+            echo "- \`${_line%%: *}\`: ${_line#*: }"
+        done
+    fi
+}
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    github_summary >> "$GITHUB_STEP_SUMMARY" || echo "Could not write the summary to $GITHUB_STEP_SUMMARY" >&2
+fi
 
 if [ "$TAP" = "1" ]; then
     echo "# passed: $PASSED, failed: $FAILED, skipped: $SKIPPED"

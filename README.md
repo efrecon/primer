@@ -612,6 +612,11 @@ into the containers: a `primer.env` of yours, which primer would read, never
 is. Tests running longer than 20 minutes fail (`-T` to change). Containers are
 labelled with `primer-test`, and removed when the suite is interrupted.
 
+On GitHub Actions, detected through `GITHUB_ACTIONS`, a summary is also written
+to the page of the run (`GITHUB_STEP_SUMMARY`): the number of passed, failed and
+skipped tests, the failed tests with the end of their logs, and the reasons of
+the skipped ones.
+
 Some steps download releases from GitHub. Set `GITHUB_TOKEN` to make these
 calls authenticated and avoid anonymous rate limits.
 

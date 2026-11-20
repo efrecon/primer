@@ -63,13 +63,17 @@ test_lib_runner() {
     # Commented out, so that they are not discovered here.
     sed 's/^#//' > "$_probe/test/probe.test.sh" <<'EOF'
 #test_probe_pass() { true; }
-#test_probe_two_calls() { false; true; }
+#test_probe_two_calls() { echo "probe output" >&2; false; true; }
 #test_probe_status77() { return 77; }
 #test_probe_skip() { skip "for a reason"; }
 #test_probe_hang () { sleep 20; }
 EOF
-    _out=$("$_probe/test/run.sh" -t -T 3 '^probe:' 2>&1 || true)
+    # As on GitHub Actions, with a summary of its own: never the one of the
+    # current run, when on GitHub.
+    _summary="$_probe/summary.md"
+    _out=$(GITHUB_ACTIONS=true GITHUB_STEP_SUMMARY=$_summary "$_probe/test/run.sh" -t -T 3 '^probe:' 2>&1 || true)
     _logs=$(printf %s\\n "$_out" | sed -n 's/^Logs kept in //p')
+    _md=$(cat "$_summary")
     rm -rf "$_probe" "$_logs"
     printf '%s\n' "$_out"
     assert_match "^ok [0-9]+ - probe:test_probe_pass$" "$_out"
@@ -79,4 +83,14 @@ EOF
     assert_match "^not ok [0-9]+ - probe:test_probe_hang$" "$_out"
     assert_match "timed out after 3s" "$_out"
     assert_match "^# passed: 1, failed: 3, skipped: 1$" "$_out"
+    printf '%s\n' "$_md"
+    assert_contains "## ❌ Tests: 3 failed" "$_md"
+    assert_match "^\\| 1 \\| 3 \\| 1 \\| [0-9]+s \\|$" "$_md"
+    for _t in two_calls status77 hang; do
+        assert_contains "<details><summary><code>probe:test_probe_$_t</code></summary>" "$_md"
+    done
+    assert_contains "probe output" "$_md" "end of the logs"
+    assert_contains "(no output)" "$_md" "empty logs"
+    assert_contains "- \`probe:test_probe_skip\`: for a reason" "$_md"
+    assert_not_contains "test_probe_pass" "$_md"
 }
