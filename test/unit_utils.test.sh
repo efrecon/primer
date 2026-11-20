@@ -370,3 +370,16 @@ test_primer_utils_remove_at_version() {
         primer_utils_remove_at_version /usr/local/bin/plugin 0.9 meta
         assert_false test -e /usr/local/bin/plugin'
 }
+
+# All compression letters of tar.
+test_primer_utils_untar() {
+    unit "$IMG_ALPINE" '
+        apk add -q xz >/dev/null
+        mkdir -p /tmp/src && echo hi > /tmp/src/f
+        for l in "" z j J; do
+            tar -C /tmp/src -c${l}f /tmp/a.tar f
+            rm -rf /tmp/dst && mkdir /tmp/dst
+            primer_utils_untar /tmp/a.tar /tmp/dst "$l"
+            assert_equal hi "$(cat /tmp/dst/f)" "letter [$l]"
+        done'
+}
