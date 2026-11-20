@@ -28,6 +28,7 @@ _dynufw_real() {
         assert_true grep -qx "IPV6=no" /etc/default/ufw
         assert_true [ -L /usr/local/bin/ufw-dynamic-host-update.sh ]
         assert_true [ -L /usr/local/bin/ufw-clean.sh ]
+        assert_equal 90ac5c50aae2e8173bd695a03470a1168fa73453 "$(git -C /usr/local/opt/dynufw/master rev-parse HEAD)" "pinned commit"
         assert_contains "/usr/local/bin/ufw-dynamic-host-update.sh -q" "$(crontab -l)"
 
         # Rules that do not belong to dynufw, one on the port of a dynamic rule,
@@ -79,12 +80,11 @@ test_dynufw_mocked() {
             esac
         }
         # Fake clone of dynufw: scripts that log their calls.
-        git() {
-            mock_log git "$@"
-            for _last; do :; done
-            mkdir -p "$_last"
+        primer_net_git_clone() {
+            mock_log primer_net_git_clone "$@"
+            mkdir -p "$4"
             for _s in ufw-clean ufw-dynamic-host-update; do
-                printf "#!/bin/sh\necho \"%s \$*\" >> %s\n" "$_s" "$MOCK_LOG" > "$_last/$_s.sh"
+                printf "#!/bin/sh\necho \"%s \$*\" >> %s\n" "$_s" "$MOCK_LOG" > "$4/$_s.sh"
             done
         }
         primer_step_dynufw option \
@@ -98,7 +98,7 @@ test_dynufw_mocked() {
         assert_contains "bad_host:22 is not a valid port opening specification" "$RUN_ERR"
         assert_contains "80/icmp is not a valid port opening specification" "$RUN_ERR"
         calls=$(mock_calls)
-        assert_contains "git clone https://github.com/efrecon/dynufw.git --recurse --branch master --depth 1 /usr/local/opt/dynufw/master" "$calls"
+        assert_contains "primer_net_git_clone https://github.com/efrecon/dynufw.git master 90ac5c50aae2e8173bd695a03470a1168fa73453 /usr/local/opt/dynufw/master update" "$calls"
         added=$(grep "^ufw " /tmp/ufw.added)
         assert_contains "ufw allow from 10.0.0.0/8 to any port 2222 proto tcp comment '"'"'primer dynufw'"'"'" "$added" "new rule marked"
         assert_equal "ufw allow 22/tcp" "$(grep " 22/tcp" /tmp/ufw.added)" "existing rule untouched"
@@ -181,11 +181,10 @@ test_dynufw_ssh_lockout() {
         unit_step dynufw
         . test/data/dynufw/ufw.sh
         crontab() { :; }
-        git() {
-            for _last; do :; done
-            mkdir -p "$_last"
+        primer_net_git_clone() {
+            mkdir -p "$4"
             for _s in ufw-clean ufw-dynamic-host-update; do
-                printf "#!/bin/sh\n" > "$_last/$_s.sh"
+                printf "#!/bin/sh\n" > "$4/$_s.sh"
             done
         }
         mock sshd

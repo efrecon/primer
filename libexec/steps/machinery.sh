@@ -1,8 +1,13 @@
 #!/usr/bin/env sh
 
-# Version of machinery to download. Can be set from the
-# outside, defaults to empty, meaning the latest as per the variable below.
+# Branch of machinery to install, also the name of the directory where it is
+# installed: branches coexist, each in its own directory.
 PRIMER_STEP_MACHINERY_BRANCH=${PRIMER_STEP_MACHINERY_BRANCH:-master}
+
+# Commit of machinery to install, verified by git: the tip of master when this
+# version of primer was released. Empty to install the tip of the branch,
+# unverified.
+PRIMER_STEP_MACHINERY_COMMIT=${PRIMER_STEP_MACHINERY_COMMIT-9eadd4fd1c226ec14e5420d18f3b63ec571e7a3a}
 
 PRIMER_STEP_MACHINERY_REPO=https://github.com/efrecon/machinery.git
 
@@ -10,11 +15,13 @@ primer_step_machinery() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--branch"
+            [ "$#" = "0" ] && echo "--branch --commit"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --branch)
                         PRIMER_STEP_MACHINERY_BRANCH=$2; shift 2;;
+                    --commit)
+                        PRIMER_STEP_MACHINERY_COMMIT=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -43,16 +50,12 @@ primer_step_machinery() {
                     *)
                         ;;
                 esac
-                primer_os_dependency git
-                yush_info "Installing machinery from $PRIMER_STEP_MACHINERY_REPO (branch: $PRIMER_STEP_MACHINERY_BRANCH)"
-                $PRIMER_OS_SUDO mkdir -p "$_dir"
-                $PRIMER_OS_SUDO git clone "$PRIMER_STEP_MACHINERY_REPO" \
-                                --recurse \
-                                --branch "$PRIMER_STEP_MACHINERY_BRANCH" \
-                                --depth 1 \
-                                "$_dir"
-                $PRIMER_OS_SUDO chmod a+x "$_dir/machinery"
             fi
+            # At the commit, when given: an existing checkout moves to it.
+            yush_info "Installing machinery from $PRIMER_STEP_MACHINERY_REPO (branch: $PRIMER_STEP_MACHINERY_BRANCH, commit: ${PRIMER_STEP_MACHINERY_COMMIT:-none})"
+            primer_net_git_clone "$PRIMER_STEP_MACHINERY_REPO" "$PRIMER_STEP_MACHINERY_BRANCH" \
+                "$PRIMER_STEP_MACHINERY_COMMIT" "$_dir" || return 1
+            $PRIMER_OS_SUDO chmod a+x "$_dir/machinery"
             # Point the link to the branch, unless machinery was installed
             # otherwise.
             if [ -e "$_link" ] && ! [ -L "$_link" ]; then

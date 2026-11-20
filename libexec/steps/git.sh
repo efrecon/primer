@@ -3,12 +3,8 @@
 # Version of git LFS to download.
 PRIMER_STEP_GIT_LFS_VERSION=${PRIMER_STEP_GIT_LFS_VERSION:-}
 
-# URL to JSON file where to find the list of releases of git LFS. The code only
-# supports github API.
-PRIMER_STEP_GIT_LFS_RELEASES=https://api.github.com/repos/git-lfs/git-lfs/releases
-
-# Root URL to download location
-PRIMER_STEP_GIT_LFS_DOWNLOAD=https://github.com/git-lfs/git-lfs/releases/download
+# Project of git LFS at GitHub.
+PRIMER_STEP_GIT_LFS_PROJECT=git-lfs/git-lfs
 
 # Regular expression matching the name of the regular users on the system that
 # should be given access to git LFS. This defaults to all regular users.
@@ -71,17 +67,8 @@ primer_step_git() {
             # Only remove git LFS when at the version that this step installs:
             # the one requested, or the latest one. Another binary might not
             # have been installed by this step.
-            _lfs="${PRIMER_BINDIR%%/}/git-lfs"
-            if [ -f "$_lfs" ]; then
-                _want=${PRIMER_STEP_GIT_LFS_VERSION:-$(_primer_step_git_lfs_latest || true)}
-                _have=$(_primer_step_git_lfs_version "$_lfs")
-                if [ -n "$_want" ] && [ "$_have" = "$_want" ]; then
-                    yush_info "Removing git LFS $_have"
-                    $PRIMER_OS_SUDO rm -f "$_lfs"
-                else
-                    yush_warn "Keeping $_lfs, at version ${_have:-unknown}, not installed by primer (version ${_want:-unknown})"
-                fi
-            fi
+            _want=${PRIMER_STEP_GIT_LFS_VERSION:-$(_primer_step_git_lfs_latest)}
+            primer_utils_remove_at_version "${PRIMER_BINDIR%%/}/git-lfs" "$_want" _primer_step_git_lfs_version
             ;;
     esac
 }
@@ -94,14 +81,8 @@ _primer_step_git_lfs_version() {
 
 # Print the latest version of git LFS, without the leading v.
 _primer_step_git_lfs_latest() {
-    # Following uses the github API
-    # https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-    # for getting the list of latest releases.
-    yush_notice "Discovering latest git LFS version from $PRIMER_STEP_GIT_LFS_RELEASES"
-    primer_net_curl "$PRIMER_STEP_GIT_LFS_RELEASES" |
-        grep -E '"name"[[:space:]]*:[[:space:]]*"v[0-9]+(\.[0-9]+)*"' |
-        sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"v([0-9]+(\.[0-9]+)*)",/\1/g' |
-        head -1
+    _latest=$(primer_github_latest "$PRIMER_STEP_GIT_LFS_PROJECT")
+    printf %s\\n "${_latest#v}"
 }
 
 # Download git LFS at PRIMER_STEP_GIT_LFS_VERSION (the latest when empty) for
@@ -130,45 +111,7 @@ _primer_step_git_lfs_download() {
     fi
 
     yush_info "Installing git LFS $PRIMER_STEP_GIT_LFS_VERSION"
-    _release="${PRIMER_STEP_GIT_LFS_DOWNLOAD%%/}/v${PRIMER_STEP_GIT_LFS_VERSION}"
-    _tar=git-lfs-${_os}-${_platform}-v${PRIMER_STEP_GIT_LFS_VERSION}.tar.gz
-    # Get the published sum, lines are formatted as <sha256> [*]<file>.
-    yush_debug "Downloading sha256 sums from ${_release}/sha256sums.asc"
-    _sum256=$(primer_net_curl "${_release}/sha256sums.asc" |
-                awk -v a="$_tar" '{f=$2; sub(/^\*/, "", f); if (f == a && !s) s = $1} END {print s}' || true)
-    if [ -z "$_sum256" ]; then
-        yush_error "Could not find sha256 sum for $_tar in ${_release}/sha256sums.asc, will not install"
-        return 1
-    fi
-
-    # Work in a temporary directory whereto we will be downloading the
-    # tarpack, verify its sha256 sum and the binary before installation.
-    _tmpdir=$(mktemp -d)
-    _rc=1
-    if ! primer_net_curl "${_release}/${_tar}" --progress-bar > "${_tmpdir}/${_tar}"; then
-        yush_error "No binary at ${_release}/${_tar}"
-    elif [ "$(sha256sum < "${_tmpdir}/${_tar}" | cut -d " " -f 1)" != "$_sum256" ]; then
-        yush_error "SHA256 sum mismatch, should have been $_sum256"
-    else
-        _bin=$(tar ztf "${_tmpdir}/$_tar" | grep 'git-lfs$' | head -1)
-        if [ -z "$_bin" ]; then
-            yush_error "Cannot find git-lfs in tar file!"
-        else
-            tar -C "${_tmpdir}" -zxf "${_tmpdir}/$_tar" "$_bin"
-            yush_debug "Verifying binary at ${_tmpdir}/${_bin}"
-            chmod a+x "${_tmpdir}/${_bin}"
-            if ! "${_tmpdir}/${_bin}" --version >/dev/null 2>&1; then
-                yush_error "Downloaded binary at ${_tmpdir}/${_bin} probably invalid, will not install"
-            else
-                yush_notice "Installing as ${PRIMER_BINDIR%%/}/git-lfs"
-                if ! [ -d "$PRIMER_BINDIR" ]; then
-                    $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
-                fi
-                primer_utils_install_bin "${_tmpdir}/${_bin}" "${PRIMER_BINDIR%%/}/git-lfs"
-                _rc=0
-            fi
-        fi
-    fi
-    rm -rf "$_tmpdir"
-    return "$_rc"
+    primer_github_install --sum sha256sums.asc --check --version --name git-lfs \
+        "$PRIMER_STEP_GIT_LFS_PROJECT" "v${PRIMER_STEP_GIT_LFS_VERSION}" \
+        "git-lfs-${_os}-${_platform}-v${PRIMER_STEP_GIT_LFS_VERSION}.tar.gz" git-lfs
 }

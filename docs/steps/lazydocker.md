@@ -12,7 +12,8 @@ Prior to installation, the sha256 sum of the download is checked against the
 published sha256 sum. The step fails, installing nothing, when the download or
 its verification fails, or when the latest version cannot be found.
 Installation will happen directly in the default primer bin directory, e.g.
-`/usr/local/bin`.
+`/usr/local/bin`. When cleaning, lazydocker is only removed at the version the
+step installs: the one requested, or the latest.
 
 ## Options
 

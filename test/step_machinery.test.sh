@@ -11,6 +11,7 @@ test_machinery_install_debian() {
         assert_true test -L /usr/local/bin/machinery
         assert_equal /usr/local/opt/machinery/master/machinery "$(readlink /usr/local/bin/machinery)"
         assert_true test -d /usr/local/opt/machinery/master/.git
+        assert_equal 9eadd4fd1c226ec14e5420d18f3b63ec571e7a3a "$(git -C /usr/local/opt/machinery/master rev-parse HEAD)" "pinned commit"
         assert_true command -v tclsh
         primer_run -s machinery clean
         assert_equal 0 "$PRIMER_RC"
@@ -67,11 +68,12 @@ test_machinery_second_branch() {
         printf "#!/bin/sh\necho 1.0\n" > /tmp/repo/machinery
         git -C /tmp/repo add machinery
         git -C /tmp/repo -c user.name=t -c user.email=t@t commit -qm init
+        git -C /tmp/repo config uploadpack.allowAnySHA1InWant true
         unit_load
         unit_step machinery
         primer_os_packages() { :; }
         PRIMER_STEP_MACHINERY_REPO=/tmp/repo
-        primer_step_machinery option --branch dev
+        primer_step_machinery option --branch dev --commit "$(git -C /tmp/repo rev-parse HEAD)"
         run primer_step_machinery install
         assert_equal 0 "$RUN_RC"
         assert_equal /usr/local/opt/machinery/dev/machinery "$(readlink /usr/local/bin/machinery)"

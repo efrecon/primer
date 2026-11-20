@@ -51,7 +51,7 @@ uname() { case "$1" in -m) echo x86_64;; *) echo Linux;; esac; }
 
 test_lazydocker_bad_checksum() {
     unit "$IMG_ALPINE" "$LAZYDOCKER_FAKE"'
-        FAKE_SUM=0000
+        FAKE_SUM=$(printf "%064d" 0)
         unit_step lazydocker
         primer_step_lazydocker option --version '"$LAZYDOCKER_VERSION"'
         run primer_step_lazydocker install
@@ -77,7 +77,7 @@ test_lazydocker_install_twice() {
 # Without a version, and when the latest one cannot be found, the step fails.
 test_lazydocker_no_latest() {
     unit "$IMG_ALPINE" '
-        mock primer_version_github_latest primer_net_curl
+        mock primer_github_latest primer_net_curl
         unit_step lazydocker
         run primer_step_lazydocker install
         assert_equal 1 "$RUN_RC"
@@ -98,4 +98,22 @@ test_lazydocker_platform_assets() {
             assert_contains "lazydocker_'"$LAZYDOCKER_VERSION"'_Linux_${_pair#*:}.tar.gz" "$(mock_calls)" "asset for ${_pair%%:*}"
             assert_contains "No binary at" "$RUN_ERR"
         done'
+}
+
+# Clean only removes lazydocker at the version the step installs.
+test_lazydocker_clean_other_version() {
+    unit "$IMG_ALPINE" '
+        mkdir -p /usr/local/bin
+        printf "#!/bin/sh\necho version 0.1\n" > /usr/local/bin/lazydocker
+        chmod a+x /usr/local/bin/lazydocker
+        unit_step lazydocker
+        primer_step_lazydocker option --version 0.25.2
+        run primer_step_lazydocker clean
+        assert_equal 0 "$RUN_RC"
+        assert_contains "Keeping /usr/local/bin/lazydocker, at version 0.1" "$RUN_ERR"
+        assert_true test -x /usr/local/bin/lazydocker
+        printf "#!/bin/sh\necho version 0.25.2\n" > /usr/local/bin/lazydocker
+        run primer_step_lazydocker clean
+        assert_equal 0 "$RUN_RC"
+        assert_false test -e /usr/local/bin/lazydocker'
 }

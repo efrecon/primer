@@ -12,7 +12,8 @@ Prior to installation, the download is verified against the sha256 sum
 published next to it (the `.sha` file of the release). The step fails,
 installing nothing, when the download or its verification fails, or when the
 latest version cannot be found. Installation will happen directly in the
-default primer bin directory, e.g. `/usr/local/bin`.
+default primer bin directory, e.g. `/usr/local/bin`. When cleaning, micro is only
+removed at the version the step installs: the one requested, or the latest.
 
 ## Options
 

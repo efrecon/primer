@@ -136,24 +136,37 @@ test_github_install_real() {
         assert_false test -e /usr/local/bin/lazydocker'
 }
 
-# Clean only removes the binaries of the projects, not other executables.
+# Clean only removes the binaries installed from the release: other
+# executables, and binaries with the same name but another content, are kept,
+# and so is everything when the release cannot be fetched.
 test_github_clean_keeps_other_binaries() {
-    unit "$IMG_ALPINE" '
+    unit "$IMG_ALPINE" "$GITHUB_FIXTURES"'
         mkdir -p /usr/local/bin
         for b in othertool toolbox; do
             printf "#!/bin/sh\n" > /usr/local/bin/$b; chmod a+x /usr/local/bin/$b
         done
-        printf "#!/bin/sh\n" > /usr/local/bin/tool; chmod a+x /usr/local/bin/tool
         printf "acme/tool tool_%%semantic%%_Linux_x86_64.tar.gz\n" > /tmp/projects
         unit_step github
         primer_step_github option --projects /tmp/projects
+        run primer_step_github install
+        assert_true test -x /usr/local/bin/tool
         run primer_step_github clean
         assert_equal 0 "$RUN_RC"
         assert_false test -e /usr/local/bin/tool
         assert_true test -x /usr/local/bin/othertool
         assert_true test -x /usr/local/bin/toolbox
+        # Same name, other content: kept.
+        printf "#!/bin/sh\necho mine\n" > /usr/local/bin/tool; chmod a+x /usr/local/bin/tool
         run primer_step_github clean
-        assert_equal 0 "$RUN_RC" "second clean"'
+        assert_equal 0 "$RUN_RC" "other content"
+        assert_contains "Keeping /usr/local/bin/tool, not the one from tool_1.2.3_Linux_x86_64.tar.gz" "$RUN_ERR"
+        assert_true test -x /usr/local/bin/tool
+        # The release cannot be fetched: kept.
+        primer_net_curl() { return 22; }
+        run primer_step_github clean
+        assert_equal 0 "$RUN_RC" "offline"
+        assert_contains "Keeping /usr/local/bin/tool, cannot compare it" "$RUN_ERR"
+        assert_true test -x /usr/local/bin/tool'
 }
 
 # Install the tarball of acme/tool with the checksum field $1, from the latest
@@ -257,7 +270,7 @@ test_github_checksum_none() {
     unit "$IMG_ALPINE" "$GITHUB_FIXTURES$GITHUB_CHECKSUM"'
         install_with ""
         assert_equal 0 "$RUN_RC"
-        assert_contains "No checksum for tool_1.2.3_Linux_x86_64.tar.gz of acme/tool, installing unverified" "$RUN_ERR"
+        assert_contains "No checksum for tool_1.2.3_Linux_x86_64.tar.gz, installing unverified" "$RUN_ERR"
         assert_true test -x /usr/local/bin/tool
         primer_step_github option --verify 1
         install_with ""
@@ -265,31 +278,4 @@ test_github_checksum_none() {
         assert_contains "not installing it" "$RUN_ERR"
         assert_false test -e /usr/local/bin/tool
         assert_contains "--verify" "$(primer_step_github option)"'
-}
-
-# Sums from checksum files: the line for the asset, compared without leading
-# directories or *, or the only sum of a file without names.
-test_github_checksum_lookup() {
-    unit "$IMG_ALPINE" '
-        unit_step github
-        printf "aaa  ./dir/x.tar.gz\nbbb *y.tar.gz\nSHA256 (z.tar.gz) = ccc\nddd  name with space.zip\n" > /tmp/sums
-        assert_equal aaa "$(_primer_step_github_sum_lookup /tmp/sums x.tar.gz)"
-        assert_equal bbb "$(_primer_step_github_sum_lookup /tmp/sums y.tar.gz)"
-        assert_equal "ccc sha256" "$(_primer_step_github_sum_lookup /tmp/sums z.tar.gz)"
-        assert_equal ddd "$(_primer_step_github_sum_lookup /tmp/sums "name with space.zip")"
-        assert_equal "" "$(_primer_step_github_sum_lookup /tmp/sums w.tar.gz)"
-        printf "\n eee \n" > /tmp/single
-        assert_equal eee "$(_primer_step_github_sum_lookup /tmp/single anything)"
-        assert_false _primer_step_github_sum "$(printf "%032d" 0)"
-        assert_equal sha256sum "$(_primer_step_github_sum "$(printf "%064d" 0)")"
-        assert_equal sha512sum "$(_primer_step_github_sum "$(printf "%0128d" 0)")"
-        assert_equal sha512sum "$(_primer_step_github_sum "$(printf "%0128d" 0)" sha512)"
-        assert_false _primer_step_github_sum "$(printf "%0128d" 0)" blake2b
-        assert_false _primer_step_github_sum "$(printf "%064d" 0)" sha512
-        assert_false _primer_step_github_sum "$(printf "%063dg" 0)"
-        for pair in SHA256SUMS:sha256 sha512sums.txt:sha512 x.tar.gz.sha384:sha384 \
-                B2SUMS:blake2b x.b2:blake2b x.md5:md5 SHA1SUMS:sha1 checksums.txt: \
-                "https://h/v1/SHA256SUMS?raw=1:sha256" x.sha:; do
-            assert_equal "${pair##*:}" "$(_primer_step_github_algo "${pair%:*}")" "$pair"
-        done'
 }

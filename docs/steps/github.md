@@ -134,9 +134,13 @@ The sum on the lazydocker line is an example, not the real one.
 
 ### Comparison to Other Steps
 
-Compared to other more complete steps such as [lazydocker] or [micro], the
-version of the installed binaries is not verified, and checksums only when
-given in the specification file.
+The [lazydocker], [micro], git, machine and docker steps download their
+binaries the same way, through the same code (`libexec/github.sh`). Compared
+to them, the version of the installed binaries is not verified, and checksums
+only when given in the specification file. When cleaning, only binaries
+identical to the ones in the release are removed: the asset is downloaded and
+verified again for the comparison, binaries are kept, with a warning, when that
+fails.
 
   [latest]: https://developer.github.com/v3/repos/releases/#get-the-latest-release
 

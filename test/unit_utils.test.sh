@@ -349,3 +349,24 @@ EOF
         assert_equal 0 "$RUN_RC" "$RUN_ERR"
         assert_equal "755 root root" "$(stat -c "%a %U %G" /usr/local/bin/tool)"'
 }
+
+# Binaries are only removed at the version that primer installs.
+test_primer_utils_remove_at_version() {
+    unit "$IMG_ALPINE" '
+        printf "#!/bin/sh\necho tool version 1.2.3\n" > /usr/local/bin/tool
+        chmod a+x /usr/local/bin/tool
+        run primer_utils_remove_at_version /usr/local/bin/tool 1.2.4
+        assert_true test -e /usr/local/bin/tool
+        assert_contains "Keeping /usr/local/bin/tool, at version 1.2.3, not installed by primer (version 1.2.4)" "$RUN_ERR"
+        run primer_utils_remove_at_version /usr/local/bin/tool ""
+        assert_true test -e /usr/local/bin/tool
+        assert_contains "(version unknown)" "$RUN_ERR"
+        primer_utils_remove_at_version /usr/local/bin/tool v1.2.3
+        assert_false test -e /usr/local/bin/tool
+        # Missing binary: nothing to do. Version from another command.
+        assert_true primer_utils_remove_at_version /usr/local/bin/tool 1.0
+        printf "#!/bin/sh\n" > /usr/local/bin/plugin
+        meta() { echo v0.9; }
+        primer_utils_remove_at_version /usr/local/bin/plugin 0.9 meta
+        assert_false test -e /usr/local/bin/plugin'
+}
