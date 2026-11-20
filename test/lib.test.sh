@@ -59,6 +59,7 @@ test_lib_runner() {
     _probe=$(mktemp -d)
     mkdir -p "$_probe/test"
     cp "$TEST_ROOT/test/run.sh" "$TEST_ROOT/test/lib.sh" "$_probe/test/"
+    cp -R "$TEST_ROOT/test/assets" "$_probe/test/"
     # Commented out, so that they are not discovered here.
     sed 's/^#//' > "$_probe/test/probe.test.sh" <<'EOF'
 #test_probe_pass() { true; }

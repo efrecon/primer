@@ -1,0 +1,26 @@
+# Warm copy of a Debian or Ubuntu image (apt), see warm_image in test/lib.sh.
+# BASE is the official image, WARM_PACKAGES the packages to download (not
+# install).
+# Heredocs need BuildKit (Docker 23 and later) or Buildah 1.33 (Podman 4.8 and
+# later): with older builders, the build fails and tests use the official
+# image, only slower.
+ARG BASE
+FROM ${BASE}
+ARG WARM_PACKAGES
+
+# Documentation is not installed.
+COPY <<EOF /etc/dpkg/dpkg.cfg.d/primer-test-nodoc
+path-exclude=/usr/share/doc/*
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+EOF
+
+# Keep apt caches, fetch the package lists, and download the common packages.
+RUN <<EOF
+set -e
+rm -f /etc/apt/apt.conf.d/docker-clean
+apt-get update -qq
+for p in $WARM_PACKAGES; do
+    apt-get install -y -qq --download-only "$p" >/dev/null || true
+done
+EOF
