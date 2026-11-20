@@ -6,10 +6,14 @@
 
 The `machine` step arranges for the Docker [machine] CLI to be present at the
 host. The step is able to pinpoint a given version and to verify the
-installation download against its sha256 sum if necessary. By default, it will
-install the latest available at [github]. The step fails, installing nothing,
-when the download or its verification fails. In addition, bash completion is
-made available to all users of the system, once the binary is installed.
+installation download against its sha256 sum if necessary: the releases do not
+publish sums, so the binary is installed unverified, with a warning, without
+[`--sha256`](#--sha256). By default, it will install the latest available at
+[github]. The step fails, installing nothing, when the download or its
+verification fails, or when the binary does not run. In addition, bash
+completion is made available to all users of the system, once the binary is
+installed. When cleaning, Docker machine and its completion are only removed at
+the version the step installs: the one requested, or the latest.
 
   [machine]: https://docs.docker.com/machine/overview/
   [github]: https://github.com/docker/machine/releases

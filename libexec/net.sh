@@ -145,6 +145,71 @@ primer_net_port_allow() {
     fi
 }
 
+# Download the file at the URL $1 and install it at $2, creating its directory
+# when needed. The file is downloaded to a temporary file first, and only
+# installed when the download succeeded and is not empty: $2 is never left
+# empty or partial. See primer_utils_sysfile_replace for owner and permissions.
+primer_net_install_file() {
+    _nf_tmp=$(mktemp)
+    if primer_net_curl "$1" > "$_nf_tmp" && [ -s "$_nf_tmp" ]; then
+        [ -d "$(dirname "$2")" ] || $PRIMER_OS_SUDO mkdir -p "$(dirname "$2")"
+        primer_utils_sysfile_replace "$2" < "$_nf_tmp"
+        rm -f "$_nf_tmp"
+    else
+        rm -f "$_nf_tmp"
+        yush_warn "Could not download $1"
+        return 1
+    fi
+}
+
+# Check out the repository at the URL $1 in the directory $4, at the commit $3.
+# Git verifies that the content matches the commit, so this is how to install
+# code that is known in advance. An existing checkout is moved to the commit,
+# e.g. after a newer version of primer pins another one. Submodules are
+# checked out at the commits recorded in the repository. Without a commit, the
+# branch $2 is cloned as is, with a warning, and pulled again when $5 is
+# "update". Fails, removing a new checkout, when anything fails.
+primer_net_git_clone() {
+    primer_os_dependency git
+    if [ -n "$3" ]; then
+        if [ -d "$4/.git" ] && [ "$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD 2>/dev/null)" = "$3" ]; then
+            yush_debug "$4 already at commit $3"
+            return 0
+        fi
+        _gc_new=0
+        if ! [ -d "$4/.git" ]; then
+            _gc_new=1
+            $PRIMER_OS_SUDO mkdir -p "$4"
+            $PRIMER_OS_SUDO git -C "$4" init -q
+            $PRIMER_OS_SUDO git -C "$4" remote add origin "$1"
+        fi
+        yush_info "Checking out $1 at commit $3 in $4"
+        if $PRIMER_OS_SUDO git -C "$4" fetch -q --depth 1 origin "$3" \
+                && $PRIMER_OS_SUDO git -C "$4" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
+                && $PRIMER_OS_SUDO git -C "$4" submodule -q update --init --recursive \
+                && [ "$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD)" = "$3" ]; then
+            return 0
+        fi
+        yush_error "Could not check out $1 at commit $3"
+        [ "$_gc_new" = 1 ] && $PRIMER_OS_SUDO rm -rf "$4"
+        return 1
+    fi
+
+    yush_warn "No commit given for $1, installing branch $2 unverified"
+    if [ -d "$4/.git" ]; then
+        if [ "${5:-}" = "update" ]; then
+            $PRIMER_OS_SUDO git -C "$4" pull -q
+        fi
+    else
+        $PRIMER_OS_SUDO mkdir -p "$4"
+        if ! $PRIMER_OS_SUDO git clone -q --recurse-submodules --branch "$2" --depth 1 "$1" "$4"; then
+            $PRIMER_OS_SUDO rm -rf "$4"
+            yush_error "Could not clone branch $2 of $1"
+            return 1
+        fi
+    fi
+}
+
 # Print the extra curl options for URL $1, if any, in the format of a curl
 # config file, one option per line. Lines of the file at $PRIMER_CURL_OPTIONS
 # (# for comments) are a URL-encoded regex followed by curl options, quoted as

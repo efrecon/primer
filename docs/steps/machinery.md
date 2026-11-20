@@ -18,6 +18,15 @@ under the `bin` directory of `primer`: installing another branch clones it, and
 points the link to it. Cleaning a branch removes its directory, and the link
 only when it points to that branch.
 
+The code is checked out at a fixed commit, see [`--commit`](#--commit): git
+verifies that what is checked out is that commit. An existing checkout is moved
+to the commit, e.g. after upgrading primer. To install a newer machinery, find
+the commit at the tip of its branch, and give it to `--commit`:
+
+```shell
+git ls-remote https://github.com/efrecon/machinery.git refs/heads/master
+```
+
   [compose]: https://docs.docker.com/machine/overview/
   [docker]: https://docs.docker.com/engine/
   [branch]: https://github.com/efrecon/machinery/branches
@@ -26,13 +35,24 @@ only when it points to that branch.
 
 ### `--branch`
 
-Version of machinery to install. This defaults to the master branch.
+Branch of machinery to install, also the name of the directory it is installed
+in. This defaults to the master branch.
+
+### `--commit`
+
+Commit of machinery to install, the tip of master when this version of primer
+was released by default. An empty value installs the tip of the branch, without
+verification.
 
 ## Environment Variables
 
 ### `PRIMER_STEP_MACHINERY_BRANCH`
 
 This environment variable is the same as the [`--branch`](#--branch) option.
+
+### `PRIMER_STEP_MACHINERY_COMMIT`
+
+This environment variable is the same as the [`--commit`](#--commit) option.
 
 ## See Also
 

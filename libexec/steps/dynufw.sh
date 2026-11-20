@@ -10,6 +10,11 @@ PRIMER_STEP_DYNUFW_RULES=${PRIMER_STEP_DYNUFW_RULES:-}
 # master, which is probably always what you want anyway...
 PRIMER_STEP_DYNUFW_BRANCH=${PRIMER_STEP_DYNUFW_BRANCH:-master}
 
+# Commit of dynufw to install, verified by git: the tip of master when this
+# version of primer was released. Empty to install the tip of the branch,
+# unverified, and update it on every installation.
+PRIMER_STEP_DYNUFW_COMMIT=${PRIMER_STEP_DYNUFW_COMMIT-90ac5c50aae2e8173bd695a03470a1168fa73453}
+
 # DNS server to use, empty for host default
 PRIMER_STEP_DYNUFW_DNS=${PRIMER_STEP_DYNUFW_DNS:-}
 
@@ -35,7 +40,7 @@ primer_step_dynufw() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--static --rules --dns"
+            [ "$#" = "0" ] && echo "--static --rules --dns --commit"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --static)
@@ -44,6 +49,8 @@ primer_step_dynufw() {
                         PRIMER_STEP_DYNUFW_RULES=$2; shift 2;;
                     --dns)
                         PRIMER_STEP_DYNUFW_DNS=$2; shift 2;;
+                    --commit)
+                        PRIMER_STEP_DYNUFW_COMMIT=$2; shift 2;;
                     -*)
                         yush_warn "Unknown option: $1 !"; shift 2;;
                     *)
@@ -53,7 +60,7 @@ primer_step_dynufw() {
             ;;
         "install")
             _primer_step_dynufw_install_ufw
-            _primer_step_dynufw_install_dynufw
+            _primer_step_dynufw_install_dynufw || return 1
             if [ -n "$PRIMER_STEP_DYNUFW_RULES" ]; then
                 yush_info "Installing dynamic rules from $PRIMER_STEP_DYNUFW_RULES"
                 $PRIMER_OS_SUDO cp -f "$PRIMER_STEP_DYNUFW_RULES" "$PRIMER_STEP_DYNUFW_DYNPATH"
@@ -140,18 +147,9 @@ _primer_step_dynufw_install_ufw() {
 # the two main scripts. However, the installation script is re-implemented
 # (better) within this step.
 _primer_step_dynufw_install_dynufw() {
-    primer_os_dependency git
-    yush_info "Installing dynufw from $PRIMER_STEP_DYNUFW_REPO (branch: $PRIMER_STEP_DYNUFW_BRANCH)"
-    if [ -d "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/.git" ]; then
-        $PRIMER_OS_SUDO git -C "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" pull -q
-    else
-        $PRIMER_OS_SUDO mkdir -p "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
-        $PRIMER_OS_SUDO git clone "$PRIMER_STEP_DYNUFW_REPO" \
-                        --recurse \
-                        --branch "$PRIMER_STEP_DYNUFW_BRANCH" \
-                        --depth 1 \
-                        "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH"
-    fi
+    yush_info "Installing dynufw from $PRIMER_STEP_DYNUFW_REPO (branch: $PRIMER_STEP_DYNUFW_BRANCH, commit: ${PRIMER_STEP_DYNUFW_COMMIT:-none})"
+    primer_net_git_clone "$PRIMER_STEP_DYNUFW_REPO" "$PRIMER_STEP_DYNUFW_BRANCH" \
+        "$PRIMER_STEP_DYNUFW_COMMIT" "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" update || return 1
     yush_debug "Installing as ${PRIMER_BINDIR%%/}/dynufw"
     for _script in ufw-clean ufw-dynamic-host-update; do
         $PRIMER_OS_SUDO chmod a+x "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/${_script}.sh"

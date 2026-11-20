@@ -55,7 +55,7 @@ test_micro_checksum() {
         printf "#!/bin/sh\necho Version: '"$MICRO_VERSION"'\n" > /tmp/fake/micro-'"$MICRO_VERSION"'/micro
         chmod a+x /tmp/fake/micro-'"$MICRO_VERSION"'/micro
         tar -C /tmp/fake -czf /tmp/fake.tar.gz micro-'"$MICRO_VERSION"'
-        FAKE_SUM=0000
+        FAKE_SUM=$(printf "%064d" 0)
         primer_net_curl() {
             mock_log primer_net_curl "$@"
             case "$1" in
@@ -69,7 +69,7 @@ test_micro_checksum() {
         primer_step_micro option --version '"$MICRO_VERSION"'
         run primer_step_micro install
         assert_equal 1 "$RUN_RC" "mismatch"
-        assert_contains "SHA256 sum mismatch" "$RUN_ERR"
+        assert_contains "Checksum mismatch" "$RUN_ERR"
         assert_false test -e /usr/local/bin/micro
         FAKE_SUM=$(sha256sum < /tmp/fake.tar.gz | cut -d" " -f1)
         run primer_step_micro install
@@ -79,4 +79,22 @@ test_micro_checksum() {
         run primer_step_micro install
         assert_equal 0 "$RUN_RC" "second install"
         assert_equal "" "$(mock_calls)" "downloads"'
+}
+
+# Clean only removes micro at the version the step installs.
+test_micro_clean_other_version() {
+    unit "$IMG_ALPINE" '
+        mkdir -p /usr/local/bin
+        printf "#!/bin/sh\necho version 0.1\n" > /usr/local/bin/micro
+        chmod a+x /usr/local/bin/micro
+        unit_step micro
+        primer_step_micro option --version 2.0.15
+        run primer_step_micro clean
+        assert_equal 0 "$RUN_RC"
+        assert_contains "Keeping /usr/local/bin/micro, at version 0.1" "$RUN_ERR"
+        assert_true test -x /usr/local/bin/micro
+        printf "#!/bin/sh\necho version 2.0.15\n" > /usr/local/bin/micro
+        run primer_step_micro clean
+        assert_equal 0 "$RUN_RC"
+        assert_false test -e /usr/local/bin/micro'
 }

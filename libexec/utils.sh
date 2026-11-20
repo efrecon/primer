@@ -118,6 +118,22 @@ primer_utils_install_bin() {
     fi
 }
 
+# Remove the binary at $1 when it is at the version $2, the one that primer
+# installs, as reported by the command $3 called with $1 (primer_version_current
+# by default). Leading v are ignored. Binaries at other versions, or when the
+# version is unknown, might not have been installed by primer: they are kept,
+# with a warning.
+primer_utils_remove_at_version() {
+    [ -e "$1" ] || return 0
+    _rv_have=$("${3:-primer_version_current}" "$1" 2>/dev/null || true)
+    if [ -n "$2" ] && [ "${_rv_have#v}" = "${2#v}" ]; then
+        yush_info "Removing $1 at version $_rv_have"
+        $PRIMER_OS_SUDO rm -f "$1"
+    else
+        yush_warn "Keeping $1, at version ${_rv_have:-unknown}, not installed by primer (version ${2:-unknown})"
+    fi
+}
+
 # Remove all lines matching the basic regular expression $2 from (not only
 # system) file at $1. The file is read with sudo, as only root might be able to.
 primer_utils_sysfile_clip() {

@@ -19,38 +19,3 @@ test_primer_version_current() {
         assert_equal 0 "$RUN_RC"
         assert_equal "" "$RUN_OUT"'
 }
-
-test_primer_version_github_latest() {
-    unit "$IMG_ALPINE" '
-        cat > /tmp/releases.json <<"EOF"
-[
-  {
-    "url": "https://api.github.com/repos/owner/repo/releases/3",
-    "name": "v2.0.0-rc1",
-    "assets": [
-      {
-        "name": "repo-2.0.0-rc1.tar.gz"
-      }
-    ]
-  },
-  {
-    "url": "https://api.github.com/repos/owner/repo/releases/2",
-    "name" : "v1.9.3",
-    "assets": [
-      {
-        "name": "repo-1.9.3.tar.gz"
-      }
-    ]
-  },
-  {
-    "name": "1.9.2"
-  }
-]
-EOF
-        primer_net_curl() { mock_log primer_net_curl "$@"; cat /tmp/releases.json; }
-        assert_equal 1.9.3 "$(primer_version_github_latest https://api.github.com/repos/owner/repo/releases repo)"
-        assert_equal "primer_net_curl https://api.github.com/repos/owner/repo/releases" "$(mock_calls)"
-        # Nothing found
-        primer_net_curl() { echo "[]"; }
-        assert_equal "" "$(primer_version_github_latest https://example.com)"'
-}

@@ -339,3 +339,60 @@ test_primer_net_curl_debian() {
         primer_net_curl file:///tmp/src.txt
         assert_equal hello "$(cat "/tmp/with space.txt")"'
 }
+
+# Files are only installed when downloaded, never left empty.
+test_primer_net_install_file() {
+    unit "$IMG_ALPINE" '
+        primer_net_curl() {
+            case "$1" in
+                */ok) echo content;;
+                */empty) ;;
+                *) return 22;;
+            esac
+        }
+        primer_net_install_file https://x/ok /tmp/new/dir/file
+        assert_equal content "$(cat /tmp/new/dir/file)"
+        assert_equal 644 "$(stat -c %a /tmp/new/dir/file)"
+        for u in empty missing; do
+            run primer_net_install_file "https://x/$u" "/tmp/$u"
+            assert_equal 1 "$RUN_RC" "$u"
+            assert_false test -e "/tmp/$u"
+        done
+        assert_equal "" "$(ls /tmp/tmp.* 2>/dev/null)" "temporary files"'
+}
+
+# Checkouts at a commit, from local repositories: the commit and its
+# submodules are checked out, existing checkouts move to a new commit, unknown
+# commits fail and leave nothing. Without a commit, the branch is cloned.
+test_primer_net_git_clone() {
+    unit "$IMG_ALPINE" '
+        apk add -q git >/dev/null
+        git config --global user.email t@t; git config --global user.name t
+        git config --global protocol.file.allow always
+        git init -q -b master /tmp/sub && echo sub > /tmp/sub/s && git -C /tmp/sub add s && git -C /tmp/sub commit -qm s
+        git init -q -b master /tmp/src
+        echo 1 > /tmp/src/f && git -C /tmp/src add f && git -C /tmp/src commit -qm 1
+        git -C /tmp/src submodule -q add file:///tmp/sub sub && git -C /tmp/src commit -qm sub
+        c1=$(git -C /tmp/src rev-parse HEAD)
+        echo 2 > /tmp/src/f && git -C /tmp/src commit -qam 2
+        c2=$(git -C /tmp/src rev-parse HEAD)
+        git -C /tmp/src config uploadpack.allowAnySHA1InWant true
+        primer_net_git_clone file:///tmp/src master "$c1" /opt/src/master
+        assert_equal "$c1" "$(git -C /opt/src/master rev-parse HEAD)"
+        assert_equal 1 "$(cat /opt/src/master/f)"
+        assert_equal sub "$(cat /opt/src/master/sub/s)" "submodule"
+        primer_net_git_clone file:///tmp/src master "$c2" /opt/src/master
+        assert_equal 2 "$(cat /opt/src/master/f)" "moved to the new commit"
+        run primer_net_git_clone file:///tmp/src master "$(printf "%040d" 0)" /opt/src/bad
+        assert_equal 1 "$RUN_RC" "unknown commit"
+        assert_false test -e /opt/src/bad
+        run primer_net_git_clone file:///tmp/src master "" /opt/src/branch
+        assert_equal 0 "$RUN_RC" "branch"
+        assert_contains "No commit given for file:///tmp/src, installing branch master unverified" "$RUN_ERR"
+        assert_equal 2 "$(cat /opt/src/branch/f)"
+        echo 3 > /tmp/src/f && git -C /tmp/src commit -qam 3
+        primer_net_git_clone file:///tmp/src master "" /opt/src/branch 2>/dev/null
+        assert_equal 2 "$(cat /opt/src/branch/f)" "no update"
+        primer_net_git_clone file:///tmp/src master "" /opt/src/branch update 2>/dev/null
+        assert_equal 3 "$(cat /opt/src/branch/f)" "update"'
+}

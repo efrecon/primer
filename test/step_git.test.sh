@@ -80,7 +80,7 @@ test_git_bad_checksum() {
         primer_step_git option --lfs-version '"$GIT_LFS_VERSION"' --lfs-install ""
         run primer_step_git install
         assert_equal 1 "$RUN_RC"
-        assert_contains "SHA256 sum mismatch" "$RUN_ERR"
+        assert_contains "Checksum mismatch" "$RUN_ERR"
         assert_false test -e /usr/local/bin/git-lfs'
 }
 
@@ -150,6 +150,6 @@ test_git_missing_checksum() {
         primer_step_git option --lfs-version '"$GIT_LFS_VERSION"' --lfs-install ""
         run primer_step_git install
         assert_equal 1 "$RUN_RC"
-        assert_contains "Could not find sha256 sum" "$RUN_ERR"
+        assert_contains "No checksum for git-lfs-linux-amd64" "$RUN_ERR"
         assert_false test -e /usr/local/bin/git-lfs'
 }

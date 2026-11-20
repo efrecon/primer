@@ -105,10 +105,10 @@ test_docker_alpine_pinned() {
 test_docker_alpine_bad_sha() {
     require_privileged
     in_container -P "$IMG_ALPINE" "$DOCKER_LIB"'
-        primer_run -s docker --docker:buildx-version '"$DOCKER_BUILDX_VERSION"' --docker:buildx-sha256 0000 install
+        primer_run -s docker --docker:buildx-version '"$DOCKER_BUILDX_VERSION"' --docker:buildx-sha256 '"$(printf "%064d" 0)"' install
         # Verification failures fail the step, nothing is installed.
         assert_equal 1 "$PRIMER_RC" "primer exit status"
-        assert_contains "SHA256 sum mismatch" "$PRIMER_ERR"
+        assert_contains "Checksum mismatch" "$PRIMER_ERR"
         assert_contains "Could not install Docker buildx plugin" "$PRIMER_ERR"
         assert_false test -e /usr/local/lib/docker/cli-plugins/docker-buildx
         assert_not_contains "'"${DOCKER_BUILDX_VERSION#v}"'" "$(docker buildx version 2>&1)"'
@@ -369,9 +369,9 @@ test_docker_plugin_download_offline() {
         assert_equal 1 "$RUN_RC" "no sum status"
         # Sum given and wrong: not installed.
         FAKE_MACHINE=x86_64
-        PRIMER_STEP_DOCKER_BUILDX_SHA256=0000
+        PRIMER_STEP_DOCKER_BUILDX_SHA256=$(printf "%064d" 0)
         run _primer_step_docker_plugin_download buildx
-        assert_contains "SHA256 sum mismatch" "$RUN_ERR"
+        assert_contains "Checksum mismatch" "$RUN_ERR"
         assert_equal 1 "$RUN_RC" "mismatch status"
         assert_false test -e /tmp/plugins/docker-buildx
         # Right sum, but not a CLI plugin: not installed.

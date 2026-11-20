@@ -9,16 +9,3 @@ primer_version_current() {
         fi
     fi
 }
-
-# Following uses the github API
-# https://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-# for getting the list of latest releases and focuses solely on "full" releases.
-# Release candidates have -rcXXX in their version number, these are set away by
-# the grep calls.
-primer_version_github_latest() {
-    yush_notice "Discovering latest ${2:-} version from $1"
-    primer_net_curl "$1" |
-        grep -E '"name"[[:space:]]*:[[:space:]]*"v?[0-9]+(\.[0-9]+)*"' |
-        grep -Eo '[0-9]+(\.[0-9]+)*' |
-        head -1
-}

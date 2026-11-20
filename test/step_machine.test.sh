@@ -31,9 +31,9 @@ test_machine_sha256() {
 
 test_machine_bad_sha256() {
     in_container "$IMG_TRIXIE" '
-        primer_run -s machine --machine:version '"$MACHINE_OLD_VERSION"' --machine:sha256 0000 install
+        primer_run -s machine --machine:version '"$MACHINE_OLD_VERSION"' --machine:sha256 '"$(printf "%064d" 0)"' install
         assert_equal 1 "$PRIMER_RC"
-        assert_contains "SHA256 sum mismatch" "$PRIMER_ERR"
+        assert_contains "Checksum mismatch" "$PRIMER_ERR"
         assert_false test -e /usr/local/bin/docker-machine'
 }
 
@@ -62,4 +62,22 @@ test_machine_platform_assets() {
             assert_match "/v0.16.2/docker-machine-Linux-${_pair#*:}$" "$(mock_calls)" "asset for ${_pair%%:*}"
         done
         assert_false [ -e "$(primer_os_bash_completion_dir)/docker-machine" ]'
+}
+
+# Clean only removes docker-machine at the version the step installs.
+test_machine_clean_other_version() {
+    unit "$IMG_ALPINE" '
+        mkdir -p /usr/local/bin
+        printf "#!/bin/sh\necho version 0.1\n" > /usr/local/bin/docker-machine
+        chmod a+x /usr/local/bin/docker-machine
+        unit_step machine
+        primer_step_machine option --version 0.16.2
+        run primer_step_machine clean
+        assert_equal 0 "$RUN_RC"
+        assert_contains "Keeping /usr/local/bin/docker-machine, at version 0.1" "$RUN_ERR"
+        assert_true test -x /usr/local/bin/docker-machine
+        printf "#!/bin/sh\necho version 0.16.2\n" > /usr/local/bin/docker-machine
+        run primer_step_machine clean
+        assert_equal 0 "$RUN_RC"
+        assert_false test -e /usr/local/bin/docker-machine'
 }

@@ -25,7 +25,10 @@ the `:` (colon) sign. These fields are, in order:
 The specification file passed to the step is then installed as
 `/etc/ufw-dynamic-hosts.allow`. The current IP address of each host is kept in
 the comments of the [ufw] rules. Implementation for updating the rules is taken
-from the [dynufw] project, which is cloned to `/usr/local/opt/dynufw`. Updates
+from the [dynufw] project, which is checked out under
+`$PRIMER_OPTDIR/dynufw/<branch>`, e.g. `/usr/local/opt/dynufw/master`, at a
+fixed commit (see [`--commit`](#--commit)): git verifies that what is checked
+out is that commit, and the scripts run as root. Updates
 happen every minute through cron (busybox `crond` on Alpine, `cron` on Debian
 derivatives, `cronie` on Fedora derivatives). Once all rules are in place,
 [ufw] is enabled.
@@ -64,6 +67,18 @@ add. On hosts reached over SSH, open the SSH port, e.g. `--static 22`: without
 a rule for it, the step fails and leaves the firewall disabled (see
 [Description](#description)).
 
+### `--commit`
+
+Commit of [dynufw] to install, the tip of master when this version of primer was
+released by default. An existing checkout is moved to the commit. An empty
+value installs the tip of the branch, without verification, and updates it at
+every installation. To install a newer dynufw, find the commit at the tip of
+its branch:
+
+```shell
+git ls-remote https://github.com/efrecon/dynufw.git refs/heads/master
+```
+
 ### `--rules`
 
 This is the location of the rules file to be installed and used for managing
@@ -92,8 +107,13 @@ This environment variable is the same as the [`--dns`](#--dns) option.
 
 ### `PRIMER_STEP_DYNUFW_BRANCH`
 
-This environment variable contains the branch of the [ufw] project to check out
-and install for regular updating of the rules. It defaults to `master`.
+This environment variable contains the branch of the [dynufw] project to check
+out and install for regular updating of the rules, also the name of its
+directory. It defaults to `master`.
+
+### `PRIMER_STEP_DYNUFW_COMMIT`
+
+This environment variable is the same as the [`--commit`](#--commit) option.
 
 ### `PRIMER_STEP_DYNUFW_SCHEDULE`
 
