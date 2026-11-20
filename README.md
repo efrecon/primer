@@ -274,6 +274,8 @@ How primer drives steps, and the rules steps follow, is described in the
 * [`micro`][micro] installs micro at the latest or a specific version.
   + micro is a modern editor for the terminal.
 * [`github`][github] installs binaries from project releases (assets) at github.
+  + Downloads are verified against checksums, given directly or published with
+    the release.
 * [`disk`][disk] formats and mounts attached disks.
 * [`wifi`][wifi] connects the host to a wifi network at boot, using ifupdown.
 * [`install`][install] installs (recursively) remote or
