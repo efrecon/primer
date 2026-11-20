@@ -32,7 +32,11 @@ then.
 
 The step implements a preference-based logic for how to install the daemon and
 CLI when reverting to distribution packages. The default, `auto` will take into
-account the distribution and its version to take the most optimal solution.
+account the distribution and its version to take the most optimal solution. On
+Fedora, Docker comes from the `moby-engine` package. When no iptables is
+installed, `iptables-nft`, the default of Fedora, is installed first: otherwise
+the package would bring the legacy variant, which recent kernels might not
+support.
 
 The step also arranges for the Docker [compose] and [buildx] CLI plugins to be
 installed, so that `docker compose` is available and `docker build` uses

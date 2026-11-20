@@ -121,6 +121,14 @@ primer_step_docker() {
                     *buntu|*bian)
                         _primer_step_docker_install_debian;;
                     fedora*)
+                        # moby-engine requires iptables, which dnf resolves
+                        # to iptables-legacy when none is installed. Prefer
+                        # the default of Fedora, iptables-nft: recent kernels
+                        # might not have the legacy modules. An existing
+                        # iptables is kept as is.
+                        if ! primer_utils_syscmd_exists iptables; then
+                            primer_os_packages install iptables-nft
+                        fi
                         primer_os_packages install "moby-engine";;
                     *)
                         # Prefer the docker installation whenever possible, do

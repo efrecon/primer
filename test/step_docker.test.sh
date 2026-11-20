@@ -81,7 +81,10 @@ test_docker_fedora() {
     in_container -P "$IMG_FEDORA" "$DOCKER_LIB"'
         primer_run -s docker install
         docker_verify buildkit
-        assert_true rpm -q moby-engine'
+        assert_true rpm -q moby-engine
+        # nftables, the default of Fedora: kernels might lack legacy iptables.
+        assert_contains "nf_tables" "$(iptables --version)"
+        assert_false rpm -q iptables-legacy'
 }
 
 test_docker_alpine_pinned() {
