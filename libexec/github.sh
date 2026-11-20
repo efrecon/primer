@@ -157,15 +157,15 @@ primer_github_fetch() {
     _ft_rc=0
     case "$3" in
         *.tar)
-            _primer_github_untar "$_ft_file" "$5" "" || _ft_rc=1;;
+            primer_utils_untar "$_ft_file" "$5" "" || _ft_rc=1;;
         *.tar.gz | *.tgz)
-            _primer_github_untar "$_ft_file" "$5" "z" || _ft_rc=1;;
+            primer_utils_untar "$_ft_file" "$5" "z" || _ft_rc=1;;
         *.tar.bz2 | *.tar.bzip2)
-            _primer_github_untar "$_ft_file" "$5" "j" || _ft_rc=1;;
+            primer_utils_untar "$_ft_file" "$5" "j" || _ft_rc=1;;
         *.tar.xz)
-            _primer_github_untar "$_ft_file" "$5" "J" || _ft_rc=1;;
+            primer_utils_untar "$_ft_file" "$5" "J" || _ft_rc=1;;
         *.tar.Z)
-            _primer_github_untar "$_ft_file" "$5" "Z" || _ft_rc=1;;
+            primer_utils_untar "$_ft_file" "$5" "Z" || _ft_rc=1;;
         *.zip)
             primer_os_dependency unzip
             unzip -q "$_ft_file" -d "$5" || _ft_rc=1;;
@@ -314,21 +314,31 @@ _primer_github_algo() {
 # Names are compared without leading directories.
 _primer_github_sum_lookup() {
     awk -v a="$2" '
+        # Name n without a leading * (binary mode marker) and directories.
         function base(n) { sub(/^\*/, "", n); sub(/^.*\//, "", n); return n }
+
+        # Windows line endings, empty lines are skipped, and not counted.
         { sub(/\r$/, "") }
         NF == 0 { next }
         { lines++ }
+
+        # BSD: ALGO (name) = sum, or ALGO(name)= sum as printed by OpenSSL.
+        # Keep the first sum for the asset, and its algorithm, e.g. sha256.
         /^[A-Za-z0-9-]+ ?\(.*\) ?= ?[0-9A-Fa-f]+$/ {
             n = $0
             sub(/^[^(]*\(/, "", n)
             sub(/\) ?= ?[0-9A-Fa-f]+$/, "", n)
             if (base(n) == a && s == "") {
                 s = $NF; sub(/^.*=/, "", s)
+                # Lower case algorithm, SHA2-256 (OpenSSL) as sha256.
                 t = tolower($0); sub(/ ?\(.*$/, "", t)
                 sub(/^sha2-/, "sha", t)
             }
             next
         }
+
+        # coreutils: sum  name, or sum *name. Keep the first sum for the asset.
+        # The name keeps its spaces: everything after the sum.
         NF >= 2 && $1 ~ /^[0-9A-Fa-f]+$/ {
             n = $0
             sub(/^[^ \t]+[ \t]+/, "", n)
@@ -337,23 +347,15 @@ _primer_github_sum_lookup() {
             if (n == "-") single = $1
             next
         }
+
+        # A sum alone, e.g. in asset.sha256 files.
         $1 ~ /^[0-9A-Fa-f]+$/ { single = $1 }
+
+        # The sum for the asset, otherwise a sum alone in a one-line file.
         END {
             if (s != "") print s (t != "" ? " " t : "")
             else if (lines == 1 && single != "") print single
         }' "$1"
-}
-
-# Uncompress, untar. $1 is the tar file, $2 is the destination directory and $3
-# (can be empty) the compression "letter" for the tar options, e.g. Z for
-# (old-style) compress format, etc.
-_primer_github_untar() {
-    primer_os_dependency tar
-    if yush_loglevel_le debug; then
-        tar -C "$2" -"${3}xvf" "$1"
-    else
-        tar -C "$2" -"${3}xf" "$1"
-    fi
 }
 
 # Make the downloaded file passed as an argument executable when it is a

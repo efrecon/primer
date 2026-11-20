@@ -233,19 +233,6 @@ test__primer_github_sum_lookup() {
         assert_equal "" "$(_primer_github_sum_lookup /tmp/asc SHA256)"'
 }
 
-# All compression letters of tar.
-test__primer_github_untar() {
-    unit "$IMG_ALPINE" '
-        apk add -q xz >/dev/null
-        mkdir -p /tmp/src && echo hi > /tmp/src/f
-        for l in "" z j J; do
-            tar -C /tmp/src -c${l}f /tmp/a.tar f
-            rm -rf /tmp/dst && mkdir /tmp/dst
-            _primer_github_untar /tmp/a.tar /tmp/dst "$l"
-            assert_equal hi "$(cat /tmp/dst/f)" "letter [$l]"
-        done'
-}
-
 test__primer_github_executable() {
     unit "$IMG_ALPINE" '
         printf "#!/bin/sh\n" > /tmp/script

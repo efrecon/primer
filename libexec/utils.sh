@@ -134,6 +134,18 @@ primer_utils_remove_at_version() {
     fi
 }
 
+# Uncompress, untar. $1 is the tar file, $2 is the destination directory and $3
+# (can be empty) the compression "letter" for the tar options, e.g. Z for
+# (old-style) compress format, etc.
+primer_utils_untar() {
+    primer_os_dependency tar
+    if yush_loglevel_le debug; then
+        tar -C "$2" -"${3}xvf" "$1"
+    else
+        tar -C "$2" -"${3}xf" "$1"
+    fi
+}
+
 # Remove all lines matching the basic regular expression $2 from (not only
 # system) file at $1. The file is read with sudo, as only root might be able to.
 primer_utils_sysfile_clip() {
