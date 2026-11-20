@@ -20,13 +20,24 @@ for Windows clients.
   [Avahi]: https://avahi.org/
   [Samba]: https://www.samba.org/
 
+The daemons are started and enabled at boot. When a firewall is active, their
+ports are opened (5353/udp for mDNS, 137/udp and 138/udp for NetBIOS) through
+the [firewall] step, with the marker `primer-announce`. When cleaning, the
+daemons are stopped and disabled, and the ports opened by this step closed.
+Rules that existed before are kept, and so are the packages: they might have
+been installed before primer, e.g. Samba on a file server.
+
+  [firewall]: ./firewall.md
+
 ## Options
 
 ### `--method`
 
-Add a single announcement method to the set of methods to enable. This option
-can be specified several times to accumulate methods. Recognised values are
-`mDNS` and `NetBIOS` (case-insensitive).
+Add a single announcement method to the set of methods to enable. The first
+occurrence of this option replaces the default set of methods, further
+occurrences add to it, without duplicates. In other words, `--method mDNS`
+enables mDNS only. Recognised values are `mDNS` and `NetBIOS`
+(case-insensitive).
 
 ### `--methods`
 
@@ -40,5 +51,5 @@ disables all announcements.
 
 This environment variable controls the set of DNS announcement methods to
 install and enable. It is a space-separated list of method names and defaults
-to `mDNS NetBIOS`. The [`--method`](#--method) option appends to it, while
-[`--methods`](#--methods) replaces it entirely.
+to `mDNS NetBIOS`. The [`--method`](#--method) option replaces it at first, then
+appends to it, while [`--methods`](#--methods) replaces it entirely.

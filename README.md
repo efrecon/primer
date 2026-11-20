@@ -199,7 +199,7 @@ docker run \
   -v $(pwd):/primer:ro \
   --entrypoint /primer/primer \
   ubuntu \
-  --users:db /primer/spec/support/data/users.db \
+  --users:db /primer/test/data/users.db \
   --docker:access ".*"
 ```
 
@@ -218,6 +218,9 @@ Placing relevant `.env` formatted files under revision control,
 combined with the ability for primer not only to install, but
 also clean a system,
 makes it possible to operate on existing OS installations in a reproducible way.
+Cleaning only removes what primer can prove it made, e.g. firewall rules carrying
+its marker, or files still equal to what it would install, so it never removes
+what existed before. Clean with the same options as when installing.
 
 ## Steps
 
@@ -455,9 +458,8 @@ Primer accepts a number of aliases to those commands:
 * `env`, `environment`: List all known and accessible steps,
   together with the options and
   environment variables that can be used to modify their behaviour.
-* This also prints out host information, e.g. hostname,
-  MAC address (of the primary ethernet interface), name of distribution, version,
-  etc.
+* This also prints out host information, e.g. hostname, MAC address (of the
+  primary ethernet interface), name of distribution, version, etc.
 * `info`: List all options and
   environment variables that can be used to modify the behaviour of the steps to
   be run.
@@ -501,7 +503,8 @@ For example, the following command would download release `v0.2.0` and
 show the help message.
 
 ```bash
-curl -sSL https://github.com/efrecon/primer/releases/download/v0.2.0/primer-v0.2.0.sh |
+curl -sSL \
+  https://github.com/efrecon/primer/releases/download/v0.2.0/primer-v0.2.0.sh |
   sh -s - --help
 ```
 
@@ -525,21 +528,67 @@ chmod a+x ./primer.sh
 
 ## Testing
 
-Primer comes with a test suite, based on [shellspec].
-Provided you have installed [shellspec] and it is in your path,
-run the following command from the main directory of the project to run the test
-suite.
-The test suite requires that you have [docker] installed on your machine and
-that your user is able to call the `docker` client without elevated privileges.
-Running inside [docker] allows to perform OS-wide modifications in the context
-of containers so as to not pollute your main system.
+Primer comes with a test suite written in plain POSIX shell, so it needs no
+other tool than [docker] or [podman]. All tests run in throwaway containers, so
+they can modify the system freely without touching your host. The suite uses the
+first of `docker` and `podman` that is installed and working. Set
+`PRIMER_TEST_RUNTIME`, or use `-r`, to pick one explicitly. Run it from the
+main directory of the project:
 
 ```shell
-shellspec
+./test/run.sh
 ```
 
-  [shellspec]: https://shellspec.info/
+The suite contains:
+
++ Unit tests for every function of the library modules in [libexec](./libexec/),
+  in `test/unit_<module>.test.sh`. They source primer in library mode, call the
+  functions directly in a container and replace external commands with mocks
+  when needed, e.g. to emulate firewalls or services. In library mode, i.e.
+  when sourced with `PRIMER_LIBRARY=1`, primer loads all its modules and stops
+  before parsing options; `PRIMER_ROOT_DIR` can point to its installation
+  directory. Both variables are only for sourcing: when executed with
+  `PRIMER_LIBRARY=1`, primer refuses to run, and it always ignores
+  `PRIMER_ROOT_DIR`.
++ Tests for every installation [step](#steps), in `test/step_<step>.test.sh`.
+  Most run primer for real in Alpine and Debian containers and verify the
+  resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
+  tested with mocks. Some tests, e.g. `docker` and `firewall`, need privileged
+  containers; they are skipped, with a reason, with rootless podman or docker.
++ Tests of the command-line interface and of the functions of `primer` itself,
+  in `test/primer.test.sh`.
++ Tests of the test framework, in `test/lib.test.sh`.
+
+Tests are named `file:function`. Any argument to `run.sh` is an extended regular
+expression that selects tests by name, and `-l` lists them. When run without
+patterns, the suite also checks that every function of primer and of the
+library modules, and every step, has tests. Options come before the patterns.
+Run `./test/run.sh -h` for all options:
+
+```shell
+./test/run.sh -l                     # List all tests
+./test/run.sh '^unit_'               # Only unit tests
+./test/run.sh -j 8 step_docker       # Docker step tests, 8 in parallel
+./test/run.sh -t                     # TAP output, as in CI
+```
+
+Only the files known to git, and new files that git does not ignore, are copied
+into the containers: a `primer.env` of yours, which primer would read, never
+is. Tests running longer than 20 minutes fail (`-T` to change). Containers are
+labelled with `primer-test`, and removed when the suite is interrupted.
+
+Some steps download releases from GitHub. Set `GITHUB_TOKEN` to make these
+calls authenticated and avoid anonymous rate limits.
+
+Most of the time goes to installing packages, which is CPU-bound. By default,
+the suite runs as many tests in parallel as the container runtime has CPUs.
+Debian tests run in warm copies of the official images, built once a day: their
+package lists are fetched, apt keeps its caches, common packages are downloaded
+(not installed) and documentation is not installed. Primer still has to install
+everything it needs. Set `PRIMER_TEST_WARM=0` to use the official images.
+
   [docker]: https://docker.com/
+  [podman]: https://podman.io/
 
 ## Contributing
 

@@ -3,7 +3,7 @@
 # Path to users database, a file modelled after the /etc/password file, 5
 # colon-separated fields. When the password is the letter x, one will be
 # generated. The file must end with an empty line. See
-# spec/support/data/users.db for an example file with more details on the
+# test/data/users.db for an example file with more details on the
 # format.
 PRIMER_STEP_USERS_DB=${PRIMER_STEP_USERS_DB:-}
 
@@ -57,8 +57,11 @@ primer_step_users() {
                 # whois package, which should have been installed previously.
                 yush_info "Users setup using DB at $(yush_green "$PRIMER_STEP_USERS_DB")..."
                 if yush_is_true "$PRIMER_STEP_USERS_PWSAVE"; then
-                    _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
+                    _pwstore=$(_primer_step_users_pwstore)
                     yush_notice "Will store cleartext passwords in $_pwstore"
+                    # Make the store private before anything is written to it.
+                    ( umask 077 && touch "$_pwstore" )
+                    chmod go-rwx "$_pwstore"
                 fi
                 while IFS= read -r line || [ -n "$line" ]; do
                     line=$(printf %s\\n "$line" | sed '/^[[:space:]]*$/d' | sed '/^[[:space:]]*#/d')
@@ -70,8 +73,9 @@ primer_step_users() {
                         details=$(printf %s::::::\\n "$line" | cut -d ":" -f "4")
                         shell=$(printf %s::::::\\n "$line" | cut -d ":" -f "5")
                         ghusers=$(printf %s::::::\\n "$line" | cut -d ":" -f "6")
-                        _caller=$(id -un)
-                        [ -z "$shell" ] && shell=$(getent passwd | grep -q "^$_caller:" | cut -d ":" -f 7)
+                        # An empty shell is the default login shell of the
+                        # platform for new users, and keeps the current shell
+                        # of existing users.
 
                         if [ -z "$(getent passwd "$username")" ]; then
                             if [ "$password" = "x" ]; then
@@ -82,8 +86,10 @@ primer_step_users() {
                                 else
                                     yush_info "Creating user $username with password $password Copy password, cannot be recovered!"
                                 fi
+                            elif [ -n "$password" ]; then
+                                yush_notice "Creating user $username with password from $PRIMER_STEP_USERS_DB, this is insecure!"
                             else
-                                yush_notice "Creating user $username with password from $USERS, this is insecure!"
+                                yush_notice "Creating user $username without password"
                             fi
                             primer_auth_user_add "$username" \
                                                     --group "$group" \
@@ -136,7 +142,7 @@ primer_step_users() {
             ;;
         "clean")
             if [ -n "$PRIMER_STEP_USERS_DB" ] && [ -f "$PRIMER_STEP_USERS_DB" ]; then
-                _pwstore=${PRIMER_STEP_USERS_DB%.*}.${PRIMER_STEP_USERS_PWEXT#.*}
+                _pwstore=$(_primer_step_users_pwstore)
                 if yush_is_true "$PRIMER_STEP_USERS_PWSAVE" && [ -f "$_pwstore" ]; then
                     yush_notice "Removing existing password storage at $(yush_green "$_pwstore")"
                     rm -f "$_pwstore"
@@ -148,7 +154,11 @@ primer_step_users() {
                         username=$(printf %s\\n "$line" | cut -d ":" -f "1")
                         if [ -n "$(getent passwd "$username")" ] && [ "$username" != "$REALUSER" ]; then
                             yush_debug "Removing user $username"
-                            $PRIMER_OS_SUDO deluser "$username"
+                            if primer_utils_syscmd_exists userdel; then
+                                $PRIMER_OS_SUDO userdel "$username"
+                            else
+                                $PRIMER_OS_SUDO deluser "$username"
+                            fi
                         fi
                     fi
                 done < "${PRIMER_STEP_USERS_DB}"
@@ -208,6 +218,19 @@ EOF
             --user "$1" \
             --group "$2"
     fi
+}
+
+# Print the path of the password store: next to the database, with the same
+# name, but its extension (if any) replaced by PRIMER_STEP_USERS_PWEXT. Only
+# the name of the file can have an extension, not its directories.
+_primer_step_users_pwstore() {
+    _pwdir=$(dirname "$PRIMER_STEP_USERS_DB")
+    _pwname=$(basename "$PRIMER_STEP_USERS_DB")
+    # A leading dot is not an extension, e.g. .users
+    case "$_pwname" in
+        ?*.*) _pwname=${_pwname%.*};;
+    esac
+    printf '%s/%s.%s\n' "${_pwdir%/}" "$_pwname" "${PRIMER_STEP_USERS_PWEXT#.}"
 }
 
 _primer_step_users_groups() {

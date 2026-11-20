@@ -1,0 +1,35 @@
+[
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/222",
+    "id": 222,
+    "author": {
+      "login": "someone",
+      "id": 1234
+    },
+    "tag_name": "v2.0.0-rc1",
+    "name": "v2.0.0-rc1",
+    "prerelease": true
+  },
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/111",
+    "id": 111,
+    "author": {
+      "login": "someone",
+      "id": 1234
+    },
+    "tag_name": "v1.2.3",
+    "name": "v1.2.3",
+    "prerelease": false
+  },
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/100",
+    "id": 100,
+    "author": {
+      "login": "someone",
+      "id": 1234
+    },
+    "tag_name": "v1.0.0",
+    "name": "v1.0.0",
+    "prerelease": false
+  }
+]

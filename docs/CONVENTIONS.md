@@ -15,6 +15,9 @@ or new installation steps:
 + Do not expect GNU utilities installed, instead code for [busybox], alt. for
   both when the busybox implementation would be more complex or slower.
 + Document your code!
++ Write in British English: documentation, comments and messages, e.g.
+  behaviour, colour, initialise, licence (the noun). Names from code, options,
+  commands or external projects are kept as they are, e.g. `--color`.
 
   [shellcheck]: https://www.shellcheck.net/
   [busybox]: https://busybox.net/
@@ -53,3 +56,50 @@ or new installation steps:
   + All exported variables should start with `PRIMER_STEP_XXX_`. The `XXX` is
     the same as the name of the module, though in uppercase.
   + There should be as little exported variables as possible, preferably none.
+
+## Tests
+
++ Tests live in `test/`, in files named `<name>.test.sh`. Each test is a
+  function whose name starts with `test_`. `test/run.sh` discovers and runs
+  them, see the [README](../README.md#testing).
++ Every function of a library module in `libexec/` has at least one unit test
+  in `test/unit_<module>.test.sh`, named `test_<function>`, optionally followed
+  by a suffix, e.g. `test_primer_os_packages_alpine`.
++ Every step has tests in `test/step_<step>.test.sh`.
++ Tests always run in containers, using the helpers from `test/lib.sh`:
+  `in_container`, `primer_in` (the CLI) and `unit` (primer sourced in library
+  mode). Images are fully qualified, e.g. `docker.io/library/alpine:3.24`, so
+  they work with both docker and podman.
++ Assertions (`assert_equal`, `assert_match`, ...) run inside the containers.
+  Replace external commands with `mock` (shell functions, or executables for
+  names that are not valid function names) or `stub_bin` (executables, visible
+  to child processes).
++ Tests that need privileged containers call `require_privileged` first, and
+  `skip` explains why a test cannot run. Exit status 77 without a call to
+  `skip` is a failure.
++ Tests, and the scripts run in containers, run with `set -e`, as primer does.
+  `run`, `assert_true`, `assert_false` and `assert_exit` also run their command
+  with `set -e`, in a subshell. Never call container helpers or functions under
+  test in an `||`, `&&` or `if` context: it turns `set -e` off for the whole
+  call, and hides failures in its middle.
++ `assert_true` and `assert_false` take no message argument: an extra argument
+  goes to the command, and can make the assertion unable to fail.
++ Scripts run in containers must reach their end: an early `exit 0` fails the
+  test, as it skips the remaining assertions. Release resources shared with the
+  host, e.g. loop devices, with `at_exit`, never with a trap on `EXIT`.
++ Do not assume interface names: compare with `default_route_dev`, or use
+  `primary_dev_or_skip`.
++ Test files and test functions declared as `test_name ()` are discovered too.
+  Test the functions of `primer` itself in `test/primer.test.sh`.
++ Snippets passed to the container helpers are single-quoted on purpose, as
+  they expand inside the containers. Start test files with
+  `# shellcheck disable=SC2016` to keep [shellcheck] quiet about this.
++ When a test exposes a bug, fix the code, not the test.
+
+## Documentation
+
++ Keep Markdown lines at 80 characters at most: wrap paragraphs and list items,
+  without splitting inline code or links across lines. Split long commands in
+  code blocks with `\` continuations.
++ Only lines that cannot be wrapped may be longer: verbatim program output in
+  code blocks, and link reference definitions whose URL alone is too long.

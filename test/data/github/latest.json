@@ -1,0 +1,30 @@
+{
+  "url": "https://api.github.com/repos/acme/tool/releases/111",
+  "assets_url": "https://api.github.com/repos/acme/tool/releases/111/assets",
+  "html_url": "https://github.com/acme/tool/releases/tag/v1.2.3",
+  "id": 111,
+  "author": {
+    "login": "github-actions[bot]",
+    "id": 41898282,
+    "node_id": "MDM6Qm90NDE4OTgyODI=",
+    "type": "Bot"
+  },
+  "node_id": "RE_kwDOAAAAAAA",
+  "tag_name": "v1.2.3",
+  "target_commitish": "main",
+  "name": "v1.2.3",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/acme/tool/releases/assets/9001",
+      "id": 9001,
+      "name": "tool_1.2.3_Linux_x86_64.tar.gz",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      },
+      "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/tool_1.2.3_Linux_x86_64.tar.gz"
+    }
+  ]
+}

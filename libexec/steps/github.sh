@@ -107,7 +107,7 @@ EOF
                     if [ -n "$line" ]; then
                         _primer_step_github_parse "$line"
                         yush_debug "Looking for executable matching $bin under $PRIMER_BINDIR"
-                        find "${PRIMER_BINDIR}" -name "$bin" -perm -a=x |
+                        find "${PRIMER_BINDIR}" -mindepth 1 -maxdepth 1 -name "$bin" -perm -a=x |
                         while IFS= read -r fpath; do
                             yush_notice "Removing $fpath"
                             $PRIMER_OS_SUDO rm -f "$fpath"
@@ -154,6 +154,12 @@ _primer_step_github_latest() {
     r_id=
     r_tag=
     while IFS= read -r line; do
+        # Only consider lines at the first level of indentation of the object
+        # returned, i.e. 2 spaces. Nested objects, e.g. the author of the
+        # release, also have an "id" and a "name".
+        if ! printf %s\\n "$line" | grep -Eq '^[[:space:]]{2}"'; then
+            continue
+        fi
         if printf %s\\n "$line" | grep -Eq '"name"[[:space:]]*:'; then
             r_name=$(printf %s\\n "$line" | sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/g')
         fi
@@ -191,7 +197,7 @@ _primer_step_github_by_version() {
         # Only consider lines at the first level of identation in the objects of
         # the array returned, i.e. 2x2spaces: 2 spaces of indentation, two
         # levels.
-        if printf %s\\n "$line" | grep -Eq '^\s{4}"'; then
+        if printf %s\\n "$line" | grep -Eq '^[[:space:]]{4}"'; then
             if printf %s\\n "$line" | grep -Eq '"name"[[:space:]]*:'; then
                 r_name=$(printf %s\\n "$line" | sed -E 's/[[:space:]]*"name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/g')
             fi
@@ -254,14 +260,37 @@ _primer_step_github_install_download() {
             unzip "${tmpdir}/$_fname" -d "$tmpdir"
             rm -f "${tmpdir}/$_fname"; # Remove ZIP file at once, we are done
             ;;
-        default)
-            yush_warn "Does not recognise archive type of $_fname";;
+        *.gz)
+            # A single compressed binary.
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.gz}")
+            primer_net_curl "$1" | gzip -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
+        *.bz2)
+            primer_os_dependency bzip2
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.bz2}")
+            primer_net_curl "$1" | bzip2 -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
+        *.xz)
+            _primer_step_github_xz_dependency
+            _dst=$(_primer_step_github_binname "$2" "${_fname%.xz}")
+            primer_net_curl "$1" | xz -dc > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
+        *)
+            # Not an archive: a binary released as-is.
+            _dst=$(_primer_step_github_binname "$2" "$_fname")
+            primer_net_curl "$1" > "${tmpdir}/${_dst}"
+            _primer_step_github_executable "${tmpdir}/${_dst}"
+            ;;
     esac
 
     # Find something that is executable by everybody and matches the filter
     # passed as $2. For all matching binaries, install them to $PRIMER_BINDIR,
     # e.g. /usr/local/bin in most cases.
-    find "$tmpdir" -name "$2" -perm -a=x |
+    [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+    find "$tmpdir" -type f -name "$2" -perm -a=x |
     while IFS= read -r fpath; do
         yush_notice "Installing $(yush_basename "$fpath") to $PRIMER_BINDIR"
         $PRIMER_OS_SUDO mv -f "$fpath" "${PRIMER_BINDIR}"
@@ -274,9 +303,42 @@ _primer_step_github_install_download() {
 # (old-style) compress format, etc.
 _primer_step_github_untar() {
     primer_os_dependency tar
-    if yush_loglevel_le verbose; then
+    if yush_loglevel_le debug; then
         primer_net_curl "$1" | tar -C "$2" -"${3}xvf" -
     else
         primer_net_curl "$1" | tar -C "$2" -"${3}xf" -
+    fi
+}
+
+# Print the name to give to a downloaded binary: the binary to install ($1),
+# unless that is a glob-filter, in which case the name of the download ($2).
+_primer_step_github_binname() {
+    case "$1" in
+        *[\*\?\[]*) printf %s\\n "$2";;
+        *) printf %s\\n "$1";;
+    esac
+}
+
+# Make the downloaded file passed as an argument executable when it is a
+# binary (ELF) or a script. Remove it otherwise, e.g. for packages (.deb,
+# .rpm) or checksums, so that it is not installed.
+_primer_step_github_executable() {
+    # ELF binaries start with \177ELF, scripts with #!
+    if [ "$(head -c 4 "$1" | tail -c 3)" = "ELF" ] || [ "$(head -c 2 "$1")" = "#!" ]; then
+        chmod a+x "$1"
+    else
+        yush_warn "$(yush_basename "$1") is neither a binary nor a script, not installing it"
+        rm -f "$1"
+    fi
+}
+
+# Make sure xz can be used for decompression: busybox only provides unxz and
+# xzcat, and the package is called differently on Debian derivatives.
+_primer_step_github_xz_dependency() {
+    if ! primer_utils_syscmd_exists xz; then
+        case "$(primer_os_distribution)" in
+            *buntu|*bian) primer_os_packages add xz-utils;;
+            *) primer_os_packages add xz;;
+        esac
     fi
 }

@@ -7,8 +7,9 @@
 The `machine` step arranges for the Docker [machine] CLI to be present at the
 host. The step is able to pinpoint a given version and to verify the
 installation download against its sha256 sum if necessary. By default, it will
-install the latest available at [github]. In addition, bash completion is made
-available to all users of the system.
+install the latest available at [github]. The step fails, installing nothing,
+when the download or its verification fails. In addition, bash completion is
+made available to all users of the system, once the binary is installed.
 
   [machine]: https://docs.docker.com/machine/overview/
   [github]: https://github.com/docker/machine/releases

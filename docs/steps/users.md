@@ -26,9 +26,14 @@ the `:` (colon) sign. These fields are, in order:
   is the main group
 - [GECOS] fields (comma separated) for user
 - Login shell, ensure that the shell exists on the machine, empty for a good
-  default, i.e. the default shell on that distribution.
+  default, i.e. the default shell on that distribution: `/bin/bash` on Debian
+  derivatives (or the `DSHELL` setting of `adduser`), `/bin/sh` on Alpine, the
+  default of `useradd` elsewhere, e.g. `/bin/bash` on Fedora.
 - A comma-separated list of GitHub usernames, the public keys of whom will be
   allowed to login as the user with ssh.
+
+For users that already exist, empty groups, GECOS or shell fields keep the
+current settings.
 
   [GECOS]: https://en.wikipedia.org/wiki/Gecos_field
 
@@ -43,11 +48,12 @@ Specifies the path to the user specification file.
 The value of this option should be a boolean (`yes`/`no`, `true`/`false`,
 `on`/`off`, an integer). When it is true, the a companion file will be created
 in the same directory and with the same basename than the specification file,
-albeit with the `.pwd` [extension](#--extension). The file will automatically be
-only readable by the script caller and protected for access from other users on
-the system. By default, no such file will be created, meaning that the only
-place to get hold of the generated passwords is from the log of `primer` when
-users are created.
+albeit with the `.pwd` [extension](#--extension) replacing its own extension, if
+any, e.g. `/etc/primer.d/users.pwd` for `/etc/primer.d/users`. The file will
+automatically be only readable by the script caller and protected for access
+from other users on the system. By default, no such file will be created,
+meaning that the only place to get hold of the generated passwords is from the
+log of `primer` when users are created.
 
 ### `--ext`
 

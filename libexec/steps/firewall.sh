@@ -10,7 +10,9 @@ PRIMER_STEP_FIREWALL_PORTS=${PRIMER_STEP_FIREWALL_PORTS:-}
 PRIMER_STEP_FIREWALL_TYPE=${PRIMER_STEP_FIREWALL_TYPE:-}
 
 # Marker for the rules created by this step, so they can be found and removed
-# when cleaning. This is the comment of nftables rules and the prefix of the
+# when cleaning: only rules with the marker are ever removed. This is the
+# comment of nftables and iptables rules, the start of the comment of ufw rules,
+# the name of the firewalld service holding the ports, and the prefix of the
 # names of awall policies. Only letters, digits and dashes are kept, as in awall
 # policy names.
 PRIMER_STEP_FIREWALL_MARKER=${PRIMER_STEP_FIREWALL_MARKER:-"primer"}
@@ -152,40 +154,83 @@ _primer_step_firewall_rules() {
     done
 }
 
-# Open port $1 for protocol $2 using ufw.
+# Print the comment of the ufw rules created by this step.
+_primer_step_firewall_ufw_comment() {
+    printf '%s firewall\n' "$PRIMER_STEP_FIREWALL_MARKER"
+}
+
+# Open port $1 for protocol $2 using ufw, with a rule marked by its comment.
+# Nothing is done when a rule for the same traffic exists, whatever its action
+# or comment: adding the rule would change the comment of the existing rule,
+# making it look like one of ours.
 _primer_step_firewall_ufw_open() {
+    if $PRIMER_OS_SUDO ufw show added |
+            grep -Eq "^ufw (allow|deny|reject|limit)( in)? ${1}(/${2})?( |\$)"; then
+        yush_info "A ufw rule for port $1/$2 already exists, leaving it alone"
+        return
+    fi
     yush_info "Opening port $1/$2 in ufw"
-    $PRIMER_OS_SUDO ufw allow "${1}/${2}"
+    $PRIMER_OS_SUDO ufw allow "${1}/${2}" comment "$(_primer_step_firewall_ufw_comment)"
 }
 
-# Close port $1 for protocol $2 using ufw.
+# Close port $1 for protocol $2 using ufw, i.e. remove the rule created when
+# opening, and only that one: ufw matches the comment when deleting.
 _primer_step_firewall_ufw_close() {
-    yush_info "Closing port $1/$2 in ufw"
-    $PRIMER_OS_SUDO ufw delete allow "${1}/${2}"
+    _comment=$(_primer_step_firewall_ufw_comment)
+    if $PRIMER_OS_SUDO ufw show added | grep -qxF "ufw allow ${1}/${2} comment '${_comment}'"; then
+        yush_info "Closing port $1/$2 in ufw"
+        $PRIMER_OS_SUDO ufw delete allow "${1}/${2}" comment "$_comment"
+    fi
 }
 
-# Open port $1 for protocol $2 using firewalld, both permanently and at once
-# when the daemon is running.
+# Run firewalld configuration commands on the permanent configuration: through
+# firewall-cmd when the daemon is running, firewall-offline-cmd otherwise.
+_primer_step_firewall_firewalld_cmd() {
+    if $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
+        $PRIMER_OS_SUDO firewall-cmd --permanent "$@"
+    else
+        $PRIMER_OS_SUDO firewall-offline-cmd "$@"
+    fi
+}
+
+# Apply the permanent configuration when the daemon is running.
+_primer_step_firewall_firewalld_reload() {
+    if $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
+        $PRIMER_OS_SUDO firewall-cmd --reload
+    fi
+}
+
+# Open port $1 for protocol $2 using firewalld. Ports are added to a dedicated
+# service, named after the marker, enabled in the default zone. Ports opened
+# otherwise are never touched.
 _primer_step_firewall_firewalld_open() {
-    yush_info "Opening port $1/$2 in firewalld"
-    if $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
-        $PRIMER_OS_SUDO firewall-cmd --permanent --add-port="${1}/${2}"
-        $PRIMER_OS_SUDO firewall-cmd --add-port="${1}/${2}"
-    else
-        $PRIMER_OS_SUDO firewall-offline-cmd --add-port="${1}/${2}"
+    yush_info "Opening port $1/$2 in firewalld service $PRIMER_STEP_FIREWALL_MARKER"
+    if ! _primer_step_firewall_firewalld_cmd --get-services | tr ' ' '\n' | grep -qxF "$PRIMER_STEP_FIREWALL_MARKER"; then
+        _primer_step_firewall_firewalld_cmd --new-service="$PRIMER_STEP_FIREWALL_MARKER"
     fi
+    _primer_step_firewall_firewalld_cmd --service="$PRIMER_STEP_FIREWALL_MARKER" --add-port="${1}/${2}"
+    if ! _primer_step_firewall_firewalld_cmd --list-services | tr ' ' '\n' | grep -qxF "$PRIMER_STEP_FIREWALL_MARKER"; then
+        _primer_step_firewall_firewalld_cmd --add-service="$PRIMER_STEP_FIREWALL_MARKER"
+    fi
+    _primer_step_firewall_firewalld_reload
 }
 
-# Close port $1 for protocol $2 using firewalld, both permanently and at once
-# when the daemon is running.
+# Close port $1 for protocol $2 using firewalld, i.e. remove it from the
+# dedicated service. The service is removed with its last port.
 _primer_step_firewall_firewalld_close() {
-    yush_info "Closing port $1/$2 in firewalld"
-    if $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
-        $PRIMER_OS_SUDO firewall-cmd --permanent --remove-port="${1}/${2}"
-        $PRIMER_OS_SUDO firewall-cmd --remove-port="${1}/${2}"
-    else
-        $PRIMER_OS_SUDO firewall-offline-cmd --remove-port="${1}/${2}"
+    if ! _primer_step_firewall_firewalld_cmd --get-services | tr ' ' '\n' | grep -qxF "$PRIMER_STEP_FIREWALL_MARKER"; then
+        return
     fi
+    yush_info "Closing port $1/$2 in firewalld service $PRIMER_STEP_FIREWALL_MARKER"
+    _primer_step_firewall_firewalld_cmd --service="$PRIMER_STEP_FIREWALL_MARKER" --remove-port="${1}/${2}"
+    if [ -z "$(_primer_step_firewall_firewalld_cmd --service="$PRIMER_STEP_FIREWALL_MARKER" --get-ports)" ]; then
+        yush_info "Removing firewalld service $PRIMER_STEP_FIREWALL_MARKER"
+        if _primer_step_firewall_firewalld_cmd --list-services | tr ' ' '\n' | grep -qxF "$PRIMER_STEP_FIREWALL_MARKER"; then
+            _primer_step_firewall_firewalld_cmd --remove-service="$PRIMER_STEP_FIREWALL_MARKER"
+        fi
+        _primer_step_firewall_firewalld_cmd --delete-service="$PRIMER_STEP_FIREWALL_MARKER"
+    fi
+    _primer_step_firewall_firewalld_reload
 }
 
 # Print the name of the awall policy for port $1 and protocol $2.
@@ -258,24 +303,25 @@ _primer_step_firewall_iptables_bins() {
 }
 
 # Open port $1 for protocol $2 using iptables (and ip6tables), unless already
-# open. Rules are inserted first in the INPUT chain to take precedence.
+# open by this step. Rules are marked with a comment, and inserted first in the
+# INPUT chain to take precedence.
 _primer_step_firewall_iptables_open() {
     primer_os_dependency iptables iptables
     yush_info "Opening port $1/$2 in iptables"
     for _bin in $(_primer_step_firewall_iptables_bins); do
-        if ! $PRIMER_OS_SUDO "$_bin" -C INPUT -p "$2" --dport "$1" -j ACCEPT 2>/dev/null; then
-            $PRIMER_OS_SUDO "$_bin" -I INPUT -p "$2" --dport "$1" -j ACCEPT
+        if ! $PRIMER_OS_SUDO "$_bin" -C INPUT -p "$2" --dport "$1" -m comment --comment "$PRIMER_STEP_FIREWALL_MARKER" -j ACCEPT 2>/dev/null; then
+            $PRIMER_OS_SUDO "$_bin" -I INPUT -p "$2" --dport "$1" -m comment --comment "$PRIMER_STEP_FIREWALL_MARKER" -j ACCEPT
         fi
     done
 }
 
 # Close port $1 for protocol $2 using iptables (and ip6tables), removing all
-# matching rules.
+# matching rules created by this step, i.e. marked with its comment.
 _primer_step_firewall_iptables_close() {
     yush_info "Closing port $1/$2 in iptables"
     for _bin in $(_primer_step_firewall_iptables_bins); do
-        while $PRIMER_OS_SUDO "$_bin" -C INPUT -p "$2" --dport "$1" -j ACCEPT 2>/dev/null; do
-            $PRIMER_OS_SUDO "$_bin" -D INPUT -p "$2" --dport "$1" -j ACCEPT || break
+        while $PRIMER_OS_SUDO "$_bin" -C INPUT -p "$2" --dport "$1" -m comment --comment "$PRIMER_STEP_FIREWALL_MARKER" -j ACCEPT 2>/dev/null; do
+            $PRIMER_OS_SUDO "$_bin" -D INPUT -p "$2" --dport "$1" -m comment --comment "$PRIMER_STEP_FIREWALL_MARKER" -j ACCEPT || break
         done
     done
 }

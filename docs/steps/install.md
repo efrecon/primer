@@ -37,12 +37,36 @@ specification that will be overwritten for a given host.
 
 The `install` step uses `curl` when downloading remote resources. To access
 protected resources, you can match these to the relevant curl [options] using
-the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`)
+the `--curl` command-line option (or the `PRIMER_CURL_OPTIONS`). Downloads are
+first made to a temporary file: when they fail, existing destinations are left
+untouched.
 
 When a source is empty, the `install` step will either create an empty directory
 or an empty file. In that special case, directory names should end with a slash
 in order for the `install` step to make the difference between files and
 directories. All intermediate directories will be created, if necessary.
+
+When the destination of a local file or directory is an existing directory, or
+ends with a slash, the source is copied into it, under its own name. Otherwise,
+the destination is a copy of the source. An existing destination directory that
+only contains files of the source directory is a copy made by an earlier run: it
+is refreshed, so running the step again does not nest copies. Ownership and
+permissions are only applied to what was installed, never to the directory it
+was copied into.
+
+When cleaning, what was installed is removed: files, and directories copied from
+a local source directory (recursively). Nothing records what was installed, so
+files are only removed when they are still what the step installs: empty for an
+empty source, equal to the source for copies, and equal to a fresh download for
+URLs (kept, with a warning, when the download fails). Files that existed before,
+e.g. not overwritten, are kept. Likewise, a directory is only removed when it is
+still a copy of the source directory, i.e.
+contains the same files and sub-directories: the copy inside the destination
+first, then the destination itself. Existing directories, or copies modified
+since installation, are never removed, even when cleaning several times.
+Directories created from an empty source are only removed when they are empty.
+Use a trailing slash on the destination to copy a directory into an existing
+directory, so cleaning is unambiguous.
 
   [options]: https://curl.haxx.se/docs/manpage.html#OPTIONS
 

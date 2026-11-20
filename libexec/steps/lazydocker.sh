@@ -28,21 +28,18 @@ primer_step_lazydocker() {
             done
             ;;
         "install")
-            if [ -x "$(command -v "lazydocker")" ]; then
+            if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+                PRIMER_STEP_LAZYDOCKER_VERSION=$(primer_version_github_latest "$PRIMER_STEP_LAZYDOCKER_RELEASES" "lazydocker")
                 if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    PRIMER_STEP_LAZYDOCKER_VERSION=$(primer_version_github_latest "$PRIMER_STEP_LAZYDOCKER_RELEASES" "lazydocker")
+                    yush_error "Could not find the latest version of lazydocker"
+                    return 1
                 fi
-                if [ -n "$PRIMER_STEP_LAZYDOCKER_VERSION" ] && \
-                    [ "$(primer_version_current "lazydocker")" != "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    _primer_step_lazydocker_install
-                fi
+            fi
+            if [ -x "$(command -v "lazydocker")" ] && \
+                    [ "$(primer_version_current "lazydocker")" = "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
+                yush_debug "lazydocker $PRIMER_STEP_LAZYDOCKER_VERSION already installed"
             else
-                if [ -z "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    PRIMER_STEP_LAZYDOCKER_VERSION=$(primer_version_github_latest "$PRIMER_STEP_LAZYDOCKER_RELEASES" "lazydocker")
-                fi
-                if [ -n "$PRIMER_STEP_LAZYDOCKER_VERSION" ]; then
-                    _primer_step_lazydocker_install
-                fi
+                _primer_step_lazydocker_install || return 1
             fi
             ;;
         "clean")
@@ -54,39 +51,50 @@ primer_step_lazydocker() {
     esac
 }
 
-# Download from github, making sure we can actually execute the binary that we
-# downloaded. We download the first byte to check all the redirects, and on
-# success we will download everything and possibly check against the sha256 sum.
+# Download from github, verify the tarpack against the checksums of the release
+# and install the binary from it. Fails, installing nothing, when any of this
+# fails.
 _primer_step_lazydocker_install_download() {
-    tmpdir=$(mktemp -d)
     _arch=$(uname -m)
     case "$_arch" in
+        aarch64|arm64) _arch=arm64;;
         armv7*) _arch=armv7;;
         armv6*) _arch=armv6;;
+        i?86) _arch=x86;;
     esac
-    tar_file="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_${_arch}.tar.gz"
-    if primer_net_curl "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file" > "${tmpdir}/$tar_file"; then
-        primer_net_curl "${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/checksums.txt" > "${tmpdir}/checksums.txt"
-        local_sum=$(sha256sum "${tmpdir}/$tar_file" | awk '{print $1};')
-        remote_sum=$(grep "$tar_file" "${tmpdir}/checksums.txt"|awk '{print $1};')
-        if [ "$local_sum" != "$remote_sum" ]; then
-            yush_warn "Checksum mismatch for downloaded file $tar_file, should have been $(yush_red "$remote_sum"). Giving up on lazydocker!"
+    _release="${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION"
+    _tar="lazydocker_${PRIMER_STEP_LAZYDOCKER_VERSION}_$(uname -s)_${_arch}.tar.gz"
+    _tmpdir=$(mktemp -d)
+    _rc=1
+    if ! primer_net_curl "${_release}/$_tar" > "${_tmpdir}/$_tar"; then
+        yush_error "No binary at ${_release}/$_tar"
+    else
+        _remote_sum=$(primer_net_curl "${_release}/checksums.txt" |
+            awk -v a="$_tar" '{f=$2; sub(/^\*/, "", f); if (f == a && !s) s = $1} END {print s}' || true)
+        _local_sum=$(sha256sum < "${_tmpdir}/$_tar" | cut -d " " -f 1)
+        if [ -z "$_remote_sum" ]; then
+            yush_error "Could not find sha256 sum for $_tar in ${_release}/checksums.txt, will not install"
+        elif [ "$_local_sum" != "$_remote_sum" ]; then
+            yush_error "Checksum mismatch for downloaded file $_tar, should have been $(yush_red "$_remote_sum"). Giving up on lazydocker!"
         else
-            tar -C "$tmpdir" -zxf "$tmpdir/${tar_file}"
-            if [ -f "$tmpdir/lazydocker" ]; then
-                chmod a+x "$tmpdir/lazydocker"
-                $PRIMER_OS_SUDO mv -f "$tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
+            tar -C "$_tmpdir" -zxf "$_tmpdir/${_tar}"
+            if ! [ -f "$_tmpdir/lazydocker" ]; then
+                yush_error "Cannot find lazydocker in $_tar"
+            else
+                chmod a+x "$_tmpdir/lazydocker"
+                [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
+                $PRIMER_OS_SUDO mv -f "$_tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
+                _rc=0
             fi
         fi
-    else
-        yush_warn "No binary at ${PRIMER_STEP_LAZYDOCKER_DOWNLOAD%%/}/v$PRIMER_STEP_LAZYDOCKER_VERSION/$tar_file"
     fi
-    rm -rf "$tmpdir"
+    rm -rf "$_tmpdir"
+    return "$_rc"
 }
 
 _primer_step_lazydocker_install() {
     yush_info "Installing lazydocker $PRIMER_STEP_LAZYDOCKER_VERSION"
-    _primer_step_lazydocker_install_download
+    _primer_step_lazydocker_install_download || return 1
     # Check version
     yush_debug "Verifying installed version against $PRIMER_STEP_LAZYDOCKER_VERSION"
     instver=$(primer_version_current "${PRIMER_BINDIR%%/}/lazydocker")

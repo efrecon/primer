@@ -26,7 +26,9 @@ primer_utils_var_exists() {
     return $?  # Pedantic.
 }
 
-primer_utils_var_value() { eval printf %s "\"\$$1\""; }
+# Print the value of the variable which name is passed as an argument, empty
+# when unset (also under set -u).
+primer_utils_var_value() { eval printf %s "\"\${$1:-}\""; }
 
 primer_utils_load() {
     _varname=PRIMER_STEP__$(printf %s "$1" | tr '[:lower:]' '[:upper:]' | tr -C '[:alnum:]' '_')_PATH
@@ -73,12 +75,44 @@ primer_utils_sysfile_append() {
     $PRIMER_OS_SUDO tee -a "$1" > /dev/null
 }
 
-# Remove all lines matching $2 from (not only system) file at $1
+# Replace the content of the (not only system) file at $1 with what comes in
+# from stdin, keeping the owner and access rights of the file (a new file is
+# made readable by all). The content is first written to a temporary file in
+# the same directory, which is then moved in place: the file is replaced
+# atomically and never left truncated or half-written. When $1 is a symbolic
+# link, the file it points to is replaced, and the link kept.
+primer_utils_sysfile_replace() {
+    _rpl_path=$1
+    if [ -L "$_rpl_path" ]; then
+        _rpl_path=$($PRIMER_OS_SUDO readlink -f "$1")
+    fi
+    _rpl_tmp=$($PRIMER_OS_SUDO mktemp "$(dirname "$_rpl_path")/.$(basename "$_rpl_path").XXXXXX")
+    if $PRIMER_OS_SUDO tee "$_rpl_tmp" > /dev/null; then
+        if [ -e "$_rpl_path" ]; then
+            primer_utils_path_ownership "$_rpl_tmp" --as "$_rpl_path"
+        else
+            $PRIMER_OS_SUDO chmod 644 "$_rpl_tmp"
+        fi
+        $PRIMER_OS_SUDO mv -f "$_rpl_tmp" "$_rpl_path"
+    else
+        $PRIMER_OS_SUDO rm -f "$_rpl_tmp"
+        return 1
+    fi
+}
+
+# Remove all lines matching the basic regular expression $2 from (not only
+# system) file at $1. The file is read with sudo, as only root might be able to.
 primer_utils_sysfile_clip() {
-    _tmp=$(mktemp)
-    grep -v "$2" "$1" > "$_tmp"
-    primer_utils_path_ownership "$_tmp" --as "$1"
-    $PRIMER_OS_SUDO mv -f "$_tmp" "$1"
+    _clip_tmp=$(mktemp)
+    # grep returns 1 when all lines are removed, which is not an error, but 2
+    # on errors, e.g. a missing file.
+    if $PRIMER_OS_SUDO grep -v -e "$2" "$1" > "$_clip_tmp" || [ "$?" = "1" ]; then
+        primer_utils_sysfile_replace "$1" < "$_clip_tmp"
+        rm -f "$_clip_tmp"
+    else
+        rm -f "$_clip_tmp"
+        return 1
+    fi
 }
 
 
@@ -90,23 +124,27 @@ primer_utils_sysfile_clip() {
 # --perm   chmod compatible access rights
 # --as     Take ownership and access rights from this file/dir instead
 primer_utils_path_ownership() {
-    _path="$1"
+    # Variables are prefixed, as callers might use the same names (shell
+    # variables are global).
+    _po_path="$1"
     shift
-    _username=$(id -un)
-    _group=$(id -gn)
-    _perms="u+rw,go-rw"
+    _po_user=$(id -un)
+    _po_group=$(id -gn)
+    _po_perms="u+rw,go-rw"
     while [ $# -gt 0 ]; do
         case "$1" in
             --user*)
-                _username=$2; _group=$(id -gn "$2");  shift 2;;
+                _po_user=$2; _po_group=$(id -gn "$2");  shift 2;;
             --group*)
-                _group=$2;  shift 2;;
+                _po_group=$2;  shift 2;;
             --perm*)
-                _perms=$2; shift 2;;
+                _po_perms=$2; shift 2;;
             --as*)
-                _username=$(stat -c "%U" "$2")
-                _group=$(stat -c "%G" "$2")
-                _perms=$(stat -c "%A" "$2")
+                # Numeric ids, as the reference might be owned by ids without
+                # names.
+                _po_user=$(stat -c "%u" "$2")
+                _po_group=$(stat -c "%g" "$2")
+                _po_perms=$(stat -c "%a" "$2")
                 shift 2
                 ;;
             -*)
@@ -116,6 +154,6 @@ primer_utils_path_ownership() {
         esac
     done
 
-    $PRIMER_OS_SUDO chown -R "${_username}:${_group}" "$_path"
-    $PRIMER_OS_SUDO chmod -R "$_perms" "$_path"
+    $PRIMER_OS_SUDO chown -R "${_po_user}:${_po_group}" "$_po_path"
+    $PRIMER_OS_SUDO chmod -R "$_po_perms" "$_po_path"
 }

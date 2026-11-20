@@ -7,9 +7,13 @@
 The `git` step arranges for the installation of [git] and [LFS]. [git] is
 installed directly as packaged by the OS distribution, but the step is able to
 pinpoint a given version of LFS. By default, the latest official release will be
-installed. LFS downloads are verified before installation. By default, this step
-will make git LFS available to all regular users of the system, but this can be
-changed.
+installed. LFS downloads are verified against the sha256 sums published with the
+release before installation: when the verification fails, or the release has no
+sum for the download, nothing is installed and the step fails. By default, this
+step will make git LFS available to all regular users of the system, but this
+can be changed. When cleaning, LFS is only removed at the version that the step
+installs, i.e. the one specified, or the latest release: pass the same options
+as when installing.
 
   [git]: https://git-scm.com/
   [LFS]: https://git-lfs.github.com/

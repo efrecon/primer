@@ -39,10 +39,23 @@ primer_net_primary_interface() {
     primer_net_interfaces | grep -E '^(en.*|eth[[:digit:]]{1,})' | head -n 1
 }
 
+# Decode URL-encoded (percent-encoded) strings, from the argument or stdin,
+# line by line. awk is used as printf %b does not support \x in all shells
+# (e.g. dash), and the C locale makes it process bytes.
 # shellcheck disable=SC2120
 primer_net_urldec() {
     if [ "$#" -eq "0" ]; then
-        printf '%b\n' "$(sed -E -e 's/\+/ /g' -e 's/%([0-9a-fA-F]{2})/\\x\1/g')"
+        LC_ALL=C awk '
+            BEGIN { for (i = 1; i < 256; i++) chr[sprintf("%02x", i)] = sprintf("%c", i) }
+            {
+                gsub(/\+/, " ")
+                out = ""
+                while (match($0, /%[0-9a-fA-F][0-9a-fA-F]/)) {
+                    out = out substr($0, 1, RSTART - 1) chr[tolower(substr($0, RSTART + 1, 2))]
+                    $0 = substr($0, RSTART + 3)
+                }
+                print out $0
+            }'
     else
         printf %s\\n "$1" | primer_net_urldec
     fi
@@ -73,10 +86,10 @@ primer_net_active_firewall() {
             $PRIMER_OS_SUDO firewall-cmd --state 2>/dev/null | grep -qx running; then
         printf '%s\n' firewalld
     elif primer_utils_syscmd_exists nft &&
-            { primer_utils_syscmd_exists systemctl &&
-                $PRIMER_OS_SUDO systemctl is-active --quiet nftables ||
-              primer_utils_syscmd_exists rc-service &&
-                $PRIMER_OS_SUDO rc-service nftables status >/dev/null 2>&1; }; then
+            { { primer_utils_syscmd_exists systemctl &&
+                    $PRIMER_OS_SUDO systemctl is-active --quiet nftables; } ||
+              { primer_utils_syscmd_exists rc-service &&
+                    $PRIMER_OS_SUDO rc-service nftables status >/dev/null 2>&1; }; }; then
         printf '%s\n' nftables
     fi
 }
@@ -132,6 +145,9 @@ primer_net_port_allow() {
     fi
 }
 
+# Print the extra curl options for URL $1, if any. Lines of the file at
+# $PRIMER_CURL_OPTIONS (# for comments) are a URL-encoded regex followed by
+# curl options: print the options of the first line whose regex matches $1.
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
         yush_debug "Looking for curl options for $1"
@@ -146,7 +162,9 @@ _primer_net_curlopts() {
                     # respecting the ORS and OFS variables of awk.
                     _opts=$(    printf %s\\n "$line" |
                                 awk '{for(i=2;i<=NF;i++){ printf("%s",( (i>2) ? OFS : "" ) $i) } ; printf("%s",ORS);}' )
-                    yush_info "Picked these curl options for accessing $1: $_opts"
+                    # Options are not logged, as they often carry secrets,
+                    # e.g. tokens.
+                    yush_debug "Using curl options from $PRIMER_CURL_OPTIONS for accessing $1"
                     printf %s\\n "$_opts"
                     break
                 fi
@@ -170,10 +188,12 @@ primer_net_curl() {
     # Construct a curl command, forcing some decent options first, then the one
     # that could be specific for that (group of) URLs, last from the caller.
     yush_trace "Downloading $_url"
-    if yush_loglevel_le verbose; then
+    # Always fail on HTTP errors, and only show progress at the debug level
+    # and below.
+    if yush_loglevel_le debug; then
         _copts="-fSL --progress-bar"
     else
-        _copts=-sSL
+        _copts=-fsSL
     fi
     # shellcheck disable=SC2046,SC2086
     curl $_copts $(_primer_net_curlopts "$_url") "$@" "$_url"

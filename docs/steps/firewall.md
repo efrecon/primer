@@ -33,12 +33,25 @@ is either a port number, e.g. `8080`, or a port number and a protocol, e.g.
 definition without a protocol opens the port for both TCP and UDP. Invalid
 definitions are skipped with a warning.
 
-With nftables, rules are added to the `input` chain of the `inet filter` table
-and marked with a comment so that cleaning only removes the rules created by
-this step. With awall, each port and protocol pair gets its own policy, e.g.
-`primer-8080-tcp`, accepting incoming traffic to the host from all zones.
-Cleaning disables and removes these policies, and policies are activated in
-both cases.
+Cleaning only removes what this step created, never rules that existed before,
+even for the same ports, e.g. a `ufw allow 22/tcp` of the administrator. The
+rules of the step are marked with the [marker](#primer_step_firewall_marker):
+
++ With [ufw], rules have the comment `primer firewall`. When a rule for the
+  same port and protocol already exists, whatever its action or comment, it is
+  left alone and no rule is added: ufw would otherwise take it over.
++ With [firewalld], ports are added to a dedicated firewalld service called
+  `primer`, enabled in the default zone. Cleaning removes the ports from the
+  service, and the service with its last port. Changes are made to the
+  permanent configuration, and applied at once when firewalld runs.
++ With [nftables], rules are added to the `input` chain of the `inet filter`
+  table, with the comment `primer`.
++ With [iptables], rules are inserted first in the `INPUT` chain, with the
+  comment `primer` (`-m comment --comment primer`).
++ With [awall], each port and protocol pair gets its own policy, e.g.
+  `primer-8080-tcp`, accepting incoming traffic to the host from all zones.
+  Cleaning disables and removes these policies, and policies are activated in
+  both cases.
 
 ## Options
 
@@ -72,8 +85,10 @@ default, meaning automatic detection.
 
 ### `PRIMER_STEP_FIREWALL_MARKER`
 
-Marker for the rules created by this step: the comment of nftables rules and the
-prefix of the names of awall policies. Defaults to `primer`.
+Marker for the rules created by this step: the comment of nftables and iptables
+rules, the start of the comment of ufw rules, the name of the firewalld service
+holding the ports, and the prefix of the names of awall policies. Defaults to
+`primer`.
 
 The marker may only contain the characters accepted in awall policy names, i.e.
 ASCII letters, digits and dashes (`[0-9a-zA-Z-]`). Other characters are removed

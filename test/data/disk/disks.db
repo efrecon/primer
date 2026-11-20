@@ -1,0 +1,8 @@
+# Disks used by the tests, as image files in /dev (see setup.sh).
+# device:filesystem:mount point:mount options:user:group:permissions
+
+# All defaults: ext4, mounted at /mnt/disks/fakedisk, owned by root, a+w
+fakedisk
+
+# Through a symlink (as with /dev/disk/by-label), non-default filesystem
+bylabel:ext2:/srv/data:defaults:1000:1000:0750

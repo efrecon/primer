@@ -55,19 +55,23 @@ primer_step_install() {
 }
 
 _primer_step_install() {
-    src=$(printf %s\\n "$2" | cut -d ":" -f "1" | primer_net_urldec)
-    tgt=$(printf %s\\n "$2" | cut -d ":" -f "2" | primer_net_urldec)
-    user=$(printf %s\\n "$2" | cut -d ":" -f "3")
+    src=$(_primer_step_install_field "$2" 1 | primer_net_urldec)
+    tgt=$(_primer_step_install_field "$2" 2 | primer_net_urldec)
+    if [ -z "$tgt" ]; then
+        yush_warn "No destination in installation specification $2, skipping"
+        return 0
+    fi
+    user=$(_primer_step_install_field "$2" 3)
     if [ -z "$user" ]; then
         user=$(id -un)
         yush_debug "$tgt will be owned by user: $user"
     fi
-    group=$(printf %s\\n "$2" | cut -d ":" -f "4")
+    group=$(_primer_step_install_field "$2" 4)
     if [ -z "$group" ]; then
         group=$(id -gn)
         yush_debug "$tgt will be owned by group: $group"
     fi
-    perms=$(printf %s\\n "$2" | cut -d ":" -f "5")
+    perms=$(_primer_step_install_field "$2" 5)
     if [ -z "$perms" ]; then
         perms=u+rw,g+r,g-w,o-rw
         yush_debug "Permissions for $tgt will be: $perms"
@@ -94,9 +98,17 @@ _primer_step_install() {
                     yush_debug "Target $tgt already exists!"
                     do_perms=0
                 else
+                    # Download to a temporary file first, so a failed download
+                    # never truncates an existing target.
                     yush_info "Downloading $src into $tgt"
-                    # shellcheck disable=SC2086
-                    primer_net_curl "$src" | $PRIMER_OS_SUDO tee "$tgt" > /dev/null
+                    _download=$(mktemp)
+                    if primer_net_curl "$src" > "$_download"; then
+                        primer_utils_sysfile_replace "$tgt" < "$_download"
+                    else
+                        yush_warn "Could not download $src, $tgt left untouched"
+                        do_perms=0
+                    fi
+                    rm -f "$_download"
                 fi
             elif [ -z "$src" ]; then
                 # When the source is empty, we have a special case and simply
@@ -126,24 +138,33 @@ _primer_step_install() {
                 fi
             else
                 # When here, the source is neither empty, nor a remote resource,
-                # so we consider it a local resource. We copy recursively or
-                # just the file depending on the target type.
-                if [ -d "$tgt" ]; then
-                    if yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
-                        yush_info "Recursively copying $src into $tgt"
-                        $PRIMER_OS_SUDO cp -R "$src" "$tgt"
+                # so we consider it a local file or directory. When the target
+                # is an existing directory, or ends with a slash, the source is
+                # copied into it. The effective target is then the copy, so
+                # that permissions only apply to what was installed. A target
+                # directory (without a slash) that only contains files from
+                # the source directory is the copy made by an earlier
+                # installation: it is refreshed rather than copied into.
+                if [ -d "$src" ] && ! yush_glob '*/' "$tgt" \
+                        && _primer_step_install_within "$src" "$tgt"; then
+                    yush_debug "$tgt is a copy of $src"
+                elif [ -d "$tgt" ] || yush_glob '*/' "$tgt"; then
+                    [ -d "$tgt" ] || $PRIMER_OS_SUDO mkdir -p "$tgt"
+                    tgt=${tgt%/}/$(yush_basename "${src%/}")
+                fi
+                if { [ -e "$tgt" ] || [ -L "$tgt" ]; } && ! yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
+                    yush_debug "Target $tgt already exists!"
+                    do_perms=0
+                elif [ -d "$src" ]; then
+                    yush_info "Recursively copying $src to $tgt"
+                    if [ -d "$tgt" ]; then
+                        $PRIMER_OS_SUDO cp -R "${src%/}/." "$tgt"
                     else
-                        yush_debug "Target directory $tgt already exists!"
-                        do_perms=0
+                        $PRIMER_OS_SUDO cp -R "$src" "$tgt"
                     fi
                 else
-                    if [ -f "$tgt" ] && ! yush_is_true "$PRIMER_STEP_INSTALL_OVERWRITE"; then
-                        yush_debug "Target $tgt already exists!"
-                        do_perms=0
-                    else
-                        yush_info "Copying $src into $tgt"
-                        $PRIMER_OS_SUDO cp "$src" "$tgt"
-                    fi
+                    yush_info "Copying $src to $tgt"
+                    $PRIMER_OS_SUDO cp "$src" "$tgt"
                 fi
             fi
 
@@ -156,26 +177,125 @@ _primer_step_install() {
             fi
             ;;
         "clean")
-            if printf %s\\n "$src" | grep -Eq '^https?://'; then
+            if [ -z "$src" ] && yush_glob '*/' "$tgt"; then
+                # Directories created from an empty source are only removed
+                # when empty, they might have been populated since.
+                if [ -d "$tgt" ]; then
+                    if [ -z "$(ls -A "$tgt")" ]; then
+                        yush_info "Removing directory $tgt"
+                        $PRIMER_OS_SUDO rmdir "$tgt"
+                    else
+                        yush_warn "Directory $tgt is not empty, keeping it"
+                    fi
+                fi
+            elif printf %s\\n "$src" | grep -Eq '^https?://'; then
+                # Downloads are placed into target directories. They are only
+                # removed when still equal to a fresh download.
                 if [ -d "$tgt" ]; then
                     tgt=${tgt%/}/$(yush_basename "$src")
                 fi
-            fi
-            if [ -d "$tgt" ]; then
-                # If the source was a directory, remove the entire directory
-                # destination. Otherwise, only remove the file that it created.
-                if [ -d "$src" ]; then
+                if [ -e "$tgt" ] || [ -L "$tgt" ]; then
+                    _download=$(mktemp)
+                    if primer_net_curl "$src" > "$_download"; then
+                        _primer_step_install_rm_file "$tgt" "$_download"
+                    else
+                        yush_warn "Could not download $src to compare, keeping $tgt"
+                    fi
+                    rm -f "$_download"
+                fi
+            elif [ -d "$src" ]; then
+                # Directories are copied into existing target directories, or
+                # become the target. As nothing records which one happened,
+                # only remove directories that are (still) a copy of the
+                # source: the copy inside the target first, then the target
+                # itself, unless it ends with a slash, i.e. was meant as a
+                # parent directory. This never removes a directory that
+                # existed before installation, even when cleaning twice.
+                _into=${tgt%/}/$(yush_basename "${src%/}")
+                if _primer_step_install_is_copy "$src" "$_into"; then
+                    yush_info "Recursively removing $_into"
+                    $PRIMER_OS_SUDO rm -rf "$_into"
+                elif ! yush_glob '*/' "$tgt" && _primer_step_install_is_copy "$src" "$tgt"; then
                     yush_info "Recursively removing $tgt"
                     $PRIMER_OS_SUDO rm -rf "$tgt"
-                else
-                    tgt=${tgt%/}/$(yush_basename "$src")
-                    yush_info "Removing $tgt"
-                    $PRIMER_OS_SUDO rm -f "$tgt"
+                elif [ -e "$_into" ]; then
+                    yush_warn "$_into is not a copy of $src (anymore), not removing it"
+                elif [ -e "$tgt" ] && ! yush_glob '*/' "$tgt"; then
+                    yush_notice "$tgt is not a copy of $src, not removing it"
                 fi
+            elif [ -z "$src" ]; then
+                # Files created from an empty source are only removed when
+                # still empty: the file might have existed before.
+                _primer_step_install_rm_file "$tgt" /dev/null
             else
-                yush_info "Removing $tgt"
-                $PRIMER_OS_SUDO rm -f "$tgt"
+                # Files are copied into target directories, or become the
+                # target. They are only removed when still equal to the
+                # source: the file might have existed before, e.g. when not
+                # overwritten.
+                if yush_glob '*/' "$tgt" || [ -d "$tgt" ]; then
+                    tgt=${tgt%/}/$(yush_basename "$src")
+                fi
+                _primer_step_install_rm_file "$tgt" "$src"
             fi
             ;;
     esac
+}
+
+# Print field number $2 of the colon-separated specification $1, empty when the
+# specification has less fields (cut would print the whole line when there is
+# no colon at all).
+_primer_step_install_field() {
+    printf %s\\n "$1" | awk -F: -v n="$2" '{print $n}'
+}
+
+# Remove the file (or link) at $1, never a directory, and only when its content
+# is the same as the one of the file at $2, i.e. what this step installs.
+_primer_step_install_rm_file() {
+    if [ -d "$1" ] && ! [ -L "$1" ]; then
+        yush_warn "Not removing directory $1"
+    elif [ -e "$1" ] || [ -L "$1" ]; then
+        if ! [ -e "$2" ]; then
+            yush_warn "Cannot read $2 to compare, keeping $1"
+        elif $PRIMER_OS_SUDO cmp -s "$1" "$2"; then
+            yush_info "Removing $1"
+            $PRIMER_OS_SUDO rm -f "$1"
+        else
+            yush_notice "$1 differs from what was installed, keeping it"
+        fi
+    fi
+}
+
+# Print the paths of all files and directories under directory $1, relative
+# to $1, sorted.
+_primer_step_install_tree() {
+    _root=${1%/}
+    $PRIMER_OS_SUDO find "$_root/" -mindepth 1 | cut -c "$(( ${#_root} + 2 ))-" | sort
+}
+
+# Does the non-empty directory at $2 only contain paths that also exist in the
+# (source) directory at $1? This is the case for a copy of $1, even when files
+# have been added to $1 since. Links to directories are never copies.
+_primer_step_install_within() {
+    if [ -d "$2" ] && ! [ -L "$2" ] && [ -d "$1" ]; then
+        _within_src=$(mktemp)
+        _primer_step_install_tree "$1" > "$_within_src"
+        _within_tgt=$(_primer_step_install_tree "$2")
+        _within_extra=$(printf %s\\n "$_within_tgt" | grep -vxF -f "$_within_src" || true)
+        rm -f "$_within_src"
+        [ -n "$_within_tgt" ] && [ -z "$_within_extra" ]
+    else
+        return 1
+    fi
+}
+
+# Is the directory at $2 a copy of the (source) directory at $1, i.e. do they
+# contain the same, non-empty, set of paths? Links to directories are never
+# copies.
+_primer_step_install_is_copy() {
+    if [ -d "$2" ] && ! [ -L "$2" ] && [ -d "$1" ]; then
+        _src_tree=$(_primer_step_install_tree "$1")
+        [ -n "$_src_tree" ] && [ "$_src_tree" = "$(_primer_step_install_tree "$2")" ]
+    else
+        return 1
+    fi
 }

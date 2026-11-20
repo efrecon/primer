@@ -32,6 +32,16 @@ the spaces. When they have defaults, empty fields can be specified with `""` or
   `find`. Only binaries that are executable by everybody (i.e. user, group and
   others) will be considered for installation.
 
+Assets can be archives (`.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`,
+`.tar.Z` or `.zip`), from which the binaries are extracted, single compressed
+binaries (`.gz`, `.bz2` or `.xz`), which are uncompressed, or binaries released
+as-is. A single binary is installed under the name of the binary, unless that
+name is a glob-filter, in which case the name of the asset (without compression
+extension) is kept. Single files are only installed when they are binaries (ELF)
+or scripts (starting with `#!`), not e.g. packages or checksums. When
+cleaning, only binaries matching the name directly under the bin directory are
+removed.
+
 ### Asset Filtering
 
 When filtering for asset names within a selected release, this step will
@@ -69,16 +79,16 @@ jesseduffield/lazydocker lazydocker_%semantic%_%Kernel%_%machine%* v0.8
 jesseduffield/lazygit lazygit_%semantic%_%Kernel%_%machine%*
 
 # User-friendly Console Editor
-zyedidia/micro micro-%semantic%-%kernel%%bits%*
+micro-editor/micro micro-%semantic%-%kernel%%bits%-static.tar.gz
 ```
 
-The two first lines focus on installing the go binaries of the [kubectx] project.
-Note the difference between the two lines, one installing the latest `kubectx`
-(using the default version and binary name out of the project's name), the
-second specifying `kubens` as the binary to find in the compressed tar files. To
-be able to get the latest, it specifies an empty version filter manually. All
-tokens in the asset filters are tweaked to the naming [conventions] for the
-project.
+The two first lines focus on installing the go binaries of the [kubectx]
+project. Note the difference between the two lines, one installing the latest
+`kubectx` (using the default version and binary name out of the project's name),
+the second specifying `kubens` as the binary to find in the compressed tar
+files. To be able to get the latest, it specifies an empty version filter
+manually. All tokens in the asset filters are tweaked to the naming
+[conventions] for the project.
 
   [kubectx]: https://github.com/ahmetb/kubectx
   [conventions]: https://github.com/ahmetb/kubectx/releases
