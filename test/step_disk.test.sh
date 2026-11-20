@@ -95,6 +95,38 @@ test_disk_partition_table() {
         assert_true grep -q " /data ext4 " /etc/fstab'
 }
 
+# The blkid of busybox does not report partition tables: the one of util-linux
+# is installed, and the partitioned disk is not formatted.
+test_disk_busybox_blkid() {
+    in_container "$IMG_ALPINE" '
+        . test/data/disk/setup.sh
+        apk add -q sfdisk >/dev/null
+        printf "label: gpt\n,\n" | sfdisk -q /dev/fakedisk
+        apk del -q blkid >/dev/null
+        assert_not_contains util-linux "$(blkid -V 2>&1)"
+        echo "fakedisk:ext4:/data" > /tmp/disks.db
+        primer_run -s disk --disk:db /tmp/disks.db install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_contains util-linux "$(blkid -V 2>&1)"
+        assert_contains "has a gpt partition table, not formatting it" "$PRIMER_ERR"
+        assert_match "PTTYPE=.gpt." "$(blkid -p /dev/fakedisk)" "partition table kept"
+        assert_false grep -q " /data " /etc/fstab'
+}
+
+# Without the blkid of util-linux, devices are left alone, even blank ones.
+test_disk_no_reliable_blkid() {
+    in_container "$IMG_ALPINE" '
+        . test/data/disk/setup.sh
+        apk del -q blkid >/dev/null
+        stub_bin apk "exit 1"
+        echo "fakedisk:ext4:/data" > /tmp/disks.db
+        primer_run -s disk --disk:db /tmp/disks.db install
+        assert_equal 0 "$PRIMER_RC" "install status"
+        assert_contains "Cannot reliably detect the content of /dev/fakedisk" "$PRIMER_ERR"
+        assert_equal "" "$(blkid -p /dev/fakedisk || true)" "still blank"
+        assert_false grep -q " /data " /etc/fstab'
+}
+
 # Encrypted volumes, swap and other non-filesystems are never formatted or
 # mounted, unless overwriting. Blank devices are formatted without forcing.
 test_disk_keeps_non_filesystems() {

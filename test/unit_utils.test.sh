@@ -284,8 +284,7 @@ test_primer_utils_sysfile_replace_symlink() {
 }
 
 # The system file helpers as a non-root user with real sudo, as on most hosts.
-# Needs network (apk add sudo). FAILS NOW on clip: grep reads the file
-# without sudo.
+# Needs network (apk add sudo).
 test_primer_utils_sysfile_clip_sudo() {
     unit "$IMG_ALPINE" '
         apk add -q sudo >/dev/null
@@ -307,4 +306,46 @@ EOF
         assert_equal "keep
 more" "$(cat /etc/primer.conf)"
         assert_equal "640 root root" "$(stat -c "%a %U %G" /etc/primer.conf)"'
+}
+
+# Installed binaries belong to root, whoever owned the source, e.g. the uid
+# recorded in a tar archive, and are executable by all.
+test_primer_utils_install_bin() {
+    unit "$IMG_ALPINE" '
+        printf "#!/bin/sh\necho hi\n" > /tmp/tool
+        chown 1001:127 /tmp/tool
+        chmod 700 /tmp/tool
+        primer_utils_install_bin /tmp/tool /usr/local/bin/tool
+        assert_equal "755 0 0" "$(stat -c "%a %u %g" /usr/local/bin/tool)"
+        assert_equal hi "$(/usr/local/bin/tool)"
+        assert_false test -e /tmp/tool
+        # Into a directory, replacing an existing file
+        printf "#!/bin/sh\necho ho\n" > /tmp/tool
+        chown 1001:127 /tmp/tool
+        primer_utils_install_bin /tmp/tool /usr/local/bin
+        assert_equal "755 0 0" "$(stat -c "%a %u %g" /usr/local/bin/tool)"
+        assert_equal ho "$(/usr/local/bin/tool)"
+        assert_equal "" "$(find /usr/local/bin -name ".tool.*")" "no temporary file left"
+        # Missing source: fails, nothing left
+        assert_false primer_utils_install_bin /tmp/nope /usr/local/bin/nope
+        assert_equal "" "$(find /usr/local/bin -name ".nope.*")"'
+}
+
+# As a non-root user with sudo: the binary belongs to root, not to the user.
+test_primer_utils_install_bin_sudo() {
+    unit "$IMG_ALPINE" '
+        apk add -q sudo >/dev/null
+        adduser -D op
+        echo "op ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/op
+        cat > /tmp/as-op.sh <<"EOF"
+. /primer/test/lib.sh
+unit_load
+primer_os_sudo
+d=$(mktemp -d)
+printf "#!/bin/sh\necho hi\n" > "$d/tool"
+primer_utils_install_bin "$d/tool" /usr/local/bin/tool
+EOF
+        run su op -s /bin/sh -c "sh /tmp/as-op.sh"
+        assert_equal 0 "$RUN_RC" "$RUN_ERR"
+        assert_equal "755 root root" "$(stat -c "%a %U %G" /usr/local/bin/tool)"'
 }

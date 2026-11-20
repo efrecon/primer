@@ -168,11 +168,16 @@ where the Docker CLI looks for plugins.
 
 This environment variable should contain the short GPG signature of the Docker
 package repository to use on Debian derivatives, i.e. the last 8 hexadecimal
-digits of the fingerprint of its key, e.g. `0EBFCD88`. When set, the key
-installed by the convenience [script] is checked: the keyring given to
+digits of the fingerprint of its key, e.g. `0EBFCD88`. When set, the
+convenience [script] only sets up the repository (`--setup-repo`), and its key
+is checked before any package is installed from it: the keyring given to
 `signed-by` in `/etc/apt/sources.list.d/docker.list`, read with `gpg`
-(installed when missing), or the keys of `apt-key` with older scripts. This step
-fails when the script installed access to the wrong repository.
+(installed when missing). The step then installs the packages the script would
+install: `docker-ce`, `docker-ce-cli`, `containerd.io`,
+`docker-ce-rootless-extras`, `docker-compose-plugin` and `docker-buildx-plugin`.
+With the wrong key, the repository and its key are removed, nothing is
+installed, and the step fails. When empty, the script installs everything, and
+the key of the repository is not checked.
 
 ### `PRIMER_STEP_DOCKER_GET_URL`
 

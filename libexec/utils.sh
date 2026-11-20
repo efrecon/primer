@@ -100,6 +100,24 @@ primer_utils_sysfile_replace() {
     fi
 }
 
+# Install the executable file $1 as $2, or into $2 when it is a directory, and
+# remove $1. The installed file is a copy made with sudo, so it is owned by
+# root rather than by the owner of $1, e.g. the user running primer or the uid
+# recorded in a tar archive. It is executable by all, and moved in place
+# atomically.
+primer_utils_install_bin() {
+    _ib_dst=$2
+    [ -d "$_ib_dst" ] && _ib_dst="${_ib_dst%/}/$(basename "$1")"
+    _ib_tmp=$($PRIMER_OS_SUDO mktemp "$(dirname "$_ib_dst")/.$(basename "$_ib_dst").XXXXXX")
+    if $PRIMER_OS_SUDO cp "$1" "$_ib_tmp" && $PRIMER_OS_SUDO chmod 755 "$_ib_tmp"; then
+        $PRIMER_OS_SUDO mv -f "$_ib_tmp" "$_ib_dst"
+        rm -f "$1"
+    else
+        $PRIMER_OS_SUDO rm -f "$_ib_tmp"
+        return 1
+    fi
+}
+
 # Remove all lines matching the basic regular expression $2 from (not only
 # system) file at $1. The file is read with sudo, as only root might be able to.
 primer_utils_sysfile_clip() {

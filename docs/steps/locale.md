@@ -19,6 +19,9 @@ When the distribution supports it, the locale is also generated:
   need no generation.
 + On Ubuntu, the `locales` package is installed and `locale-gen` is run with
   the locale.
++ On Fedora, locales come precompiled, one package per language: the package
+  for the language of the locale is installed, e.g. `glibc-langpack-sv` for
+  `sv_SE.UTF-8`.
 + On other distributions, `locale-gen` is run with the locale when it exists.
   Alpine (musl) has no locale generation.
 

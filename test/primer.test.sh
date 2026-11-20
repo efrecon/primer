@@ -88,6 +88,24 @@ test_cli_unknown_option() {
         assert_contains "Unknown option: --no-such-option" "$PRIMER_ERR"'
 }
 
+# A typo in the command is an error, not a silent success.
+test_cli_unknown_command() {
+    primer_in "$IMG_ALPINE" -s timezone instal -- '
+        assert_equal 1 "$PRIMER_RC"
+        assert_contains "Unknown command: instal" "$PRIMER_ERR"'
+    primer_in "$IMG_ALPINE" -s timezone envfoo -- '
+        assert_equal 1 "$PRIMER_RC"
+        assert_contains "Unknown command: envfoo" "$PRIMER_ERR"'
+}
+
+# Values of --step:option=value can contain equal signs, e.g. URLs.
+test_cli_step_option_value_with_equals() {
+    primer_in "$IMG_ALPINE" -s timezone --timezone:location=a=b=c info -- '
+        assert_equal 0 "$PRIMER_RC"
+        assert_not_contains "Unknown option" "$PRIMER_ERR"
+        assert_match "PRIMER_STEP_TIMEZONE_LOCATION.*a=b=c" "$PRIMER_OUT"'
+}
+
 test_cli_info_lists_step_options() {
     primer_in "$IMG_ALPINE" -s "docker compose" info -- '
         assert_equal 0 "$PRIMER_RC"
@@ -149,6 +167,30 @@ test_cli_amalgamation() {
 
 
 #### Functions of primer itself, in library mode #############################
+
+# Variables changing how commands run cannot come from configuration files.
+test_primer_config_refused_variables() {
+    unit "$IMG_ALPINE" '
+        printf "PATH=/tmp/evil\nLD_PRELOAD=/tmp/x.so\nPRIMER_OS_SUDO=/tmp/x\nIFS=x\nPRIMER_OK=yes\n" > /tmp/cfg.env
+        path=$PATH
+        run primer_config /tmp/cfg.env
+        assert_equal 0 "$RUN_RC"
+        for v in PATH LD_PRELOAD PRIMER_OS_SUDO IFS; do
+            assert_contains "$v cannot be set from configuration files" "$RUN_ERR"
+        done
+        primer_config /tmp/cfg.env 2>/dev/null
+        assert_equal "$path" "$PATH"
+        assert_equal "" "${LD_PRELOAD:-}"
+        assert_equal "" "$PRIMER_OS_SUDO"
+        assert_equal yes "$PRIMER_OK"'
+}
+
+# Remote configuration over plain HTTP is refused, before any download.
+test_cli_config_http_refused() {
+    primer_in "$IMG_ALPINE" -c http://config.invalid/primer.env -s timezone install -- '
+        assert_equal 1 "$PRIMER_RC"
+        assert_contains "over plain HTTP refused, use https://" "$PRIMER_ERR"'
+}
 
 test_primer_abort() {
     unit "$IMG_ALPINE" '

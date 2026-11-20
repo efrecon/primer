@@ -86,7 +86,7 @@ _primer_step_micro_install_download() {
             tar -C "$_tmpdir" -zxf "$_tmpdir/${_tar}"
             if [ -f "$_tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" ]; then
                 [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
-                $PRIMER_OS_SUDO mv -f "$_tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"
+                primer_utils_install_bin "$_tmpdir/micro-${PRIMER_STEP_MICRO_VERSION}/micro" "${PRIMER_BINDIR%%/}/micro"
                 _rc=0
             else
                 yush_error "No micro binary found in tar file!"

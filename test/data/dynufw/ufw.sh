@@ -6,13 +6,19 @@
 # exists (whatever its action) does not duplicate it: an identical rule is
 # skipped, a comment replaces the existing one, another action (e.g. allow
 # instead of limit) replaces the rule. Rules for a source are listed with the
-# protocol last, as ufw does.
+# protocol last, as ufw does. ufw status reports $UFW_STATUS, when set.
 
 UFW_ADDED=${UFW_ADDED:-/tmp/ufw.added}
 
 ufw() {
     mock_log ufw "$@"
     case "$1" in
+        status)
+            # Status of the firewall, from $UFW_STATUS, e.g. active.
+            if [ -n "${UFW_STATUS:-}" ]; then
+                echo "Status: $UFW_STATUS"
+            fi
+            ;;
         show)
             echo "Added user rules (see 'ufw status' for running firewall):"
             if [ -f "$UFW_ADDED" ]; then

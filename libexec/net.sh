@@ -145,9 +145,11 @@ primer_net_port_allow() {
     fi
 }
 
-# Print the extra curl options for URL $1, if any. Lines of the file at
-# $PRIMER_CURL_OPTIONS (# for comments) are a URL-encoded regex followed by
-# curl options: print the options of the first line whose regex matches $1.
+# Print the extra curl options for URL $1, if any, in the format of a curl
+# config file, one option per line. Lines of the file at $PRIMER_CURL_OPTIONS
+# (# for comments) are a URL-encoded regex followed by curl options, quoted as
+# in the shell, e.g. -H "Authorization: Bearer xxx": the options of the first
+# line whose regex matches $1 are printed.
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
         yush_debug "Looking for curl options for $1"
@@ -158,19 +160,58 @@ _primer_net_curlopts() {
             if [ -n "$line" ]; then
                 _rx=$(printf %s\\n "$line" | awk '{print $1}' | primer_net_urldec)
                 if printf %s\\n "$1" | grep -Eq "$_rx"; then
-                    # Use awk to print all remaining fields of the line,
-                    # respecting the ORS and OFS variables of awk.
-                    _opts=$(    printf %s\\n "$line" |
-                                awk '{for(i=2;i<=NF;i++){ printf("%s",( (i>2) ? OFS : "" ) $i) } ; printf("%s",ORS);}' )
                     # Options are not logged, as they often carry secrets,
                     # e.g. tokens.
                     yush_debug "Using curl options from $PRIMER_CURL_OPTIONS for accessing $1"
-                    printf %s\\n "$_opts"
+                    printf %s\\n "$line" |
+                        sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//' |
+                        _primer_net_curlconfig
                     break
                 fi
             fi
         done < "$PRIMER_CURL_OPTIONS"
     fi
+}
+
+# Convert the command-line options on stdin, quoted as in the shell (single
+# and double quotes, backslashes), to the format of a curl config file: one
+# option per line, followed by its value in double quotes, if any.
+_primer_net_curlconfig() {
+    awk '
+        function esc(t,   r, k, ch) {
+            r = ""
+            for (k = 1; k <= length(t); k++) {
+                ch = substr(t, k, 1)
+                if (ch == "\\" || ch == "\"") r = r "\\"
+                r = r ch
+            }
+            return r
+        }
+        {
+            sq = sprintf("%c", 39); n = 0; tok = ""; intok = 0; q = ""
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (q != "") {
+                    if (c == q) q = ""
+                    else if (c == "\\" && q == "\"" && i < length($0)) { i++; tok = tok substr($0, i, 1) }
+                    else tok = tok c
+                } else if (c == "\"" || c == sq) { q = c; intok = 1 }
+                else if (c == "\\" && i < length($0)) { i++; tok = tok substr($0, i, 1); intok = 1 }
+                else if (c == " " || c == "\t") { if (intok) { toks[++n] = tok; tok = ""; intok = 0 } }
+                else { tok = tok c; intok = 1 }
+            }
+            if (intok) toks[++n] = tok
+            out = ""
+            for (j = 1; j <= n; j++) {
+                if (substr(toks[j], 1, 1) == "-") {
+                    if (out != "") print out
+                    out = toks[j]
+                } else {
+                    out = out " \"" esc(toks[j]) "\""
+                }
+            }
+            if (out != "") print out
+        }'
 }
 
 primer_net_curl() {
@@ -195,6 +236,8 @@ primer_net_curl() {
     else
         _copts=-fsSL
     fi
-    # shellcheck disable=SC2046,SC2086
-    curl $_copts $(_primer_net_curlopts "$_url") "$@" "$_url"
+    # Options for the URL are given as a config file on stdin, so that they
+    # can contain spaces, and secrets do not show in the list of processes.
+    # shellcheck disable=SC2086
+    _primer_net_curlopts "$_url" | curl -K - $_copts "$@" "$_url"
 }

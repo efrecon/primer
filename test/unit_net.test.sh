@@ -246,11 +246,33 @@ example%5C.com/private --retry 3   -H X-Test:1
 EOF
 '
 
+# Options quoted as in the shell (test/data/net/curlconfig.in), converted to a
+# curl config (curlconfig.out): one option per line, values in double quotes,
+# with backslashes and quotes escaped. Run with busybox awk and mawk.
+NET_CURLCONFIG_CHECKS='
+_curlconfig_checks() {
+    assert_equal "$(cat /primer/test/data/net/curlconfig.out)" \
+        "$(_primer_net_curlconfig < /primer/test/data/net/curlconfig.in)"
+}
+'
+
+test__primer_net_curlconfig() {
+    unit "$IMG_ALPINE" "$NET_CURLCONFIG_CHECKS"'
+        _curlconfig_checks'
+}
+
+test__primer_net_curlconfig_debian() {
+    unit "$IMG_TRIXIE" "$NET_CURLCONFIG_CHECKS"'
+        _curlconfig_checks'
+}
+
 test__primer_net_curlopts() {
-    unit "$IMG_ALPINE" "$NET_CURLOPTS_FIXTURE"'
+    unit "$IMG_ALPINE" "$NET_CURLOPTS_FIXTURE$NET_CURLCONFIG_CHECKS"'
+        _curlconfig_checks
         PRIMER_CURL_OPTIONS=/tmp/curl.opts
-        assert_equal "-u x-access-token:secret" "$(_primer_net_curlopts https://api.github.com/repos/a/b)"
-        assert_equal "--retry 3 -H X-Test:1" "$(_primer_net_curlopts https://example.com/private/file)"
+        assert_equal "-u \"x-access-token:secret\"" "$(_primer_net_curlopts https://api.github.com/repos/a/b)"
+        assert_equal "--retry \"3\"
+-H \"X-Test:1\"" "$(_primer_net_curlopts https://example.com/private/file)"
         assert_equal "--catch-all" "$(_primer_net_curlopts https://example.com/public)"
         # Options are never logged, even at the debug level, as they carry
         # secrets
@@ -266,15 +288,20 @@ test__primer_net_curlopts() {
 
 test__primer_net_curlopts_debian() {
     # The URL-encoded regexes must decode with dash too.
-    unit "$IMG_TRIXIE" "$NET_CURLOPTS_FIXTURE"'
+    unit "$IMG_TRIXIE" "$NET_CURLOPTS_FIXTURE$NET_CURLCONFIG_CHECKS"'
         PRIMER_CURL_OPTIONS=/tmp/curl.opts
-        assert_equal "-u x-access-token:secret" "$(_primer_net_curlopts https://api.github.com/repos/a/b)"
-        assert_equal "--catch-all" "$(_primer_net_curlopts https://apixgithubxcom.example/)"'
+        assert_equal "-u \"x-access-token:secret\"" "$(_primer_net_curlopts https://api.github.com/repos/a/b)"
+        assert_equal "--catch-all" "$(_primer_net_curlopts https://apixgithubxcom.example/)"
+        _curlconfig_checks'
 }
 
 test_primer_net_curl() {
     unit "$IMG_ALPINE" "$NET_CURLOPTS_FIXTURE"'
-        mock curl
+        # Logs its arguments, and the config it reads on stdin.
+        curl() {
+            mock_log curl "$@"
+            while IFS= read -r _l; do mock_log "  $_l"; done
+        }
         # No options file to start with, even when the prelude made one for
         # GITHUB_TOKEN (CI).
         PRIMER_CURL_OPTIONS=
@@ -290,10 +317,11 @@ test_primer_net_curl() {
         YUSH_LOG_LEVEL=warn
         PRIMER_CURL_OPTIONS=/tmp/curl.opts
         primer_net_curl https://api.github.com/x --max-time 5
-        assert_equal "curl -fsSL -o /tmp/a https://example.com/a
-curl -fsSL https://example.com/b0
-curl -fSL --progress-bar https://example.com/b
-curl -fsSL -u x-access-token:secret --max-time 5 https://api.github.com/x" "$(mock_calls)"'
+        assert_equal "curl -K - -fsSL -o /tmp/a https://example.com/a
+curl -K - -fsSL https://example.com/b0
+curl -K - -fSL --progress-bar https://example.com/b
+curl -K - -fsSL --max-time 5 https://api.github.com/x
+  -u \"x-access-token:secret\"" "$(mock_calls)"'
 }
 
 test_primer_net_curl_debian() {
@@ -303,5 +331,11 @@ test_primer_net_curl_debian() {
         primer_net_curl https://github.com/efrecon/primer -o /dev/null
         assert_true command -v curl
         run primer_net_curl https://github.com/efrecon/primer/this-does-not-exist-404
-        assert_equal 22 "$RUN_RC"'
+        assert_equal 22 "$RUN_RC"
+        # Options with spaces reach the real curl, through its config.
+        echo hello > /tmp/src.txt
+        printf "%s\n" "file%3A -o \"/tmp/with space.txt\"" > /tmp/curl.opts
+        PRIMER_CURL_OPTIONS=/tmp/curl.opts
+        primer_net_curl file:///tmp/src.txt
+        assert_equal hello "$(cat "/tmp/with space.txt")"'
 }

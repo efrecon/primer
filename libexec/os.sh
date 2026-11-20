@@ -34,7 +34,7 @@ primer_os_distribution() {
         # Every system that we officially support has /etc/os-release
         if [ -r /etc/os-release ]; then
             # shellcheck disable=SC1091
-            lsb_dist="$(. /etc/os-release && echo "$ID")"
+            lsb_dist="$(. /etc/os-release && echo "${ID:-}")"
         fi
         # Returning an empty string here should be alright since the
         # case statements don't act unless you provide an actual value
@@ -50,7 +50,7 @@ primer_os_version() {
         # Every system that we officially support has /etc/os-release
         if [ -r /etc/os-release ]; then
             # shellcheck disable=SC1091
-            _version="$(. /etc/os-release && echo "$VERSION_ID")"
+            _version="$(. /etc/os-release && echo "${VERSION_ID:-}")"
         fi
         PRIMER_OS_VERSION=$(printf %s\\n "$_version" | tr '[:upper:]' '[:lower:]')
     fi
@@ -344,22 +344,47 @@ primer_os_service() {
                             ;;
                     esac
                 fi
-            elif primer_utils_syscmd_exists service; then
-                if [ "$1" = "list" ]; then
-                    $PRIMER_OS_SUDO service --status-all | sed -E 's/^\s*\[\s*.\s*\]\s*(.*)/\1/'
-                else
-                    $PRIMER_OS_SUDO service "$1" "$2"
-                fi
             elif primer_utils_syscmd_exists rc-service; then
+                # OpenRC, e.g. Alpine. Checked before service, which OpenRC
+                # also provides, as a link to rc-service.
                 case "$1" in
                     start|stop|restart)
                         $PRIMER_OS_SUDO rc-service "$2" "$1";;
                     enable)
-                        $PRIMER_OS_SUDO rc-update add "$2";;
+                        $PRIMER_OS_SUDO rc-update add "$2" default;;
                     disable)
-                        $PRIMER_OS_SUDO rc-update del "$2";;
+                        # Remove from all the runlevels it is in: rc-update
+                        # fails when the service is not in the runlevel.
+                        for _lvl in $($PRIMER_OS_SUDO rc-update show | sed -nE "s/^[[:space:]]*$2[[:space:]]*\|(.*)/\1/p"); do
+                            $PRIMER_OS_SUDO rc-update del "$2" "$_lvl"
+                        done
+                        ;;
                     list)
                         $PRIMER_OS_SUDO rc-service -l;;
+                esac
+            elif primer_utils_syscmd_exists service; then
+                # SysV init: service takes the name first, then the action.
+                case "$1" in
+                    start|stop|restart)
+                        $PRIMER_OS_SUDO service "$2" "$1";;
+                    enable|disable)
+                        if primer_utils_syscmd_exists update-rc.d; then
+                            if [ "$1" = enable ]; then
+                                $PRIMER_OS_SUDO update-rc.d "$2" defaults
+                            fi
+                            $PRIMER_OS_SUDO update-rc.d "$2" "$1"
+                        elif primer_utils_syscmd_exists chkconfig; then
+                            if [ "$1" = enable ]; then
+                                $PRIMER_OS_SUDO chkconfig "$2" on
+                            else
+                                $PRIMER_OS_SUDO chkconfig "$2" off
+                            fi
+                        else
+                            yush_warn "Cannot $1 $2 at boot, no update-rc.d or chkconfig"
+                        fi
+                        ;;
+                    list)
+                        $PRIMER_OS_SUDO service --status-all | sed -E 's/^\s*\[\s*.\s*\]\s*(.*)/\1/';;
                 esac
             else
                 yush_error "Only service, systemctl (systemd) or alpine are supported for daemons"

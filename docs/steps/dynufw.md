@@ -30,6 +30,13 @@ happen every minute through cron (busybox `crond` on Alpine, `cron` on Debian
 derivatives, `cronie` on Fedora derivatives). Once all rules are in place,
 [ufw] is enabled.
 
+Enabling [ufw] blocks all incoming connections without a rule. When the host
+runs an SSH server, or primer runs over SSH, the step only enables the
+firewall when a rule allows (or limits) connections to the SSH port: the port
+of the current connection, 22 otherwise. Otherwise, the step fails and the
+firewall stays disabled, so the next connection is not refused: add a rule,
+e.g. `--dynufw:static 22`. Nothing is checked when [ufw] is already active.
+
 Static rules are commented with `primer dynufw`, unless the same rule already
 existed: it then remains yours, and is not removed when cleaning. When cleaning,
 only the rules of dynufw are removed: static rules carrying that comment, and
@@ -53,7 +60,9 @@ ports) to open for incoming traffic, `proto` can be one of `tcp` or `udp`
 (defaults to `tcp` when omitted) and `/d` can be added to add a dynamic rule at
 the end of the specification file. When `host.tld:` is omitted, the port is
 opened for all incoming traffic. This is for use when you have few rules to
-add.
+add. On hosts reached over SSH, open the SSH port, e.g. `--static 22`: without
+a rule for it, the step fails and leaves the firewall disabled (see
+[Description](#description)).
 
 ### `--rules`
 

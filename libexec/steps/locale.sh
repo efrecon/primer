@@ -84,6 +84,20 @@ _primer_step_locale_generate() {
             primer_os_dependency locale-gen locales
             $PRIMER_OS_SUDO locale-gen "$1"
             ;;
+        fedora*)
+            # Locales come precompiled, in one package per language, e.g.
+            # glibc-langpack-sv for sv_SE.UTF-8.
+            case "$1" in
+                C|POSIX|C.*)
+                    yush_debug "$1 is a built-in locale"
+                    return 0;;
+            esac
+            _lang=${1%%_*}
+            _lang=${_lang%%.*}
+            if ! primer_os_packages installed "glibc-langpack-$_lang"; then
+                primer_os_packages add "glibc-langpack-$_lang"
+            fi
+            ;;
         *)
             if primer_utils_syscmd_exists locale-gen; then
                 $PRIMER_OS_SUDO locale-gen "$1"

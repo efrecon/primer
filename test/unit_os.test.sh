@@ -55,6 +55,18 @@ test_primer_os_distribution_debian() {
         assert_equal debian "$(primer_os_distribution)"'
 }
 
+test_primer_os_distribution_ubuntu() {
+    unit "$IMG_UBUNTU" '
+        assert_equal ubuntu "$(primer_os_distribution)"
+        assert_equal 26.04 "$(primer_os_version)"'
+}
+
+test_primer_os_distribution_fedora() {
+    unit "$IMG_FEDORA" '
+        assert_equal fedora "$(primer_os_distribution)"
+        assert_equal 45 "$(primer_os_version)"'
+}
+
 test_primer_os_distribution_unknown() {
     unit "$IMG_ALPINE" '
         rm -f /etc/os-release
@@ -66,6 +78,17 @@ test_primer_os_version_alpine() {
         assert_equal 3.24.4 "$(primer_os_version)"
         PRIMER_OS_VERSION=42
         assert_equal 42 "$(primer_os_version)"'
+}
+
+# os-release without VERSION_ID or ID, e.g. Debian sid or testing: no value,
+# rather than an error under set -u.
+test_primer_os_version_missing() {
+    unit "$IMG_ALPINE" '
+        printf "NAME=Test\nPRETTY_NAME=Test\n" > /etc/os-release
+        set -u
+        primer_os_init
+        assert_equal "" "$PRIMER_OS_VERSION"
+        assert_equal "" "$PRIMER_OS_DISTRO"'
 }
 
 test_primer_os_version_debian() {
@@ -296,32 +319,71 @@ ssh" "$(primer_os_service list)"
 systemctl --no-pager --no-legend list-units *.service" "$(mock_calls)"'
 }
 
+# SysV init: service takes the name of the service first, then the action.
+# Enabling at boot goes through update-rc.d, or chkconfig.
 test_primer_os_service_service() {
     unit "$IMG_ALPINE" '
         primer_os_in_container() { return 1; }
         mock -o " [ + ]  docker
  [ - ]  ssh" service
-        primer_os_service start docker
-        primer_os_service enable docker
-        assert_equal "service start docker
-service enable docker" "$(mock_calls)"
+        mock update-rc.d
+        for verb in start stop restart enable disable; do
+            primer_os_service "$verb" docker
+        done
+        assert_equal "service docker start
+service docker stop
+service docker restart
+update-rc.d docker defaults
+update-rc.d docker enable
+update-rc.d docker disable" "$(mock_calls)"
         assert_equal "docker
-ssh" "$(primer_os_service list)"'
+ssh" "$(primer_os_service list)"
+        rm -f "$STUB_DIR/update-rc.d"
+        mock_reset
+        mock chkconfig
+        primer_os_service enable docker
+        primer_os_service disable docker
+        assert_equal "chkconfig docker on
+chkconfig docker off" "$(mock_calls)"'
 }
 
+# OpenRC provides service as a link to rc-service, as on Alpine: rc-service
+# must be preferred. Disabling a service that is not enabled is not an error.
 test_primer_os_service_openrc() {
     unit "$IMG_ALPINE" '
         primer_os_in_container() { return 1; }
-        mock rc-service rc-update
+        mock service
+        mock -o "            docker |      boot default" rc-update
+        mock rc-service
         for verb in start stop restart enable disable list; do
             primer_os_service "$verb" docker
         done
         assert_equal "rc-service docker start
 rc-service docker stop
 rc-service docker restart
-rc-update add docker
-rc-update del docker
-rc-service -l" "$(mock_calls)"'
+rc-update add docker default
+rc-update show
+rc-update del docker boot
+rc-update del docker default
+rc-service -l" "$(mock_calls)"
+        mock_reset
+        mock -o "           dockerd |      default" rc-update
+        primer_os_service disable docker
+        assert_equal "rc-update show" "$(mock_calls)"'
+}
+
+# The real thing: OpenRC on Alpine.
+test_primer_os_service_openrc_real() {
+    unit "$IMG_ALPINE" '
+        primer_os_in_container() { return 1; }
+        apk add -q openrc >/dev/null
+        assert_true command -v service
+        primer_os_service enable local
+        assert_match "^ *local \\| +default" "$(rc-update show)"
+        primer_os_service enable local
+        primer_os_service disable local
+        assert_not_contains "local" "$(rc-update show)"
+        primer_os_service disable local'
 }
 
 test_primer_os_service_none() {
@@ -418,4 +480,27 @@ test_primer_os_packages_search_names() {
         assert_equal "g++" "$(primer_os_packages search g++)"
         assert_equal "libstdc++6" "$(primer_os_packages search libstdc++6)"
         assert_equal "python3.13" "$(primer_os_packages search python3.13)"'
+}
+
+# The real package managers of Ubuntu (apt) and Fedora (dnf).
+_os_packages_real='
+    assert_false primer_os_packages installed jq
+    primer_os_packages add jq
+    assert_true command -v jq
+    assert_true primer_os_packages installed jq
+    assert_match "^jq$" "$(primer_os_packages list)"
+    assert_match "^jq$" "$(primer_os_packages search jq)"
+    assert_equal "" "$(primer_os_packages search nosuchpackage || true)"
+    assert_false primer_os_packages installed j
+    primer_os_packages del jq
+    assert_false command -v jq
+    assert_false primer_os_packages installed jq
+'
+
+test_primer_os_packages_ubuntu() {
+    unit "$IMG_UBUNTU" "$_os_packages_real"
+}
+
+test_primer_os_packages_fedora() {
+    unit "$IMG_FEDORA" "$_os_packages_real"
 }

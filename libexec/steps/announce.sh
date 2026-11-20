@@ -42,13 +42,16 @@ primer_step_announce() {
             fi
             lsb_dist=$(primer_os_distribution)
             for method in $PRIMER_STEP_ANNOUNCE_METHODS; do
-                # Daemon implementing the method, and package providing it.
+                # Daemon implementing the method, the service running it, and
+                # the package providing it.
                 _daemon=
+                _service=
                 _pkg=
                 _ports=
                 case "$(printf %s\\n "$method" | tr '[:upper:]' '[:lower:]')" in
                     mdns)
                         _daemon=avahi-daemon
+                        _service=avahi-daemon
                         _ports=5353/udp
                         case "$lsb_dist" in
                             *buntu|*bian)
@@ -61,10 +64,14 @@ primer_step_announce() {
                         _daemon=nmbd
                         _ports="137/udp 138/udp"
                         case "$lsb_dist" in
-                            *buntu|*bian|fedora*|clear*linux*)
-                                _pkg=samba;;
+                            *buntu|*bian)
+                                _pkg=samba; _service=nmbd;;
+                            fedora*|clear*linux*)
+                                _pkg=samba; _service=nmb;;
                             alpine*)
-                                _pkg=samba-server;;
+                                # The samba service runs the daemons listed in
+                                # /etc/conf.d/samba, nmbd among them.
+                                _pkg=samba-server; _service=samba;;
                         esac
                         ;;
                 esac
@@ -75,13 +82,13 @@ primer_step_announce() {
                     yush_warn "Announce method $method NYI for $lsb_dist"
                 elif [ "$1" = "install" ]; then
                     yush_info "Announcing using method: $method"
-                    _primer_step_announce_install "$_daemon" "$_pkg"
+                    _primer_step_announce_install "$_daemon" "$_pkg" "$_service"
                     if primer_utils_syscmd_exists "$_daemon"; then
                         _primer_step_announce_ports install "$_ports"
                     fi
                 else
                     yush_info "Cleaning announcements for method: $method"
-                    _primer_step_announce_uninstall "$_daemon"
+                    _primer_step_announce_uninstall "$_daemon" "$_service"
                     _primer_step_announce_ports clean "$_ports"
                 fi
             done
@@ -89,23 +96,24 @@ primer_step_announce() {
     esac
 }
 
-# Install package $2 and run the daemon $1 it provides at boot.
+# Install package $2 providing the daemon $1, and run its service $3 at boot.
 _primer_step_announce_install() {
     primer_os_dependency "$1" "$2"
     if primer_utils_syscmd_exists "$1"; then
-        primer_os_service start "$1"
-        primer_os_service enable "$1"
+        primer_os_service start "$3"
+        primer_os_service enable "$3"
     else
         yush_warn "Could not find $1 after installing $2, announcing disabled"
     fi
 }
 
-# Stop the daemon $1 and disable it at boot. The package providing it is kept:
-# it might have been installed before primer, e.g. Samba on a file server.
+# Stop the service $2 of the daemon $1 and disable it at boot. The package
+# providing it is kept: it might have been installed before primer, e.g. Samba
+# on a file server.
 _primer_step_announce_uninstall() {
     if primer_utils_syscmd_exists "$1"; then
-        primer_os_service stop "$1"
-        primer_os_service disable "$1"
+        primer_os_service stop "$2"
+        primer_os_service disable "$2"
     fi
 }
 

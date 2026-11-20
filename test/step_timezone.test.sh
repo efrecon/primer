@@ -25,6 +25,14 @@ test_timezone_alpine() {
     in_container "$IMG_ALPINE" "$_timezone_verify"
 }
 
+test_timezone_ubuntu() {
+    in_container "$IMG_UBUNTU" "$_timezone_verify"
+}
+
+test_timezone_fedora() {
+    in_container "$IMG_FEDORA" "$_timezone_verify"
+}
+
 test_timezone_replaces_dangling_link() {
     in_container "$IMG_TRIXIE" '
         ln -sf /nonexistent/zone /etc/localtime

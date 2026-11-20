@@ -83,9 +83,10 @@ _primer_step_disk_install() {
 
     # Check if device is already formatted, or carries a partition table (a
     # whole disk with partitions has no filesystem TYPE of its own).
-    _blkid=$($PRIMER_OS_SUDO blkid "$_dev" || true)
-    current=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "TYPE" || true)
-    pttype=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "PTTYPE" || true)
+    if ! _primer_step_disk_probe "$_dev"; then
+        yush_warn "Cannot reliably detect the content of $_dev without the blkid of util-linux, not touching it!"
+        return 0
+    fi
     format=0
     if [ -z "$current" ] && [ -z "$pttype" ]; then
         format=1
@@ -257,6 +258,37 @@ _primer_step_disk_linespec() {
 # line has fewer fields (unlike cut, which prints lines without separators).
 _primer_step_disk_field() {
     printf %s\\n "$2" | awk -F: -v f="$1" '{ print $f }'
+}
+
+# Probe the content of the device $1: set current to the type of its content,
+# e.g. ext4, and pttype to the type of its partition table, e.g. gpt, both
+# empty for a blank device. Fails when the content cannot be reliably detected:
+# the blkid of busybox never reports partition tables, nor many types of
+# content. The blkid of util-linux is installed when missing, on Alpine.
+_primer_step_disk_probe() {
+    if ! $PRIMER_OS_SUDO blkid -V 2>&1 | grep -q util-linux; then
+        case "$(primer_os_distribution)" in
+            alpine)
+                yush_info "Installing the blkid of util-linux"
+                primer_os_packages add blkid || true
+                ;;
+        esac
+        $PRIMER_OS_SUDO blkid -V 2>&1 | grep -q util-linux || return 1
+    fi
+    # Low-level probe, bypassing the cache. Exits 2 when nothing is found.
+    _blkid=$($PRIMER_OS_SUDO blkid -p "$1" || true)
+    current=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "TYPE" || true)
+    pttype=$(printf %s\\n "$_blkid" | _primer_step_disk_blkid_val "PTTYPE" || true)
+    # Partitions known to the kernel also tell there is a partition table, even
+    # when blkid cannot recognise it.
+    if [ -z "$pttype" ]; then
+        for _part in "/sys/class/block/${1##*/}"/*/partition; do
+            if [ -f "$_part" ]; then
+                pttype=unknown
+                break
+            fi
+        done
+    fi
 }
 
 # Print the value of the blkid field $1, e.g. TYPE, from the blkid output on

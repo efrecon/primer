@@ -1,0 +1,3 @@
+-H "Authorization: Bearer a b" -u 'us er:p"w'  --compressed -o C:\\x\ y
+--retry 3
+

@@ -2,7 +2,8 @@
 
 # Short GPG signature (last 8 hexadecimal digits of the fingerprint) of the key
 # of the Docker repository on Debian derivatives, e.g. 0EBFCD88. When set, the
-# key installed by the convenience script is verified against it.
+# convenience script only sets up the repository, and its key is verified
+# against this before any package is installed from it.
 PRIMER_STEP_DOCKER_APT_GPG=${PRIMER_STEP_DOCKER_APT_GPG:-}
 
 # Space separated list of registry login information in the form
@@ -176,9 +177,10 @@ primer_step_docker() {
                 _config=${PRIMER_STEP_DOCKER_CONFIG:-"$HOME/.docker"}/config.json
                 _prior_settings=0; [ -f "$_config" ] && _prior_settings=1
                 for _registry in $PRIMER_STEP_DOCKER_REGISTRY; do
-                    _user=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\1/')
-                    _pass=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\3/')
-                    _host=$(printf %s\\n "$_registry" | sed -E -e 's/([^:]+)(:([^@]+))?@((([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])+)/\4/')
+                    if ! _primer_step_docker_registry_parse "$_registry"; then
+                        yush_error "Registry login information must be user:password@host, not logged in"
+                        return 1
+                    fi
                     yush_info "Logging in at $_host as $_user"
                     printf %s\\n "$_pass" | docker login --password-stdin -u "$_user" "$_host"
                 done
@@ -301,10 +303,7 @@ _primer_step_docker_uninstall_debian() {
 
     if [ -f /etc/apt/sources.list ] && grep -q docker /etc/apt/sources.list; then
         yush_info "Removing docker from main repo list at /etc/apt/sources.list"
-        listtemp=$(mktemp)
-        grep -v "docker" /etc/apt/sources.list > "$listtemp" || true
-        primer_utils_path_ownership "$listtemp" --as /etc/apt/sources.list
-        $PRIMER_OS_SUDO mv "$listtemp" /etc/apt/sources.list
+        primer_utils_sysfile_clip /etc/apt/sources.list docker
     fi
 }
 
@@ -312,18 +311,28 @@ _primer_step_docker_install_debian() {
     method=${1:-$PRIMER_STEP_DOCKER_PACKAGING}
     case "$method" in
         "docker")
-            _primer_step_docker_install_getdocker
-            # On debian we try to ensure that we have the proper
-            # repository so we have some additional degree of
-            # security.
             lsb_dist=$(primer_os_distribution)
             case "$lsb_dist" in
-                *buntu)
-                    _primer_step_docker_install_apt_verify;;
-                *bian)
-                    _primer_step_docker_install_apt_verify;;
+                *buntu|*bian)
+                    if [ -n "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
+                        # Only set up the repository, and verify its key
+                        # before installing anything from it. The packages
+                        # are the ones the script would install.
+                        _primer_step_docker_install_getdocker --setup-repo
+                        if ! _primer_step_docker_install_apt_verify; then
+                            _primer_step_docker_apt_unsetup
+                            return 1
+                        fi
+                        primer_os_packages add docker-ce docker-ce-cli containerd.io \
+                            docker-ce-rootless-extras docker-compose-plugin docker-buildx-plugin
+                    else
+                        yush_notice "No key given for the Docker repository, its key is not verified"
+                        _primer_step_docker_install_getdocker
+                    fi
+                    ;;
                 *)
                     yush_warn "Cannot verify proper package provider on $lsb_dist"
+                    _primer_step_docker_install_getdocker
                     ;;
             esac
             ;;
@@ -389,14 +398,45 @@ _primer_step_docker_apt_shortkey() {
     fi
 }
 
+# Succeed when the key of the Docker repository matches the short key in
+# PRIMER_STEP_DOCKER_APT_GPG.
 _primer_step_docker_install_apt_verify() {
-    if [ -n "$PRIMER_STEP_DOCKER_APT_GPG" ]; then
-        yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
-        dkey=$(_primer_step_docker_apt_shortkey)
-        if [ "$(printf %s "$dkey" | tr '[:lower:]' '[:upper:]')" != "$(printf %s "$PRIMER_STEP_DOCKER_APT_GPG" | tr '[:lower:]' '[:upper:]')" ]; then
-            primer_abort "System might have been compromised, installed short GPG key for Docker was: $dkey"
-        fi
+    yush_info "Verifying Docker GPG short key against: $(yush_green "$PRIMER_STEP_DOCKER_APT_GPG")"
+    dkey=$(_primer_step_docker_apt_shortkey)
+    if [ "$(printf %s "$dkey" | tr '[:lower:]' '[:upper:]')" != "$(printf %s "$PRIMER_STEP_DOCKER_APT_GPG" | tr '[:lower:]' '[:upper:]')" ]; then
+        yush_error "Wrong key for the Docker repository: ${dkey:-none}, not $PRIMER_STEP_DOCKER_APT_GPG. Nothing installed from it."
+        return 1
     fi
+}
+
+# Remove the Docker repository and its key, as just set up by the convenience
+# script.
+_primer_step_docker_apt_unsetup() {
+    _keyring=$(_primer_step_docker_apt_keyring)
+    $PRIMER_OS_SUDO rm -f /etc/apt/sources.list.d/docker.list
+    if [ -n "$_keyring" ]; then
+        $PRIMER_OS_SUDO rm -f "$_keyring"
+    fi
+}
+
+# Split the registry login information $1, user:password@host, into _user,
+# _pass and _host. The host is after the last @, the user before the first :,
+# so passwords can contain both, and hosts a port. Fails when any is empty.
+_primer_step_docker_registry_parse() {
+    _user=; _pass=; _host=
+    case "$1" in
+        *@*) ;;
+        *) return 1;;
+    esac
+    _host=${1##*@}
+    _creds=${1%@*}
+    case "$_creds" in
+        *:*) ;;
+        *) return 1;;
+    esac
+    _user=${_creds%%:*}
+    _pass=${_creds#*:}
+    [ -n "$_user" ] && [ -n "$_pass" ] && [ -n "$_host" ]
 }
 
 # Succeed when the sha256 sum of the file $1 is exactly $2 (in any case).
@@ -407,8 +447,8 @@ _primer_step_docker_sha256_ok() {
 }
 
 # Download the convenience script, from the docker-install repository at the
-# pinned commit unless another URL is given, and run it when its sha256 sum
-# matches. The script runs with LOAD_SCRIPT_COMMIT_SHA set to the commit: the
+# pinned commit unless another URL is given, and run it, with the arguments
+# passed to this function, when its sha256 sum matches. The script runs with LOAD_SCRIPT_COMMIT_SHA set to the commit: the
 # repository version of the script uses it for the commit it prints, a value
 # that the upload to get.docker.com substitutes in the script.
 _primer_step_docker_install_getdocker() {
@@ -440,7 +480,7 @@ _primer_step_docker_install_getdocker() {
 
     yush_info "Verified Docker installation script, running it now"
     _rc=0
-    LOAD_SCRIPT_COMMIT_SHA=$PRIMER_STEP_DOCKER_INSTALL_COMMIT sh "$_get" || _rc=$?
+    LOAD_SCRIPT_COMMIT_SHA=$PRIMER_STEP_DOCKER_INSTALL_COMMIT sh "$_get" "$@" || _rc=$?
     rm -f "$_get"
     if [ "$_rc" != "0" ]; then
         yush_error "Docker installation script failed. The script at commit $PRIMER_STEP_DOCKER_INSTALL_COMMIT might not support this distribution: try a newer --docker:commit, with its --docker:sha256"
@@ -687,7 +727,7 @@ _primer_step_docker_plugin_download() {
             if ! [ -d "$PRIMER_STEP_DOCKER_PLUGINS_DIR" ]; then
                 $PRIMER_OS_SUDO mkdir -p "$PRIMER_STEP_DOCKER_PLUGINS_DIR"
             fi
-            $PRIMER_OS_SUDO mv -f "$_bin" "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
+            primer_utils_install_bin "$_bin" "${PRIMER_STEP_DOCKER_PLUGINS_DIR%%/}/docker-$1"
             _rc=0
         fi
     fi
