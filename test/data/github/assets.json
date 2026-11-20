@@ -58,5 +58,15 @@
       "id": 41898282
     },
     "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/toolelf-linux-amd64"
+  },
+  {
+    "url": "https://api.github.com/repos/acme/tool/releases/assets/9006",
+    "id": 9006,
+    "name": "tool_1.2.3_Linux_x86_64.tar.gz.sha256",
+    "uploader": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "browser_download_url": "https://github.com/acme/tool/releases/download/v1.2.3/tool_1.2.3_Linux_x86_64.tar.gz.sha256"
   }
 ]

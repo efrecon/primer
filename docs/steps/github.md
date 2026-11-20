@@ -31,6 +31,8 @@ the spaces. When they have defaults, empty fields can be specified with `""` or
   project. Otherwise, this is a globbing filter that will be passed further to
   `find`. Only binaries that are executable by everybody (i.e. user, group and
   others) will be considered for installation.
+- The checksum of the asset, see [Checksum Verification](#checksum-verification).
+  When empty, the default, the asset is installed unverified, with a warning.
 
 Assets can be archives (`.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`,
 `.tar.Z` or `.zip`), from which the binaries are extracted, single compressed
@@ -64,22 +66,55 @@ recognise the following `%`-enclosed tokens:
 - `%Machine%` is the architecture, results of `uname -m`, as is.
 - `%machine%` is the same as `%Machine%`, but in lower case.
 
+### Checksum Verification
+
+Assets are downloaded first, then verified against the checksum field, and only
+then unpacked and installed. The checksum is that of the asset as downloaded,
+e.g. the archive, not of the binaries in it. The checksum field is either:
+
+- A sha256 or sha512 sum, in hexadecimal, recognised by its length: 64 or 128
+  digits. md5 sums, which do not protect against tampering, are not supported.
+- The URL of a checksum file, starting with `https://`, `http://` or `file://`.
+- Otherwise, a filter (with globbing rules) for the name of the checksum file
+  among the assets of the same release, e.g. `checksums.txt` or `*SHA256SUMS`.
+
+URLs and filters can contain the same `%`-enclosed tokens as asset filters,
+together with `%asset%`, the name of the asset to verify, e.g. `%asset%.sha256`
+for projects publishing one checksum file per asset. In checksum files, the sum
+for the asset is looked for in lines formatted as `<sum>  <name>` or
+`<sum> *<name>` (as output by `sha256sum` and friends), or as
+`ALGO (<name>) = <sum>` (BSD style, `shasum --tag`, or `ALGO(<name>)= <sum>` as
+printed by `openssl dgst`). Names are compared without their leading
+directories. A file containing a single sum and nothing else is used as is.
+
+Other algorithms have sums of the same length as sha256 and sha512, e.g. SHA3,
+BLAKE3 (64 digits) or BLAKE2b (128 digits). The algorithm of sums from checksum
+files is taken, in order, from the tag of BSD-style lines, from the name of the
+file (e.g. `SHA512SUMS`, `*.sha256`, `B2SUMS`, `*.md5`), and otherwise from the
+length of the sum. Sums of other algorithms than sha256 and sha512, or which
+length does not match their algorithm, fail the step.
+
+When the checksum file cannot be found or downloaded, has no sum for the asset,
+or when the sum does not match, nothing is installed and the step fails. When
+the checksum field is empty, the asset is installed unverified, with a warning,
+unless [`--verify`](#--verify) is set: the step then fails.
+
 ### Example
 
 The following longer example helps understanding the formatting better:
 
 ```
-# kubens and kubectx
-ahmetb/kubectx kubectx_%version%_%kernel%_%machine%*
-ahmetb/kubectx kubens_%version%_%kernel%_%machine%* '' kubens
+# kubens and kubectx, verified against the checksums of the release.
+ahmetb/kubectx kubectx_%version%_%kernel%_%machine%* '' '' checksums.txt
+ahmetb/kubectx kubens_%version%_%kernel%_%machine%* '' kubens checksums.txt
 
 # lazy* CUI tools. Keep an old version of lazydocker just for the sake of the
-# example.
-jesseduffield/lazydocker lazydocker_%semantic%_%Kernel%_%machine%* v0.8
-jesseduffield/lazygit lazygit_%semantic%_%Kernel%_%machine%*
+# example, verified against a sum given here.
+jesseduffield/lazydocker lazydocker_%semantic%_%Kernel%_%machine%* v0.8 '' 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+jesseduffield/lazygit lazygit_%semantic%_%Kernel%_%machine%* '' '' checksums.txt
 
-# User-friendly Console Editor
-micro-editor/micro micro-%semantic%-%kernel%%bits%-static.tar.gz
+# User-friendly Console Editor, one checksum file per asset.
+micro-editor/micro micro-%semantic%-%kernel%%bits%-static.tar.gz '' '' https://github.com/micro-editor/micro/releases/download/%tag%/%asset%.sha
 ```
 
 The two first lines focus on installing the go binaries of the [kubectx]
@@ -94,14 +129,14 @@ manually. All tokens in the asset filters are tweaked to the naming
   [conventions]: https://github.com/ahmetb/kubectx/releases
 
 The remaining lines show more example, including specifying a specific version
-for the [lazydocker] project.
+for the [lazydocker] project, and the different ways to verify the downloads.
+The sum on the lazydocker line is an example, not the real one.
 
 ### Comparison to Other Steps
 
-Note that compared to other more complete steps such as [lazydocker] or [micro],
-this does not perform any verification on the binaries being downloaded. The
-checksums will not be verified, neither would the version of the downloaded
-binary.
+Compared to other more complete steps such as [lazydocker] or [micro], the
+version of the installed binaries is not verified, and checksums only when
+given in the specification file.
 
   [latest]: https://developer.github.com/v3/repos/releases/#get-the-latest-release
 
@@ -112,11 +147,21 @@ binary.
 Path to the projects specification file to download and install binaries from.
 See above for format.
 
+### `--verify`
+
+A boolean (`yes`/`no`, `true`/`false`, `on`/`off`, an integer), false by
+default. When true, assets without a checksum in the specification file are not
+installed, and the step fails.
+
 ## Environment Variables
 
 ### `PRIMER_STEP_GITHUB_PROJECTS`
 
 This environment variable is the same as the [`--projects`](#--projects) option.
+
+### `PRIMER_STEP_GITHUB_VERIFY`
+
+This environment variable is the same as the [`--verify`](#--verify) option.
 
 ## See Also
 
