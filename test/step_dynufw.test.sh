@@ -219,3 +219,18 @@ test_dynufw_ssh_lockout() {
         run primer_step_dynufw install
         assert_equal 0 "$RUN_RC" "active firewall"'
 }
+
+# Only master has a default commit: other branches need --commit.
+test_dynufw_branch_commit() {
+    unit "$IMG_ALPINE" '
+        unit_step dynufw
+        mock primer_net_git_clone
+        PRIMER_STEP_DYNUFW_BRANCH=dev
+        run _primer_step_dynufw_install_dynufw
+        assert_equal 1 "$RUN_RC"
+        assert_contains "No commit for branch dev of dynufw" "$RUN_ERR"
+        assert_equal "" "$(mock_calls)"
+        primer_step_dynufw option --commit ""
+        run _primer_step_dynufw_install_dynufw
+        assert_contains "primer_net_git_clone https://github.com/efrecon/dynufw.git dev  /usr/local/opt/dynufw/dev update" "$(mock_calls)"'
+}

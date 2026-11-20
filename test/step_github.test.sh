@@ -272,6 +272,9 @@ test_github_checksum_none() {
         assert_equal 0 "$RUN_RC"
         assert_contains "No checksum for tool_1.2.3_Linux_x86_64.tar.gz, installing unverified" "$RUN_ERR"
         assert_true test -x /usr/local/bin/tool
+        primer_step_github option --verify ""
+        install_with ""
+        assert_equal 0 "$RUN_RC" "empty --verify is off"
         primer_step_github option --verify 1
         install_with ""
         assert_equal 1 "$RUN_RC" "with --verify"

@@ -162,18 +162,26 @@ primer_net_install_file() {
     fi
 }
 
-# Check out the repository at the URL $1 in the directory $4, at the commit $3.
-# Git verifies that the content matches the commit, so this is how to install
-# code that is known in advance. An existing checkout is moved to the commit,
-# e.g. after a newer version of primer pins another one. Submodules are
-# checked out at the commits recorded in the repository. Without a commit, the
-# branch $2 is cloned as is, with a warning, and pulled again when $5 is
+# Check out the repository at the URL $1 in the directory $4, at the commit $3,
+# a full or short commit hash. Short hashes are resolved from the history of the
+# branch $2, and must be unambiguous. Git verifies that the content matches the
+# commit, so this is how to install code that is known in advance. An existing checkout is
+# moved to the commit, e.g. after a newer version of primer pins another one.
+# Submodules are checked out at the commits recorded in the repository. Without
+# a commit, the tip of the branch $2 is checked out, with a warning: a new
+# clone, an existing checkout that was pinned before, or any checkout when $5 is
 # "update". Fails, removing a new checkout, when anything fails.
 primer_net_git_clone() {
     primer_os_dependency git
     if [ -n "$3" ]; then
-        if [ -d "$4/.git" ] && [ "$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD 2>/dev/null)" = "$3" ]; then
-            yush_debug "$4 already at commit $3"
+        # Tags can move: only commit hashes are verified.
+        if ! printf %s\\n "$3" | grep -qE '^[0-9a-f]{4,64}$'; then
+            yush_error "$3 is not a commit hash, not checking out $1"
+            return 1
+        fi
+        _gc_head=$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD 2>/dev/null || true)
+        if [ -d "$4/.git" ] && [ -n "$_gc_head" ] && [ "${_gc_head#"$3"}" != "$_gc_head" ]; then
+            yush_debug "$4 already at commit $_gc_head"
             return 0
         fi
         _gc_new=0
@@ -183,31 +191,61 @@ primer_net_git_clone() {
             $PRIMER_OS_SUDO git -C "$4" init -q
             $PRIMER_OS_SUDO git -C "$4" remote add origin "$1"
         fi
-        yush_info "Checking out $1 at commit $3 in $4"
-        if $PRIMER_OS_SUDO git -C "$4" fetch -q --depth 1 origin "$3" \
+        if ! _gc_commit=$(_primer_net_git_resolve "$4" "$2" "$3"); then
+            yush_error "Could not find commit $3 in branch $2 of $1"
+            [ "$_gc_new" = 1 ] && $PRIMER_OS_SUDO rm -rf "$4"
+            return 1
+        fi
+        yush_info "Checking out $1 at commit $_gc_commit in $4"
+        if $PRIMER_OS_SUDO git -C "$4" fetch -q --depth 1 origin "$_gc_commit" \
                 && $PRIMER_OS_SUDO git -C "$4" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
                 && $PRIMER_OS_SUDO git -C "$4" submodule -q update --init --recursive \
-                && [ "$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD)" = "$3" ]; then
+                && [ "$($PRIMER_OS_SUDO git -C "$4" rev-parse HEAD)" = "$_gc_commit" ]; then
             return 0
         fi
-        yush_error "Could not check out $1 at commit $3"
+        yush_error "Could not check out $1 at commit $_gc_commit"
         [ "$_gc_new" = 1 ] && $PRIMER_OS_SUDO rm -rf "$4"
         return 1
     fi
 
     yush_warn "No commit given for $1, installing branch $2 unverified"
-    if [ -d "$4/.git" ]; then
-        if [ "${5:-}" = "update" ]; then
-            $PRIMER_OS_SUDO git -C "$4" pull -q
-        fi
-    else
+    if ! [ -d "$4/.git" ]; then
         $PRIMER_OS_SUDO mkdir -p "$4"
         if ! $PRIMER_OS_SUDO git clone -q --recurse-submodules --branch "$2" --depth 1 "$1" "$4"; then
             $PRIMER_OS_SUDO rm -rf "$4"
             yush_error "Could not clone branch $2 of $1"
             return 1
         fi
+    elif [ "${5:-}" = "update" ] || ! $PRIMER_OS_SUDO git -C "$4" symbolic-ref -q HEAD >/dev/null; then
+        # Also when detached, i.e. pinned to a commit before: a pull would fail.
+        yush_info "Checking out the tip of branch $2 of $1 in $4"
+        if ! { $PRIMER_OS_SUDO git -C "$4" fetch -q --depth 1 origin "$2" \
+                && $PRIMER_OS_SUDO git -C "$4" checkout -q -B "$2" FETCH_HEAD \
+                && $PRIMER_OS_SUDO git -C "$4" submodule -q update --init --recursive; }; then
+            yush_error "Could not check out branch $2 of $1"
+            return 1
+        fi
     fi
+}
+
+# Print the full hash of the commit $3 of the repository checked out at $1: as
+# is when full, resolved from the history of the branch $2 otherwise. Only the
+# commits are fetched, not their content, when the server supports it. Fails
+# when the commit is unknown or ambiguous.
+_primer_net_git_resolve() {
+    if printf %s\\n "$3" | grep -qE '^([0-9a-f]{40}|[0-9a-f]{64})$'; then
+        printf %s\\n "$3"
+        return 0
+    fi
+    yush_debug "Resolving $3 from the history of branch $2"
+    $PRIMER_OS_SUDO git -C "$1" fetch -q --filter=tree:0 origin "+refs/heads/$2:refs/remotes/origin/$2" 2>/dev/null \
+        || $PRIMER_OS_SUDO git -C "$1" fetch -q origin "+refs/heads/$2:refs/remotes/origin/$2" \
+        || return 1
+    _gr_full=$($PRIMER_OS_SUDO git -C "$1" rev-parse -q --verify "$3^{commit}" 2>/dev/null) || return 1
+    # Only commits of the branch: rev-parse also knows other objects.
+    $PRIMER_OS_SUDO git -C "$1" merge-base --is-ancestor "$_gr_full" "refs/remotes/origin/$2" || return 1
+    yush_info "Resolved commit $3 to $_gr_full"
+    printf %s\\n "$_gr_full"
 }
 
 # Print the extra curl options for URL $1, if any, in the format of a curl

@@ -10,10 +10,14 @@ PRIMER_STEP_DYNUFW_RULES=${PRIMER_STEP_DYNUFW_RULES:-}
 # master, which is probably always what you want anyway...
 PRIMER_STEP_DYNUFW_BRANCH=${PRIMER_STEP_DYNUFW_BRANCH:-master}
 
-# Commit of dynufw to install, verified by git: the tip of master when this
-# version of primer was released. Empty to install the tip of the branch,
-# unverified, and update it on every installation.
-PRIMER_STEP_DYNUFW_COMMIT=${PRIMER_STEP_DYNUFW_COMMIT-90ac5c50aae2e8173bd695a03470a1168fa73453}
+# Commit of dynufw to install, verified by git. When unset, the tip of master
+# when this version of primer was released, for the master branch only: other
+# branches need a commit. Empty to install the tip of the branch, unverified,
+# and update it on every installation.
+#PRIMER_STEP_DYNUFW_COMMIT=
+
+# Tip of master when this version of primer was released.
+_PRIMER_STEP_DYNUFW_MASTER=90ac5c50aae2e8173bd695a03470a1168fa73453
 
 # DNS server to use, empty for host default
 PRIMER_STEP_DYNUFW_DNS=${PRIMER_STEP_DYNUFW_DNS:-}
@@ -147,9 +151,17 @@ _primer_step_dynufw_install_ufw() {
 # the two main scripts. However, the installation script is re-implemented
 # (better) within this step.
 _primer_step_dynufw_install_dynufw() {
-    yush_info "Installing dynufw from $PRIMER_STEP_DYNUFW_REPO (branch: $PRIMER_STEP_DYNUFW_BRANCH, commit: ${PRIMER_STEP_DYNUFW_COMMIT:-none})"
+    if [ -n "${PRIMER_STEP_DYNUFW_COMMIT+x}" ]; then
+        _commit=$PRIMER_STEP_DYNUFW_COMMIT
+    elif [ "$PRIMER_STEP_DYNUFW_BRANCH" = master ]; then
+        _commit=$_PRIMER_STEP_DYNUFW_MASTER
+    else
+        yush_error "No commit for branch $PRIMER_STEP_DYNUFW_BRANCH of dynufw: give one with --commit, or --commit \"\" to install its tip unverified"
+        return 1
+    fi
+    yush_info "Installing dynufw from $PRIMER_STEP_DYNUFW_REPO (branch: $PRIMER_STEP_DYNUFW_BRANCH, commit: ${_commit:-none})"
     primer_net_git_clone "$PRIMER_STEP_DYNUFW_REPO" "$PRIMER_STEP_DYNUFW_BRANCH" \
-        "$PRIMER_STEP_DYNUFW_COMMIT" "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" update || return 1
+        "$_commit" "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH" update || return 1
     yush_debug "Installing as ${PRIMER_BINDIR%%/}/dynufw"
     for _script in ufw-clean ufw-dynamic-host-update; do
         $PRIMER_OS_SUDO chmod a+x "${PRIMER_OPTDIR%%/}/dynufw/$PRIMER_STEP_DYNUFW_BRANCH/${_script}.sh"

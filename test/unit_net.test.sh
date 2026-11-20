@@ -386,6 +386,21 @@ test_primer_net_git_clone() {
         run primer_net_git_clone file:///tmp/src master "$(printf "%040d" 0)" /opt/src/bad
         assert_equal 1 "$RUN_RC" "unknown commit"
         assert_false test -e /opt/src/bad
+        # Short hashes are resolved, tags are refused: they can move.
+        primer_net_git_clone file:///tmp/src master "$(printf %s "$c1" | cut -c1-8)" /opt/src/short 2>/dev/null
+        assert_equal "$c1" "$(git -C /opt/src/short rev-parse HEAD)" "short hash"
+        primer_net_git_clone file:///tmp/src master "$(printf %s "$c2" | cut -c1-7)" /opt/src/short 2>/dev/null
+        assert_equal "$c2" "$(git -C /opt/src/short rev-parse HEAD)" "short hash, existing checkout"
+        git -C /tmp/src tag v1 "$c1"
+        run primer_net_git_clone file:///tmp/src master v1 /opt/src/tag
+        assert_equal 1 "$RUN_RC" "tag"
+        assert_contains "v1 is not a commit hash" "$RUN_ERR"
+        assert_false test -e /opt/src/tag
+        # Pinned before, now unpinned: the tip of the branch.
+        run primer_net_git_clone file:///tmp/src master "" /opt/src/master
+        assert_equal 0 "$RUN_RC" "unpinned after pinned: $RUN_ERR"
+        assert_equal master "$(git -C /opt/src/master symbolic-ref --short HEAD)"
+        assert_equal "$c2" "$(git -C /opt/src/master rev-parse HEAD)"
         run primer_net_git_clone file:///tmp/src master "" /opt/src/branch
         assert_equal 0 "$RUN_RC" "branch"
         assert_contains "No commit given for file:///tmp/src, installing branch master unverified" "$RUN_ERR"
@@ -395,4 +410,24 @@ test_primer_net_git_clone() {
         assert_equal 2 "$(cat /opt/src/branch/f)" "no update"
         primer_net_git_clone file:///tmp/src master "" /opt/src/branch update 2>/dev/null
         assert_equal 3 "$(cat /opt/src/branch/f)" "update"'
+}
+
+# Short hashes are resolved from the history of the branch only: unknown
+# hashes, or commits of other branches, fail.
+test__primer_net_git_resolve() {
+    unit "$IMG_ALPINE" '
+        apk add -q git >/dev/null
+        git config --global user.email t@t; git config --global user.name t
+        git init -q -b master /tmp/src
+        echo 1 > /tmp/src/f && git -C /tmp/src add f && git -C /tmp/src commit -qm 1
+        c1=$(git -C /tmp/src rev-parse HEAD)
+        git -C /tmp/src checkout -q -b other && echo 2 > /tmp/src/f && git -C /tmp/src commit -qam 2
+        other=$(git -C /tmp/src rev-parse HEAD)
+        git -C /tmp/src checkout -q master
+        git init -q /tmp/co && git -C /tmp/co remote add origin file:///tmp/src
+        assert_equal "$c1" "$(_primer_net_git_resolve /tmp/co master "$c1")" "full hash as is"
+        assert_equal "$c1" "$(_primer_net_git_resolve /tmp/co master "$(printf %s "$c1" | cut -c1-6)")"
+        assert_false _primer_net_git_resolve /tmp/co master "$(printf %s "$other" | cut -c1-8)"
+        assert_false _primer_net_git_resolve /tmp/co master 0000000
+        assert_false _primer_net_git_resolve /tmp/co nosuchbranch "$(printf %s "$c1" | cut -c1-8)"'
 }

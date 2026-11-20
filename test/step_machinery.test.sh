@@ -79,3 +79,25 @@ test_machinery_second_branch() {
         assert_equal /usr/local/opt/machinery/dev/machinery "$(readlink /usr/local/bin/machinery)"
         assert_true [ -x /usr/local/opt/machinery/master/machinery ]'
 }
+
+# Only master has a default commit: other branches need --commit, or an
+# explicitly empty one to follow the branch, unverified.
+test_machinery_branch_commit() {
+    unit "$IMG_ALPINE" '
+        unit_step machinery
+        primer_os_packages() { :; }
+        mock primer_net_git_clone
+        primer_step_machinery option --branch dev
+        run primer_step_machinery install
+        assert_equal 1 "$RUN_RC" "no commit"
+        assert_contains "No commit for branch dev of machinery" "$RUN_ERR"
+        assert_equal "" "$(mock_calls)"
+        primer_step_machinery option --commit ""
+        run primer_step_machinery install
+        assert_contains "primer_net_git_clone https://github.com/efrecon/machinery.git dev  /usr/local/opt/machinery/dev" "$(mock_calls)"
+        mock_reset
+        unset PRIMER_STEP_MACHINERY_COMMIT
+        primer_step_machinery option --branch master
+        run primer_step_machinery install
+        assert_contains "machinery.git master 9eadd4fd1c226ec14e5420d18f3b63ec571e7a3a" "$(mock_calls)"'
+}
