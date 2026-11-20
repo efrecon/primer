@@ -35,10 +35,11 @@ larger solutions such as [Ansible], [puppet] or [cloud-init].
   [Ansible]: https://github.com/ansible/ansible
   [puppet]: https://puppet.com/open-source/#osp
 
-**Note**: Primer is still under development and a little bit of a moving target.
-But it has reached enough stability to start being used on real (or virtual)
-hosts, rather that test containers.
-Please raise [issues], or even better, fix bugs through [PR]s.
+> [!NOTE] Primer is still under development and a little bit of a moving target.
+> But it has reached enough stability to start being used on real (or virtual)
+> hosts, rather that test containers.
+> Thanks to LLMs, there is now an extensive test [suite](#testing).
+> Please raise [issues], or even better, fix bugs through [PR]s.
 
   [issues]: https://github.com/efrecon/primer/issues
   [PR]: https://github.com/efrecon/primer/pulls
