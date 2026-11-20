@@ -261,22 +261,32 @@ primer_auth_user_mod() {
                         "$_username"
         else
             # No usermod (e.g. busybox): rewrite the entry of the user in
-            # /etc/passwd. Values are passed through the environment, as awk
-            # would interpret backslashes in -v assignments. The file is
-            # replaced atomically, and only when the new content looks sane.
+            # /etc/passwd. Only the line of the user is split, all others are
+            # copied verbatim; read -r and printf %s never interpret
+            # backslashes. The file is replaced atomically, and only when the
+            # entry of the user was found and rewritten.
             _gid=$(getent group "$_group" | cut -d ":" -f 3)
             _passwd=$(mktemp)
-            if PRIMER_AUTH_U=$_username PRIMER_AUTH_G=$_gid \
-                PRIMER_AUTH_C=$_gecos PRIMER_AUTH_S=$_shell \
-                    awk -F ":" -v OFS=":" '
-                        $1 == ENVIRON["PRIMER_AUTH_U"] {
-                            $4 = ENVIRON["PRIMER_AUTH_G"]
-                            $5 = ENVIRON["PRIMER_AUTH_C"]
-                            $7 = ENVIRON["PRIMER_AUTH_S"]
-                        }
-                        { print }' /etc/passwd > "$_passwd" \
-                    && [ -n "$_gid" ] \
-                    && grep -q "^${_username}:" "$_passwd"; then
+            _found=0
+            while IFS= read -r _line || [ -n "$_line" ]; do
+                case $_line in
+                    "$_username":*)
+                        # Keep name:password:uid: and the home directory,
+                        # replace gid, gecos and shell.
+                        _rest=${_line#*:*:*:}           # gid:gecos:home:shell
+                        _head=${_line%"$_rest"}         # name:password:uid:
+                        _home=${_rest#*:*:}             # home:shell
+                        _home=${_home%%:*}              # home
+                        printf '%s%s:%s:%s:%s\n' \
+                            "$_head" "$_gid" "$_gecos" "$_home" "$_shell"
+                        _found=1
+                        ;;
+                    *)
+                        printf '%s\n' "$_line"
+                        ;;
+                esac
+            done < /etc/passwd > "$_passwd"
+            if [ -n "$_gid" ] && [ "$_found" = 1 ]; then
                 primer_utils_sysfile_replace /etc/passwd < "$_passwd"
                 rm -f "$_passwd"
             else

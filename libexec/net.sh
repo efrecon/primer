@@ -145,6 +145,9 @@ primer_net_port_allow() {
     fi
 }
 
+# Print the extra curl options for URL $1, if any. Lines of the file at
+# $PRIMER_CURL_OPTIONS (# for comments) are a URL-encoded regex followed by
+# curl options: print the options of the first line whose regex matches $1.
 _primer_net_curlopts() {
     if [ -n "$PRIMER_CURL_OPTIONS" ] && [ -f "$PRIMER_CURL_OPTIONS" ]; then
         yush_debug "Looking for curl options for $1"
