@@ -57,6 +57,47 @@ or new installation steps:
     the same as the name of the module, though in uppercase.
   + There should be as little exported variables as possible, preferably none.
 
+### Step Lifecycle
+
+A step is a single function, `primer_step_xxx`, whose first argument is the
+action to perform. [`timezone`](../libexec/steps/timezone.sh) is a short
+example. When primer runs, it:
+
+1. Reads the configuration files (`-c`, by default `primer.env` and
+   `primer_<mac>.env`) and exports every variable they set. Steps declare
+   their settings at the top of their file, as
+   `PRIMER_STEP_XXX_YYY=${PRIMER_STEP_XXX_YYY:-default}`, so that values
+   from the environment or the configuration files win over the defaults.
+2. Calls `primer_step_xxx option --yyy value` once for each `--xxx:yyy`
+   option given on the command line. Command-line options therefore win
+   over the configuration files. The step sets the matching variable and
+   should warn about options it does not know.
+3. Calls `primer_step_xxx install` or `primer_step_xxx clean` for each step
+   of `PRIMER_STEPS` (or `-s`), in that order. `clean` uses the same order
+   as `install`, not the reverse.
+
+Step files are found in `libexec/steps`, or in the directories given with
+`-p`, and are only loaded when a step is first used. Primer aborts when the
+file does not define `primer_step_xxx`.
+
+Each action must follow these rules:
+
++ `option`, without any further argument, prints the space-separated list of
+  options the step accepts, e.g. `--location`. The `env` and `info` commands
+  use it, together with the `PRIMER_STEP_XXX_` variables, to describe steps.
++ Primer runs with `set -eu`: a step that fails, or returns non-zero, stops
+  the whole run, and the steps after it do not run. Return non-zero, with an
+  error message, rather than continue in a half-installed state.
++ `install` should be safe to run again on a host where it already ran.
++ Downloads are verified (sha256 sum, signature) before anything is
+  installed. A failed download or verification fails the step and installs
+  nothing.
++ `clean` only removes what the step can prove it made: firewall rules
+  carrying its marker, files identical to what `install` puts there,
+  binaries at the version that `install` installs. Anything else is left in
+  place, with a warning. When nothing can safely be removed, `clean` warns
+  and succeeds.
+
 ## Tests
 
 + Tests live in `test/`, in files named `<name>.test.sh`. Each test is a

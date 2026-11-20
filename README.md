@@ -229,6 +229,8 @@ This list will grow with personal needs, or with the help of the community.
 [PR]s are welcome!
 Some inspiration can be taken from the [config][cc] implementation in
 [cloud-init].
+How primer drives steps, and the rules steps follow, is described in the
+[step lifecycle](./docs/CONVENTIONS.md#step-lifecycle).
 
 * [`packages`][packages] upgrades the system to the latest and
   installs additional packages.
