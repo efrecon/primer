@@ -28,14 +28,16 @@ jobs:
           # Decide output filename.
           out="primer-${SAFE_TAG}.sh"
 
-          # Generate amalgamation script and set version.
+          # Generate amalgamation script and set version. Only the sanitised
+          # tag goes into the script: the raw tag could contain $, quotes or
+          # backticks, which would run in the released script.
           ./libexec/yu.sh/bin/amalgamation.sh primer > "$out"
-          escaped_tag=$(printf '%s' "$TAG_NAME" | sed 's/[\/&]/\\&/g')
-          sed -i "s/^PRIMER_VERSION=.*/PRIMER_VERSION=\"$escaped_tag\"/" "$out"
+          sed -i "s/^PRIMER_VERSION=.*/PRIMER_VERSION=\"${SAFE_TAG}\"/" "$out"
           chmod +x "$out"
 
-          # Verify the amalgamation script.
+          # Verify the amalgamation script, and the version it reports.
           ./"$out" --help
+          ./"$out" --version | grep -qE " v${SAFE_TAG#v}$"
 
       - name: Upload release asset
         env:

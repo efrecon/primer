@@ -16,6 +16,8 @@
 IMG_ALPINE=${IMG_ALPINE:-docker.io/library/alpine:3.24}
 IMG_TRIXIE=${IMG_TRIXIE:-docker.io/library/debian:trixie}
 IMG_BOOKWORM=${IMG_BOOKWORM:-docker.io/library/debian:bookworm}
+IMG_UBUNTU=${IMG_UBUNTU:-docker.io/library/ubuntu:26.04}
+IMG_FEDORA=${IMG_FEDORA:-docker.io/library/fedora:45}
 # An exact Alpine release, for tests of version detection.
 IMG_ALPINE_PINNED=${IMG_ALPINE_PINNED:-docker.io/library/alpine:3.24.4}
 
@@ -148,7 +150,7 @@ tar -xf - -C /primer
 exec </dev/null
 cd /primer
 if [ -n "${GITHUB_TOKEN:-}" ]; then
-    printf "%s -u x-access-token:%s\n" "api%5C.github%5C.com" "$GITHUB_TOKEN" > /tmp/curl.opts
+    printf "%s -u x-access-token:%s\n" "^https%3A//api%5C.github%5C.com/" "$GITHUB_TOKEN" > /tmp/curl.opts
     PRIMER_CURL_OPTIONS=/tmp/curl.opts
     export PRIMER_CURL_OPTIONS
 fi

@@ -60,6 +60,16 @@ test_git_install_debian() {
         assert_false test -e /home/tester/.gitconfig'
 }
 
+test_git_install_fedora() {
+    in_container "$IMG_FEDORA" '
+        useradd -m tester
+        primer_run -s git --git:lfs-version '"$GIT_LFS_VERSION"' --git:lfs-install "^tester$" install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true command -v git
+        assert_contains "'"$GIT_LFS_VERSION"'" "$(/usr/local/bin/git-lfs --version)"
+        assert_contains "[filter \"lfs\"]" "$(cat /home/tester/.gitconfig)"'
+}
+
 test_git_bad_checksum() {
     unit "$IMG_ALPINE" "$GIT_FAKE_RELEASE"'
         fake_lfs_release

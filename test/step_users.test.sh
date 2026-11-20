@@ -24,7 +24,7 @@ _users_db_verify='
     assert_match "^Emmanuel Frecon" "$(getent passwd emmanuel | cut -d: -f5)"
     # No shell in the DB: the default login shell of the platform
     case "$(. /etc/os-release && echo "$ID")" in
-        debian) assert_equal /bin/bash "$(getent passwd emmanuel | cut -d: -f7)";;
+        debian|ubuntu|fedora) assert_equal /bin/bash "$(getent passwd emmanuel | cut -d: -f7)";;
         *) assert_equal /bin/sh "$(getent passwd emmanuel | cut -d: -f7)";;
     esac
     assert_true [ -d /home/emmanuel ]
@@ -48,6 +48,16 @@ test_users_db_keeps_shell() {
 
 test_users_db_debian() {
     primer_in -e PRIMER_STEP_USERS_GHAPI=file:///tmp/gh/ "$IMG_TRIXIE" -s users --users:db /primer/test/data/users.db install -- "$_users_db_verify"
+}
+
+test_users_db_ubuntu() {
+    primer_in -e PRIMER_STEP_USERS_GHAPI=file:///tmp/gh/ "$IMG_UBUNTU" -s users --users:db /primer/test/data/users.db install -- "$_users_db_verify"
+}
+
+# Fedora: shadow tools, and passwords set although cracklib complains.
+test_users_db_fedora() {
+    primer_in -e PRIMER_STEP_USERS_GHAPI=file:///tmp/gh/ "$IMG_FEDORA" -s users --users:db /primer/test/data/users.db install -- "$_users_db_verify"'
+    assert_match "^\\$" "$(getent shadow emmanuel | cut -d: -f2)" "password set"'
 }
 
 # Generated passwords are saved next to the database when asked to, the file is

@@ -16,7 +16,7 @@ primer_step_install() {
     case "$1" in
         "option")
             shift;
-            [ "$#" = "0" ] && echo "--bundle --target --targets"
+            [ "$#" = "0" ] && echo "--bundle --target --targets --overwrite"
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --bundle)

@@ -203,13 +203,14 @@ else
 fi
 
 # Pull images once, quietly, so parallel tests do not race to pull them.
-for _img in "$IMG_ALPINE" "$IMG_ALPINE_PINNED" "$IMG_TRIXIE" "$IMG_BOOKWORM"; do
+for _img in "$IMG_ALPINE" "$IMG_ALPINE_PINNED" "$IMG_TRIXIE" "$IMG_BOOKWORM" "$IMG_UBUNTU" "$IMG_FEDORA"; do
     "$PRIMER_TEST_RUNTIME" pull -q "$_img" >/dev/null 2>&1 || true
 done
 
-# Use warm copies of the Debian images, when the selected tests use them.
+# Use warm copies of the Debian and Ubuntu images, when the selected tests use
+# them.
 if [ "${PRIMER_TEST_WARM:-1}" != "0" ]; then
-    for _var in IMG_TRIXIE IMG_BOOKWORM; do
+    for _var in IMG_TRIXIE IMG_BOOKWORM IMG_UBUNTU; do
         for _file in $(printf %s\\n "$TESTS" | cut -d: -f1 | sort -u); do
             if grep -qF -e "\$$_var" -e "\${$_var}" "$TEST_ROOT/test/${_file}.test.sh"; then
                 eval "_img=\$$_var"
@@ -225,7 +226,7 @@ if [ "${PRIMER_TEST_WARM:-1}" != "0" ]; then
         done
     done
 fi
-export IMG_ALPINE IMG_TRIXIE IMG_BOOKWORM
+export IMG_ALPINE IMG_TRIXIE IMG_BOOKWORM IMG_UBUNTU IMG_FEDORA
 
 NUM=0
 PASSED=0

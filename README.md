@@ -236,47 +236,49 @@ How primer drives steps, and the rules steps follow, is described in the
   installs additional packages.
 * [`users`][users] takes a `/etc/passwd` inspired colon separated file to create
   a number of users on the host system.
-* Relevant groups will be created and
-  all users can be made members of additional groups (e.g. `sudo`?).
-* The module is able to generate strong passwords for all these users if
-  necessary.
-* This module is also able to fetch public keys from GitHub handles to
-  automatically allow for SSH access.
+  + Relevant groups will be created and all users can be made members of
+    additional groups (e.g. `sudo`?).
+  + The module is able to generate strong passwords for all these users if
+    necessary.
+  + This module is also able to fetch public keys from GitHub handles to
+    automatically allow for SSH access.
 * [`git`][git] installs git on the system, with [LFS] support.
 * [`announce`][announce] installs and
   enables network announcement services so the host is discoverable by hostname
   on the local network, via [mDNS] and/or [NetBIOS].
 * [`dynufw`][dynufw] installs [ufw] and a simplification wrapper on top of ufw.
-* The wrapper is able to track host names that would change their pointed IP
-  with time (dynamic DNS).
+  + The wrapper is able to track host names that would change their pointed IP
+    with time (dynamic DNS).
 * [`firewall`][firewall] opens ports in the firewall of the host,
   detecting ufw, firewalld, awall or nftables and falling back to iptables.
-* `timezone` places the host at a given location.
+* [`timezone`][timezone] places the host at a given location.
+* [`locale`][locale] sets the locale of the system, generating it when needed.
 * [`sshkeys`][sshkeys] automatically generates strong SSH keys for the calling
   user.
-* The target of this module are deploy keys when interacting with automated CI
-  systems.
+  + The target of this module are deploy keys when interacting with automated
+    CI systems.
 * [`docker`][docker] installs the Docker daemon and client, together with the
   Docker compose and buildx plugins, it has been described above.
 * [`compose`][compose] is deprecated, Docker compose is now a CLI plugin
   installed by the [`docker`][docker] step.
 * [`machine`][machine] installs Docker machine at the latest or
   a specific version, together with bash completion.
-* The binary integrity can be verified before installation.
+  + The binary integrity can be verified before installation.
 * [`machinery`][machinery] installs machinery from a given branch (defaults to
   `master`).
 * [`lazydocker`][lazydocker] installs lazydocker at the latest or
   a specific version.
-* Lazydocker is a CUI for Docker.
-* Binary integrity is verified before installation.
+  + Lazydocker is a CUI for Docker.
+  + Binary integrity is verified before installation.
 * [`micro`][micro] installs micro at the latest or a specific version.
-* micro is a modern editor for the terminal.
+  + micro is a modern editor for the terminal.
 * [`github`][github] installs binaries from project releases (assets) at github.
 * [`disk`][disk] formats and mounts attached disks.
+* [`wifi`][wifi] connects the host to a wifi network at boot, using ifupdown.
 * [`install`][install] installs (recursively) remote or
   local files onto the host.
-* `install` benefits from the [`--curl`](#curl) option for authenticated access
-  to remote resources, when necessary.
+  + `install` benefits from the [`--curl`](#--curl) option for authenticated
+    access to remote resources, when necessary.
 * [`freeform`][freeform] looks up and
   executes binaries in alphabetical order to perform free-form
   installation/removal operations.
@@ -291,6 +293,9 @@ How primer drives steps, and the rules steps follow, is described in the
   [NetBIOS]: https://en.wikipedia.org/wiki/NetBIOS
   [dynufw]: ./docs/steps/dynufw.md
   [firewall]: ./docs/steps/firewall.md
+  [timezone]: ./docs/steps/timezone.md
+  [locale]: ./docs/steps/locale.md
+  [wifi]: ./docs/steps/wifi.md
   [sshkeys]: ./docs/steps/sshkeys.md
   [docker]: ./docs/steps/docker.md
   [compose]: ./docs/steps/compose.md
@@ -343,7 +348,7 @@ In those files, all empty lines or
 lines starting with a `#` (hash mark) will be ignored.
 Variables should be separated from their values by an equal sign `=` and
 values should not be quoted.
-The default is to [substitute](#no-subst) the value of existing (or set through
+The default is to [substitute](#--no-subst) the value of existing (or set through
 the file) variables by their value.
 Substitution uses an almost eval-safe [implementation][subst] for security and
 supports all POSIX [expansion] formats.
@@ -357,9 +362,16 @@ The default for this option is to read:
   `<mac>` will be the MAC address of the main Ethernet interface of the host,
   in lower-case and without any field separators.
 
-Primer is not only able to read files, but also remote resources.
+Primer is not only able to read files, but also remote resources, over
+`https://`.
+Plain `http://` is refused: anyone on the way could change the configuration,
+and thus the commands that primer runs as root.
 To access protected resources,
 you can combine with using the [`--curl`](#--curl) option.
+Variables that change how commands are run cannot be set from configuration
+files, and are ignored with a warning:
+`PATH`, `IFS`, `ENV`, `BASH_ENV`, `CDPATH`, `PS4`, `SHELLOPTS`,
+`LD_*` and `PRIMER_OS_*`.
 In path or resource specifications passed to `--config`,
 a number of tokens will automatically be replaced by their value at run time.
 These are:
@@ -385,7 +397,7 @@ interface, you can run the following command:
   [subst]: https://github.com/YanziNetworks/yu.sh/blob/fc4504e334133fe6d78531ed65301fa64e8b8193/multi-arch.sh#L19
   [expansion]: https://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_06_02
 
-#### `-no-subst`
+#### `--no-subst`
 
 When this flag is present,
 references to environment variables in `.env` files will not be expanded to
@@ -408,12 +420,22 @@ lines starting with a `#` (hash mark) will be ignored.
 Otherwise,
 the first item of the line should be an extended regular expression to match
 against a URL, and
-the remaining options that will be blindly passed to `curl` when it is used to
+the remaining options that will be passed to `curl` when it is used to
 download URLs matching the expression.
+Only the first matching line is used.
 The expression itself can be URL encoded to arrange for all special characters,
 including possible spaces.
+Options are quoted as in the shell, e.g.
+`-H "Authorization: Bearer xxx"`, without variable or command substitution.
+They are given to `curl` as a configuration file on its standard input, so
+they do not show in the list of processes.
 This feature can be used, for example, for debugging purposes, or
-to provide authentication details to `curl` to access URLs.
+to provide authentication details to `curl` to access URLs:
+
+```text
+^https://api%5C.github%5C.com/ -H "Authorization: Bearer ghp_xxx"
+^https://files%5C.example%5C.com/ -u "user:pass word" --retry 3
+```
 
 #### `--<step>:<opt>`
 
@@ -439,6 +461,14 @@ as of the [yu.sh][logging] implementation:
 * `error`
 
   [logging]: https://github.com/YanziNetworks/yu.sh/blob/fc4504e334133fe6d78531ed65301fa64e8b8193/log.sh#L46
+
+#### `--no-colour` or `--non-interactive`
+
+Do not colour the log messages. `--no-color` is an alias.
+
+#### `-V` or `--version`
+
+Print the version and exit.
 
 #### `-h` or `--help`
 
@@ -553,8 +583,8 @@ The suite contains:
   `PRIMER_LIBRARY=1`, primer refuses to run, and it always ignores
   `PRIMER_ROOT_DIR`.
 + Tests for every installation [step](#steps), in `test/step_<step>.test.sh`.
-  Most run primer for real in Alpine and Debian containers and verify the
-  resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
+  Most run primer for real in Alpine and Debian containers, some also in Ubuntu
+  and Fedora ones, and verify the resulting state. Steps that cannot fully work in a container, e.g. `wifi`, are
   tested with mocks. Some tests, e.g. `docker` and `firewall`, need privileged
   containers; they are skipped, with a reason, with rootless podman or docker.
 + Tests of the command-line interface and of the functions of `primer` itself,
@@ -584,10 +614,10 @@ calls authenticated and avoid anonymous rate limits.
 
 Most of the time goes to installing packages, which is CPU-bound. By default,
 the suite runs as many tests in parallel as the container runtime has CPUs.
-Debian tests run in warm copies of the official images, built once a day: their
-package lists are fetched, apt keeps its caches, common packages are downloaded
-(not installed) and documentation is not installed. Primer still has to install
-everything it needs. Set `PRIMER_TEST_WARM=0` to use the official images.
+Debian and Ubuntu tests run in warm copies of the official images, built once a
+day: their package lists are fetched, apt keeps its caches, common packages are
+downloaded (not installed) and documentation is not installed. Primer still has
+to install everything it needs. Set `PRIMER_TEST_WARM=0` to use the official images.
 
   [docker]: https://docker.com/
   [podman]: https://podman.io/

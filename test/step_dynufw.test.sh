@@ -172,3 +172,51 @@ test_dynufw_ipv6_kept_on_hosts() {
         assert_true grep -qx "DEFAULT_INPUT_POLICY=\"DROP\"" /etc/default/ufw
         assert_false test -e /etc/default/ufw.bak'
 }
+
+# With an SSH server, or when primer runs over SSH, the firewall is only
+# enabled when a rule allows SSH connections: it stays disabled otherwise, so
+# that the next connection is not refused.
+test_dynufw_ssh_lockout() {
+    unit "$IMG_ALPINE" '
+        unit_step dynufw
+        . test/data/dynufw/ufw.sh
+        crontab() { :; }
+        git() {
+            for _last; do :; done
+            mkdir -p "$_last"
+            for _s in ufw-clean ufw-dynamic-host-update; do
+                printf "#!/bin/sh\n" > "$_last/$_s.sh"
+            done
+        }
+        mock sshd
+        primer_step_dynufw option --static 8080
+        run primer_step_dynufw install
+        assert_equal 1 "$RUN_RC" "no SSH rule"
+        assert_contains "No rule allows SSH connections on port 22" "$RUN_ERR"
+        assert_not_contains "enable" "$(mock_calls)"
+        # Rules that do not count: another port, a deny rule.
+        printf "ufw allow 2222/tcp\nufw deny 22/tcp\n" >> /tmp/ufw.added
+        run primer_step_dynufw install
+        assert_equal 1 "$RUN_RC" "other rules"
+        # An existing rule for SSH.
+        echo "ufw limit 22/tcp" >> /tmp/ufw.added
+        run primer_step_dynufw install
+        assert_equal 0 "$RUN_RC" "with SSH rule"
+        assert_contains "ufw --force enable" "$(mock_calls)"
+        # Over SSH, on another port.
+        mock_reset
+        SSH_CONNECTION="10.0.0.2 51000 10.0.0.1 2200"
+        run primer_step_dynufw install
+        assert_equal 1 "$RUN_RC" "port of the connection"
+        assert_contains "on port 2200" "$RUN_ERR"
+        primer_step_dynufw option --static 2200
+        run primer_step_dynufw install
+        assert_equal 0 "$RUN_RC" "with --static 2200"
+        # Already active: nothing to check.
+        mock_reset
+        printf "ufw allow 8080/tcp\n" > /tmp/ufw.added
+        SSH_CONNECTION=
+        UFW_STATUS=active
+        run primer_step_dynufw install
+        assert_equal 0 "$RUN_RC" "active firewall"'
+}

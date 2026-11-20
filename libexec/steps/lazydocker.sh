@@ -83,7 +83,7 @@ _primer_step_lazydocker_install_download() {
             else
                 chmod a+x "$_tmpdir/lazydocker"
                 [ -d "$PRIMER_BINDIR" ] || $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
-                $PRIMER_OS_SUDO mv -f "$_tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
+                primer_utils_install_bin "$_tmpdir/lazydocker" "${PRIMER_BINDIR%%/}/lazydocker"
                 _rc=0
             fi
         fi

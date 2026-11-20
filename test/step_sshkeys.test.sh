@@ -35,6 +35,15 @@ test_sshkeys_debian() {
     in_container "$IMG_TRIXIE" "$_sshkeys_verify"
 }
 
+# ssh-keygen comes from openssh-client on Ubuntu, openssh-clients on Fedora.
+test_sshkeys_ubuntu() {
+    in_container "$IMG_UBUNTU" "$_sshkeys_verify"
+}
+
+test_sshkeys_fedora() {
+    in_container "$IMG_FEDORA" "$_sshkeys_verify"
+}
+
 # Existing keys are kept.
 test_sshkeys_idempotent() {
     in_container "$IMG_ALPINE" '

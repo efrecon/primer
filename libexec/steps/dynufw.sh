@@ -64,8 +64,11 @@ primer_step_dynufw() {
             # Run once to open all ports
             _primer_step_dynufw_update
             _primer_step_dynufw_install_cron
-            # Start firewall, if everything was wrong with the rules, you might
-            # be kicked out!
+            # Start firewall, unless this would lock out SSH connections.
+            if ! _primer_step_dynufw_ssh_allowed; then
+                yush_error "No rule allows SSH connections on port $_ssh_port, enabling the firewall would lock them out. Add one, e.g. --dynufw:static $_ssh_port, the firewall is left disabled"
+                return 1
+            fi
             yush_notice "Enabling firewall forcefully"
             $PRIMER_OS_SUDO ufw --force enable
             ;;
@@ -93,6 +96,25 @@ primer_step_dynufw() {
     esac
 }
 
+
+# Succeed when enabling the firewall keeps SSH connections possible: when it is
+# already active, when there is no SSH server and primer does not run over SSH,
+# or when a rule allows (or limits) connections to the SSH port, which is set
+# in _ssh_port: the one of the current connection, 22 otherwise.
+_primer_step_dynufw_ssh_allowed() {
+    _ssh_port=22
+    if [ -n "${SSH_CONNECTION:-}" ]; then
+        _ssh_port=$(printf %s\\n "$SSH_CONNECTION" | awk '{ print $4 }')
+    elif ! primer_utils_syscmd_exists sshd; then
+        return 0
+    fi
+    if $PRIMER_OS_SUDO ufw status 2>/dev/null | grep -q '^Status: active'; then
+        return 0
+    fi
+    $PRIMER_OS_SUDO ufw show added |
+        grep -E '^ufw (allow|limit) ' |
+        grep -qE "( ${_ssh_port}(/tcp)?( |\$)| (OpenSSH|ssh)( |\$))"
+}
 
 # Install ufw, with additional necessary extra packages. We treat containers a
 # little bit different (which is mostly usefull for testing)

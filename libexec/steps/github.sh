@@ -293,7 +293,7 @@ _primer_step_github_install_download() {
     find "$tmpdir" -type f -name "$2" -perm -a=x |
     while IFS= read -r fpath; do
         yush_notice "Installing $(yush_basename "$fpath") to $PRIMER_BINDIR"
-        $PRIMER_OS_SUDO mv -f "$fpath" "${PRIMER_BINDIR}"
+        primer_utils_install_bin "$fpath" "${PRIMER_BINDIR}"
     done
     rm -rf "$tmpdir"
 }

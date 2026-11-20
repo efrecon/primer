@@ -32,7 +32,11 @@ then.
 
 The step implements a preference-based logic for how to install the daemon and
 CLI when reverting to distribution packages. The default, `auto` will take into
-account the distribution and its version to take the most optimal solution.
+account the distribution and its version to take the most optimal solution. On
+Fedora, Docker comes from the `moby-engine` package. When no iptables is
+installed, `iptables-nft`, the default of Fedora, is installed first: otherwise
+the package would bring the legacy variant, which recent kernels might not
+support.
 
 The step also arranges for the Docker [compose] and [buildx] CLI plugins to be
 installed, so that `docker compose` is available and `docker build` uses
@@ -168,11 +172,16 @@ where the Docker CLI looks for plugins.
 
 This environment variable should contain the short GPG signature of the Docker
 package repository to use on Debian derivatives, i.e. the last 8 hexadecimal
-digits of the fingerprint of its key, e.g. `0EBFCD88`. When set, the key
-installed by the convenience [script] is checked: the keyring given to
+digits of the fingerprint of its key, e.g. `0EBFCD88`. When set, the
+convenience [script] only sets up the repository (`--setup-repo`), and its key
+is checked before any package is installed from it: the keyring given to
 `signed-by` in `/etc/apt/sources.list.d/docker.list`, read with `gpg`
-(installed when missing), or the keys of `apt-key` with older scripts. This step
-fails when the script installed access to the wrong repository.
+(installed when missing). The step then installs the packages the script would
+install: `docker-ce`, `docker-ce-cli`, `containerd.io`,
+`docker-ce-rootless-extras`, `docker-compose-plugin` and `docker-buildx-plugin`.
+With the wrong key, the repository and its key are removed, nothing is
+installed, and the step fails. When empty, the script installs everything, and
+the key of the repository is not checked.
 
 ### `PRIMER_STEP_DOCKER_GET_URL`
 

@@ -91,7 +91,8 @@ primer_abort() {
 
 # Read configuration (as in .env terminated) file passed as a parameter. The
 # second parameter, if present, is the source of the file, i.e. typically a
-# remote resource.
+# remote resource. Variables that change how commands run, e.g. PATH, LD_* or
+# PRIMER_OS_SUDO, are refused.
 primer_config() {
     if [ -f "$1" ]; then
         _src=$1
@@ -109,6 +110,11 @@ primer_config() {
                     yush_warn "warning $key is not a valid variable name"
                     continue
                 fi
+                case "$key" in
+                    PATH|IFS|ENV|BASH_ENV|CDPATH|PS4|SHELLOPTS|LD_*|PRIMER_OS_*)
+                        yush_warn "$key cannot be set from configuration files, ignored"
+                        continue;;
+                esac
                 yush_is_true "$PRIMER_SUBST" && val=$(yush_envsubst "$val")
                 yush_debug "Setting $key=$val"
                 export "${key}=${val}"
@@ -249,7 +255,7 @@ Usage:
         also prints out host information, e.g. hostname, MAC address, distro,
         version, etc.
     info
-        List all options and environmnet variables that can be used to modify
+        List all options and environment variables that can be used to modify
         the behaviour of the steps to be run. The list of steps can be specified
         as for the install command
     help
@@ -278,7 +284,7 @@ while [ $# -gt 0 ]; do
             # Capture and makes the difference between options that look like
             # --module:option and --module:option=value.
             _val=${1#*=};  # The value, when present is everything after the =
-            _key=${1%=*};  # This is everything before the =, when present
+            _key=${1%%=*}; # This is everything before the first =, when present
             if [ "$_key" = "$_val" ]; then
                 # This captures options that look like --module:option, where
                 # the value is the coming argument. We extract the different
@@ -356,7 +362,11 @@ for _cfg in $PRIMER_CONFIG; do
                         -e "s/%host%/${_hst}/g" \
                         -e "s/%hostname%/${_hst}/g" )
     fi
-    if printf %s\\n "$_cfg" | grep -Eq '^https?://'; then
+    if printf %s\\n "$_cfg" | grep -Eq '^http://'; then
+        # Anyone on the way could change the configuration, i.e. the commands
+        # run as root.
+        primer_abort "Configuration from $_cfg over plain HTTP refused, use https://"
+    elif printf %s\\n "$_cfg" | grep -Eq '^https://'; then
         _tmp=$(mktemp)
         primer_net_curl "$_cfg" > "$_tmp"
         primer_config "$_tmp" "$_cfg"
@@ -414,14 +424,14 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
             fi
         done
         ;;
-    env*)
+    env | environment)
         primer_hostinfo
         yush_info "Getting known accessible steps"
         for _step in $(primer_steps | sort -u); do
             primer_info "$_step"
         done
         ;;
-    info*)
+    info)
         yush_info "Getting info for steps to run"
         for _step in $PRIMER_STEPS; do
             primer_info "$_step"
@@ -429,4 +439,6 @@ case "$(printf %s\\n "$cmd" | tr '[:upper:]' '[:lower:]')" in
         ;;
     help)
         usage "" 0;;
+    *)
+        usage "Unknown command: $cmd" 1;;
 esac

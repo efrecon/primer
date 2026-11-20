@@ -79,3 +79,26 @@ test_packages_none() {
         primer_step_packages clean
         assert_equal "primer_os_update" "$(mock_calls)"'
 }
+
+test_packages_ubuntu() {
+    in_container "$IMG_UBUNTU" '
+        primer_run -s packages --packages:packages "jq tree" --packages:fresh 0 install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true dpkg -s jq
+        assert_true [ -x /usr/bin/tree ]
+        primer_run -s packages --packages:packages "jq tree" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_false dpkg -s jq'
+}
+
+test_packages_fedora() {
+    in_container "$IMG_FEDORA" '
+        primer_run -s packages --packages:packages "jq tree" --packages:fresh 0 install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true rpm -q jq
+        assert_true [ -x /usr/bin/tree ]
+        primer_run -s packages --packages:packages "jq tree" clean
+        assert_equal 0 "$PRIMER_RC"
+        assert_false rpm -q jq
+        assert_false [ -e /usr/bin/tree ]'
+}

@@ -25,6 +25,11 @@ number of fields separated by the `:` (colon) sign. These fields are, in order:
 Empty fields, or missing trailing fields, take their default value, e.g. a line
 with `sdb` only formats `/dev/sdb` as `ext4` and mounts it at `/mnt/disks/sdb`.
 
+The content of devices is detected with the `blkid` of util-linux, installed
+when missing on Alpine: the `blkid` of busybox does not report partition
+tables. Without it, devices are left untouched, with a warning. Partitions
+known to the kernel also count as a partition table.
+
 Devices that are already mounted are left untouched. Devices that already
 contain a filesystem are not reformatted, unless [`--overwrite`](#--overwrite)
 is set: they are mounted using their existing filesystem type. Whole disks with

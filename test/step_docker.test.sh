@@ -32,11 +32,21 @@ docker_verify() {
     assert_match "^[0-9]" "$(docker info --format "{{.ServerVersion}}")" "server version"
     mkdir -p /tmp/ctx
     printf "FROM scratch\nCOPY Dockerfile /\n" > /tmp/ctx/Dockerfile
-    _build=$(docker build --progress=plain /tmp/ctx 2>&1 || docker build /tmp/ctx 2>&1)
+    # The build must succeed, with the expected builder: the output of a failed
+    # build also starts like a successful one.
     case "${1:-buildkit}" in
-        buildkit) assert_match "^#[0-9]+ " "$_build" "BuildKit build";;
-        legacy) assert_contains "Sending build context" "$_build" "legacy build";;
+        buildkit)
+            run docker build --progress=plain -t primer-test-build /tmp/ctx
+            assert_equal 0 "$RUN_RC" "BuildKit build: $RUN_ERR"
+            assert_match "^#[0-9]+ " "$RUN_ERR" "BuildKit build"
+            ;;
+        legacy)
+            run docker build -t primer-test-build /tmp/ctx
+            assert_equal 0 "$RUN_RC" "legacy build: $RUN_ERR"
+            assert_contains "Sending build context" "$RUN_OUT$RUN_ERR" "legacy build"
+            ;;
     esac
+    assert_true docker image inspect primer-test-build
 }
 deb_installed() {
     dpkg-query -W -f="\${Status}" "$1" 2>/dev/null | grep -q "^install ok installed"
@@ -63,6 +73,18 @@ test_docker_alpine_auto() {
         docker_verify buildkit
         assert_true test -x /usr/libexec/docker/cli-plugins/docker-compose
         assert_true test -x /usr/libexec/docker/cli-plugins/docker-buildx'
+}
+
+# Fedora: Docker as packaged by the distribution (moby-engine).
+test_docker_fedora() {
+    require_privileged
+    in_container -P "$IMG_FEDORA" "$DOCKER_LIB"'
+        primer_run -s docker install
+        docker_verify buildkit
+        assert_true rpm -q moby-engine
+        # nftables, the default of Fedora: kernels might lack legacy iptables.
+        assert_contains "nf_tables" "$(iptables --version)"
+        assert_false rpm -q iptables-legacy'
 }
 
 test_docker_alpine_pinned() {
@@ -249,6 +271,70 @@ test_docker_getdocker_verification() {
         PRIMER_STEP_DOCKER_GET_URL=https://example.invalid/install.sh
         run _primer_step_docker_install_getdocker
         assert_contains "https://example.invalid/install.sh" "$(mock_calls)"'
+}
+
+# Registry login information: hosts with ports, passwords with : and @. Bad
+# entries are refused without their password ever reaching the logs.
+test_docker_registry_parse() {
+    unit "$IMG_ALPINE" '
+        unit_step docker
+        check() {
+            _primer_step_docker_registry_parse "$1"
+            assert_equal "$2|$3|$4" "$_user|$_pass|$_host" "$1"
+        }
+        check "bob:pw@reg.example.com" bob pw reg.example.com
+        check "bob:pw@localhost:5000" bob pw localhost:5000
+        check "bob:p@ss:w0rd@ghcr.io" bob "p@ss:w0rd" ghcr.io
+        check "me@example.com:pw@quay.io" "me@example.com" pw quay.io
+        for bad in "bob:s3cret" "bob@host" ":s3cret@host" "bob:@host" "bob:s3cret@"; do
+            assert_false _primer_step_docker_registry_parse "$bad"
+        done
+        # In the step: fails, and the password is not logged.
+        mock docker primer_auth_group_add primer_utils_syscmd_exists
+        YUSH_LOG_LEVEL=debug
+        primer_step_docker option --registry "bob:s3cret"
+        run primer_step_docker install
+        assert_equal 1 "$RUN_RC"
+        assert_contains "must be user:password@host" "$RUN_ERR"
+        assert_not_contains "s3cret" "$RUN_ERR$RUN_OUT"
+        assert_not_contains "docker login" "$(mock_calls)"'
+}
+
+# With a key for the Docker repository, the convenience script only sets the
+# repository up: its key is verified before any package is installed from it.
+# A wrong key installs nothing, and removes the repository.
+test_docker_apt_key_before_install() {
+    unit "$IMG_TRIXIE" '
+        unit_step docker
+        _primer_step_docker_install_getdocker() {
+            mock_log getdocker "$@"
+            mkdir -p /etc/apt/keyrings
+            echo key > /etc/apt/keyrings/docker.asc
+            echo "deb [signed-by=/etc/apt/keyrings/docker.asc] https://x y z" > /etc/apt/sources.list.d/docker.list
+        }
+        mock primer_os_packages
+        PRIMER_STEP_DOCKER_APT_GPG=0ebfcd88
+        mock -o DEADBEEF _primer_step_docker_apt_shortkey
+        run _primer_step_docker_install_debian docker
+        assert_equal 1 "$RUN_RC" "wrong key status"
+        assert_contains "Wrong key for the Docker repository: DEADBEEF" "$RUN_ERR"
+        assert_equal "getdocker --setup-repo
+_primer_step_docker_apt_shortkey" "$(mock_calls)"
+        assert_false test -e /etc/apt/sources.list.d/docker.list
+        assert_false test -e /etc/apt/keyrings/docker.asc
+        mock_reset
+        mock -o 0EBFCD88 _primer_step_docker_apt_shortkey
+        run _primer_step_docker_install_debian docker
+        assert_equal 0 "$RUN_RC" "right key status"
+        assert_equal "getdocker --setup-repo
+_primer_step_docker_apt_shortkey
+primer_os_packages add docker-ce docker-ce-cli containerd.io docker-ce-rootless-extras docker-compose-plugin docker-buildx-plugin" "$(mock_calls)"
+        # No key to verify against: the script installs everything.
+        mock_reset
+        PRIMER_STEP_DOCKER_APT_GPG=
+        run _primer_step_docker_install_debian docker
+        assert_equal 0 "$RUN_RC" "no key status"
+        assert_equal "getdocker" "$(mock_calls)"'
 }
 
 # Plugin downloads: verification and asset names per architecture, without

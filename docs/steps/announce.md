@@ -20,7 +20,10 @@ for Windows clients.
   [Avahi]: https://avahi.org/
   [Samba]: https://www.samba.org/
 
-The daemons are started and enabled at boot. When a firewall is active, their
+The daemons are started and enabled at boot, through their service: Avahi is
+`avahi-daemon` everywhere, `nmbd` runs as the `nmbd` service on Debian and
+Ubuntu, `nmb` on Fedora, and as part of the `samba` service on Alpine (which,
+as configured in `/etc/conf.d/samba`, also runs `smbd`). When a firewall is active, their
 ports are opened (5353/udp for mDNS, 137/udp and 138/udp for NetBIOS) through
 the [firewall] step, with the marker `primer-announce`. When cleaning, the
 daemons are stopped and disabled, and the ports opened by this step closed.

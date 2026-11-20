@@ -1,4 +1,4 @@
-# disk
+# install
 
 `install` installs remote or local files/directory to the host.
 
@@ -83,6 +83,12 @@ This option can be repeated as many times as needed. Each value to this option
 should be formatted as the active lines of the specification file described
 above.
 
+### `--targets`
+
+Space separated list of installation specifications, formatted as the active
+lines of the specification file described above. Unlike
+[`--target`](#--target), this replaces the specifications given so far.
+
 ### `--overwrite`
 
 The value of this option should be a boolean (`yes`/`no`, `true`/`false`,
@@ -100,9 +106,12 @@ This environment variable is the same as the [`--bundle`](#--bundle) option.
 
 ### `PRIMER_STEP_INSTALL_TARGETS`
 
-This environment variable is almost the same as the [`--target`](#--target)
-option. However, it should contain a space separated list of installation
-specifications.
+This environment variable is the same as the [`--targets`](#--targets) option.
+
+### `PRIMER_STEP_INSTALL_OVERWRITE`
+
+This environment variable is the same as the [`--overwrite`](#--overwrite)
+option.
 
 ## See Also
 

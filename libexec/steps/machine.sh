@@ -104,7 +104,7 @@ _primer_step_machine_install_download() {
             if ! [ -d "$PRIMER_BINDIR" ]; then
                 $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
             fi
-            $PRIMER_OS_SUDO mv -f "$_bin" "${PRIMER_BINDIR%%/}/docker-machine"
+            primer_utils_install_bin "$_bin" "${PRIMER_BINDIR%%/}/docker-machine"
             _rc=0
         fi
     fi

@@ -30,12 +30,16 @@ test_announce_mdns_debian() {
         assert_true [ -x /usr/sbin/avahi-daemon ]'
 }
 
+# With OpenRC, as on real hosts, samba-server brings the samba service, which
+# runs nmbd.
 test_announce_netbios_alpine() {
     in_container "$IMG_ALPINE" '
+        apk add -q openrc >/dev/null
         primer_run -s announce --announce:methods NetBIOS install
         assert_equal 0 "$PRIMER_RC"
         assert_true apk info -e samba-server
         assert_true [ -x /usr/sbin/nmbd ]
+        assert_true [ -x /etc/init.d/samba ]
         primer_run -s announce --announce:methods NetBIOS clean
         assert_equal 0 "$PRIMER_RC"
         assert_true apk info -e samba-server'
@@ -80,7 +84,9 @@ test_announce_services_and_firewall_alpine() {
         mock primer_os_dependency
         mock -o ufw primer_net_active_firewall
         mock -r 1 primer_os_in_container
-        mock avahi-daemon nmbd rc-service rc-update
+        mock avahi-daemon nmbd rc-service
+        mock -o "      avahi-daemon | default
+             samba | default" rc-update
         # Stateful ufw: rules as printed by ufw show added, with one rule of the
         # administrator.
         printf "ufw allow 137/udp\n" > /tmp/added
@@ -101,8 +107,8 @@ test_announce_services_and_firewall_alpine() {
         assert_contains "rc-update add avahi-daemon" "$calls"
         assert_contains "ufw allow 5353/udp comment primer-announce firewall" "$calls"
         assert_contains "primer_os_dependency nmbd samba-server" "$calls"
-        assert_contains "rc-service nmbd start" "$calls"
-        assert_contains "rc-update add nmbd" "$calls"
+        assert_contains "rc-service samba start" "$calls"
+        assert_contains "rc-update add samba" "$calls"
         assert_contains "ufw allow 138/udp comment primer-announce firewall" "$calls"
         assert_not_contains "ufw allow 137/udp" "$calls"
         mock_reset
@@ -110,8 +116,9 @@ test_announce_services_and_firewall_alpine() {
         primer_step_announce clean
         calls=$(mock_calls)
         assert_contains "rc-service avahi-daemon stop" "$calls"
-        assert_contains "rc-update del avahi-daemon" "$calls"
-        assert_contains "rc-service nmbd stop" "$calls"
+        assert_contains "rc-update del avahi-daemon default" "$calls"
+        assert_contains "rc-update del samba default" "$calls"
+        assert_contains "rc-service samba stop" "$calls"
         assert_not_contains "primer_os_packages del" "$calls"
         assert_equal "ufw allow 137/udp" "$(cat /tmp/added)" "rules after clean"'
 }
@@ -139,4 +146,49 @@ test_announce_services_debian() {
         calls=$(mock_calls)
         assert_contains "systemctl disable nmbd" "$calls"
         assert_not_contains "ufw" "$calls"'
+}
+
+# On Fedora, the service of nmbd is called nmb.
+test_announce_services_fedora() {
+    unit "$IMG_TRIXIE" '
+        mock primer_os_dependency
+        mock primer_net_active_firewall
+        mock -r 1 primer_os_in_container
+        mock systemctl avahi-daemon nmbd
+        PRIMER_OS_DISTRO=fedora
+        unit_step announce
+        primer_step_announce install
+        calls=$(mock_calls)
+        assert_contains "primer_os_dependency avahi-daemon avahi" "$calls"
+        assert_contains "systemctl start avahi-daemon" "$calls"
+        assert_contains "primer_os_dependency nmbd samba" "$calls"
+        assert_contains "systemctl start nmb" "$calls"
+        assert_contains "systemctl enable nmb" "$calls"
+        assert_not_contains "systemctl start nmbd" "$calls"
+        mock_reset
+        primer_step_announce clean
+        calls=$(mock_calls)
+        assert_contains "systemctl stop nmb" "$calls"
+        assert_contains "systemctl disable nmb" "$calls"'
+}
+
+# The real packages: Fedora provides nmbd through the nmb service, Ubuntu like
+# Debian.
+test_announce_netbios_fedora() {
+    in_container "$IMG_FEDORA" '
+        primer_run -s announce --announce:methods "mDNS NetBIOS" install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true [ -x /usr/sbin/nmbd ]
+        assert_true [ -f /usr/lib/systemd/system/nmb.service ]
+        assert_true [ -f /usr/lib/systemd/system/avahi-daemon.service ]
+        assert_contains "Service nmb start" "$PRIMER_ERR"'
+}
+
+test_announce_ubuntu() {
+    in_container "$IMG_UBUNTU" '
+        primer_run -s announce --announce:methods "mDNS NetBIOS" install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true [ -x /usr/sbin/nmbd ]
+        assert_true [ -f /usr/lib/systemd/system/nmbd.service ]
+        assert_true [ -x /usr/sbin/avahi-daemon ]'
 }

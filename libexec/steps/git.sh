@@ -54,6 +54,8 @@ primer_step_git() {
 
             if [ -n "$PRIMER_STEP_GIT_LFS_INSTALL" ]; then
                 yush_info "Installing LFS for all users on system matching $PRIMER_STEP_GIT_LFS_INSTALL"
+                # su is missing from minimal Fedora installations.
+                primer_os_dependency su util-linux
                 primer_auth_user_list | while IFS= read -r _username || [ -n "$_username" ]; do
                     if printf %s\\n "$_username" | grep -qE "$PRIMER_STEP_GIT_LFS_INSTALL"; then
                         yush_debug "Installing git LFS for $_username"
@@ -162,7 +164,7 @@ _primer_step_git_lfs_download() {
                 if ! [ -d "$PRIMER_BINDIR" ]; then
                     $PRIMER_OS_SUDO mkdir -p "$PRIMER_BINDIR"
                 fi
-                $PRIMER_OS_SUDO mv -f "${_tmpdir}/${_bin}" "${PRIMER_BINDIR%%/}/git-lfs"
+                primer_utils_install_bin "${_tmpdir}/${_bin}" "${PRIMER_BINDIR%%/}/git-lfs"
                 _rc=0
             fi
         fi

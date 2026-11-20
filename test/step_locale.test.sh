@@ -70,6 +70,29 @@ test_locale_generated_debian() {
         assert_equal "sv_SE.UTF-8 UTF-8" "$(grep -v "^#" /etc/locale.gen | grep -v "^[[:space:]]*$")"'
 }
 
+# On Ubuntu, locale-gen takes the locale.
+test_locale_generated_ubuntu() {
+    in_container "$IMG_UBUNTU" '
+        primer_run -s locale --locale:locale sv_SE.UTF-8 install
+        assert_equal 0 "$PRIMER_RC"
+        assert_contains "sv_SE.utf8" "$(locale -a)"
+        assert_true grep -qx "LC_ALL=sv_SE.UTF-8" /etc/environment'
+}
+
+# On Fedora, locales come in one package per language.
+test_locale_langpack_fedora() {
+    in_container "$IMG_FEDORA" '
+        assert_not_contains "sv_SE" "$(locale -a)"
+        primer_run -s locale --locale:locale sv_SE.UTF-8 install
+        assert_equal 0 "$PRIMER_RC"
+        assert_true rpm -q glibc-langpack-sv
+        assert_contains "sv_SE.utf8" "$(locale -a)"
+        assert_not_contains "cannot change locale" "$PRIMER_ERR"
+        assert_true grep -qx "LC_ALL=sv_SE.UTF-8" /etc/environment
+        primer_run -s locale --locale:locale C.UTF-8 install
+        assert_equal 0 "$PRIMER_RC" "built-in locale"'
+}
+
 # On Debian, the charset of locales missing from /etc/locale.gen comes from
 # the list of supported locales. Built-in locales need no generation, and
 # locales with unknown charsets are not generated.
