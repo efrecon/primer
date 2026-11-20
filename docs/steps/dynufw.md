@@ -69,11 +69,13 @@ a rule for it, the step fails and leaves the firewall disabled (see
 
 ### `--commit`
 
-Commit of [dynufw] to install, the tip of master when this version of primer was
-released by default. An existing checkout is moved to the commit. An empty
-value installs the tip of the branch, without verification, and updates it at
-every installation. To install a newer dynufw, find the commit at the tip of
-its branch:
+Hash of the commit of [dynufw] to install, full or short (resolved from the
+history of the branch, it must be unambiguous). Tags are refused: they can move.
+By default, the tip of master when this version of primer was released, for the
+master branch only: other branches need a commit. An existing checkout is moved
+to the commit. An empty value installs the tip of the branch, without
+verification, and updates it at every installation. To install a newer dynufw,
+find the commit at the tip of its branch:
 
 ```shell
 git ls-remote https://github.com/efrecon/dynufw.git refs/heads/master

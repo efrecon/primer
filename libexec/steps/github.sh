@@ -66,12 +66,14 @@ _primer_step_github_install() {
         *) return 1;;
     esac
     yush_info "Installing binary matching $bin from $project"
-    if [ -z "$checksum" ] && yush_is_true "$PRIMER_STEP_GITHUB_VERIFY"; then
+    # Empty is false, as the default.
+    if [ -z "$checksum" ] && [ -n "$PRIMER_STEP_GITHUB_VERIFY" ] \
+            && yush_is_true "$PRIMER_STEP_GITHUB_VERIFY"; then
         yush_error "No checksum for $asset of $project, not installing it"
         return 1
     fi
     _gi_rc=0
-    primer_github_install --sum "$sum" "$project" "$tag" "$asset" "$bin" || _gi_rc=$?
+    primer_github_install --sum "$sum" --url "$url" "$project" "$tag" "$asset" "$bin" || _gi_rc=$?
     # 2: no binary in the asset, only reported.
     [ "$_gi_rc" != 1 ]
 }
@@ -84,7 +86,7 @@ _primer_step_github_clean() {
     _primer_step_github_resolve "$1" || _rs_rc=$?
     _cl_tmp=$(mktemp -d)
     if [ "$_rs_rc" != 0 ] \
-            || ! primer_github_fetch "$project" "$tag" "$asset" "$sum" "$_cl_tmp" "$(_primer_step_github_single "$bin")"; then
+            || ! primer_github_fetch "$project" "$tag" "$asset" "$sum" "$_cl_tmp" "$(_primer_step_github_single "$bin")" "$url"; then
         rm -rf "$_cl_tmp"
         find "${PRIMER_BINDIR}" -mindepth 1 -maxdepth 1 -name "$bin" -perm -a=x |
         while IFS= read -r fpath; do
@@ -142,8 +144,9 @@ _primer_step_github_parse() {
 }
 
 # Parse the line $1 of the projects file (see _primer_step_github_parse), find
-# its release, and the first asset that matches the filter. Sets tag and asset,
-# and sum: the checksum, with tokens replaced, and with checksum files among
+# its release, and the first asset that matches the filter. Sets tag, asset and
+# url, its download URL as given by the API, and sum: the checksum, with tokens
+# replaced, and with checksum files among
 # the assets of the release replaced by their URL. Returns 1 when the release
 # or the asset cannot be found, 2 when the checksum file cannot be found.
 _primer_step_github_resolve() {
@@ -151,6 +154,7 @@ _primer_step_github_resolve() {
     tag=
     id=
     asset=
+    url=
     sum=
     # Latest release, or release which name matches the version (glob-style).
     if [ -z "$version" ]; then
@@ -170,7 +174,9 @@ EOF
     filter=$(primer_github_tokens "$filter" "$tag" "$version")
     yush_debug "Looking for first asset matching $filter in release $id"
     _rs_assets=$(_primer_step_github_assets "$project" "$id")
-    asset=$(printf %s\\n "$_rs_assets" | _primer_step_github_pick "$filter" | cut -f 1)
+    _rs_asset=$(printf %s\\n "$_rs_assets" | _primer_step_github_pick "$filter")
+    asset=$(printf %s\\n "$_rs_asset" | cut -f 1)
+    url=$(printf %s\\n "$_rs_asset" | cut -f 2)
     if [ -z "$asset" ]; then
         yush_warn "No asset matching $filter in release $tag of $project"
         return 1

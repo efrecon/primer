@@ -108,7 +108,7 @@ EOF
             yush_error "No checksum for $2 in $_vf_url, not installing it"
             return 1
         fi
-        [ -n "$_vf_algo" ] || _vf_algo=$(_primer_github_algo "$_vf_url")
+        [ -n "$_vf_algo" ] || _vf_algo=$(_primer_github_algo "$_vf_url" "$2")
         _vf_from=$_vf_url
     fi
 
@@ -136,10 +136,11 @@ EOF
 # directory $5. Archives are unpacked, compressed files uncompressed, installing
 # the necessary tools, e.g. unzip. Single files are named $6, the name of the
 # asset (without compression extension) by default, and made executable when
-# they are binaries or scripts (removed otherwise). Fails, leaving nothing in
-# the directory, when the download or the verification fails.
+# they are binaries or scripts (removed otherwise). The asset is downloaded from
+# $7, when given, e.g. the URL given by the API. Fails, leaving nothing in the
+# directory, when the download or the verification fails.
 primer_github_fetch() {
-    _ft_url=$(primer_github_url "$1" "$2" "$3")
+    _ft_url=${7:-$(primer_github_url "$1" "$2" "$3")}
     _ft_dl=$(mktemp -d)
     _ft_file="${_ft_dl}/$3"
     yush_info "Downloading $_ft_url"
@@ -193,7 +194,7 @@ primer_github_fetch() {
 }
 
 # primer_github_install [--dest DIR] [--name NAME] [--check ARGS] [--sum SUM]
-#                       PROJECT TAG ASSET [BINARY]
+#                       [--url URL] PROJECT TAG ASSET [BINARY]
 # Download the asset ASSET of the release tagged TAG of the project PROJECT,
 # verify it against SUM (see primer_github_verify) and install the binaries it
 # contains that match the glob-filter BINARY (the basename of the project by
@@ -201,19 +202,22 @@ primer_github_fetch() {
 # binary, named BINARY (when not a glob-filter). Binaries are installed in DIR,
 # PRIMER_BINDIR by default, under their own name or NAME (when there is only
 # one), owned by root. When ARGS are given, binaries must run successfully with
-# them, e.g. --version, before anything is installed. Returns 1 on failures,
+# them, e.g. --version, before anything is installed. The asset is downloaded
+# from URL, when given, from its release otherwise. Returns 1 on failures,
 # installing nothing, 2 when there was no binary to install.
 primer_github_install() {
     _in_dest=$PRIMER_BINDIR
     _in_name=
     _in_check=
     _in_sum=
+    _in_url=
     while [ $# -gt 0 ]; do
         case "$1" in
             --dest) _in_dest=$2; shift 2;;
             --name) _in_name=$2; shift 2;;
             --check) _in_check=$2; shift 2;;
             --sum) _in_sum=$2; shift 2;;
+            --url) _in_url=$2; shift 2;;
             --) shift; break;;
             *) break;;
         esac
@@ -226,7 +230,7 @@ primer_github_install() {
     esac
 
     _in_tmp=$(mktemp -d)
-    if ! primer_github_fetch "$1" "$2" "$3" "$_in_sum" "$_in_tmp" "$_in_single"; then
+    if ! primer_github_fetch "$1" "$2" "$3" "$_in_sum" "$_in_tmp" "$_in_single" "$_in_url"; then
         rm -rf "$_in_tmp"
         return 1
     fi
@@ -281,9 +285,14 @@ _primer_github_sum() {
 
 # Print the algorithm of the checksum file at the URL $1, guessed from its name,
 # e.g. sha256 for SHA256SUMS, blake2b for B2SUMS. Nothing when the name does not
-# tell, e.g. checksums.txt.
+# tell, e.g. checksums.txt. The name of the asset $2 is ignored at the start of
+# the name, e.g. for sha1dc.tar.gz.sha256.
 _primer_github_algo() {
     _al_name=$(printf %s\\n "${1##*/}" | sed 's/[?#].*//' | tr '[:upper:]' '[:lower:]')
+    if [ -n "${2:-}" ]; then
+        _al_asset=$(printf %s\\n "$2" | tr '[:upper:]' '[:lower:]')
+        _al_name=${_al_name#"$_al_asset"}
+    fi
     case "$_al_name" in
         *sha512*|*sha2-512*) echo sha512;;
         *sha384*) echo sha384;;
@@ -301,7 +310,8 @@ _primer_github_algo() {
 # algorithm when the file tells it (BSD format), e.g. sha256. Recognised
 # formats: <sum>  <name> and <sum> *<name> (coreutils), ALGO (<name>) = <sum>
 # (BSD, also ALGO(<name>)= <sum> as printed by OpenSSL), or a file with a single
-# sum and nothing else. Names are compared without leading directories.
+# sum and nothing else, or followed by - (as printed by sha256sum < file).
+# Names are compared without leading directories.
 _primer_github_sum_lookup() {
     awk -v a="$2" '
         function base(n) { sub(/^\*/, "", n); sub(/^.*\//, "", n); return n }
@@ -323,6 +333,8 @@ _primer_github_sum_lookup() {
             n = $0
             sub(/^[^ \t]+[ \t]+/, "", n)
             if (base(n) == a && s == "") s = $1
+            # As printed by sha256sum < file: a sum for whatever file.
+            if (n == "-") single = $1
             next
         }
         $1 ~ /^[0-9A-Fa-f]+$/ { single = $1 }

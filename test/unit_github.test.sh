@@ -157,6 +157,11 @@ test_primer_github_install() {
         assert_equal "tool 1.0" "$(/opt/plugins/docker-tool)"
         primer_github_install --sum checksums.txt acme/tool v1.0 toolraw toolctl
         assert_equal "raw 1.0" "$(/usr/local/bin/toolctl)"
+        # From another URL, e.g. as given by the API.
+        mock_reset
+        primer_github_install --url "$REL/toolraw" acme/tool "v#1" toolraw toolurl 2>/dev/null
+        assert_equal "raw 1.0" "$(/usr/local/bin/toolurl)"
+        assert_contains "primer_net_curl $REL/toolraw" "$(mock_calls)"
         # The check fails: nothing installed.
         run primer_github_install --check --version --sum checksums.txt acme/tool v1.0 tool.tar.gz "*o*"
         assert_equal 1 "$RUN_RC" "failed check"
@@ -195,7 +200,12 @@ test__primer_github_algo() {
                 B2SUMS:blake2b x.b2:blake2b x.md5:md5 SHA1SUMS:sha1 checksums.txt: \
                 "https://h/v1/SHA256SUMS?raw=1:sha256" x.sha:; do
             assert_equal "${pair##*:}" "$(_primer_github_algo "${pair%:*}")" "$pair"
-        done'
+        done
+        # The name of the asset does not count.
+        assert_equal "" "$(_primer_github_algo https://h/sha1dc-MD5.tar.gz.sha sha1dc-md5.tar.gz)"
+        assert_equal sha256 "$(_primer_github_algo https://h/sha1dc.tar.gz.sha256 sha1dc.tar.gz)"
+        assert_equal md5 "$(_primer_github_algo https://h/md5tool.tar.gz.sha)"
+        assert_equal "" "$(_primer_github_algo https://h/md5tool.tar.gz.sha md5tool.tar.gz)"'
 }
 
 # Sums from checksum files: the line for the asset, compared without leading
@@ -212,6 +222,11 @@ test__primer_github_sum_lookup() {
         assert_equal "" "$(_primer_github_sum_lookup /tmp/sums w.tar.gz)"
         printf "\n eee \n" > /tmp/single
         assert_equal eee "$(_primer_github_sum_lookup /tmp/single anything)"
+        # As printed by sha256sum < file, alone in the file.
+        printf "abc  -\n" > /tmp/dash
+        assert_equal abc "$(_primer_github_sum_lookup /tmp/dash anything)"
+        printf "abc  -\nbcd  -\n" > /tmp/dashes
+        assert_equal "" "$(_primer_github_sum_lookup /tmp/dashes anything)"
         # PGP-signed files, e.g. sha256sums.asc of git LFS.
         printf "%s\n" "-----BEGIN PGP SIGNED MESSAGE-----" "Hash: SHA256" "" "abc *lfs.tar.gz" "-----BEGIN PGP SIGNATURE-----" "xyz" > /tmp/asc
         assert_equal abc "$(_primer_github_sum_lookup /tmp/asc lfs.tar.gz)"

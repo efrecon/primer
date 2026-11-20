@@ -85,13 +85,14 @@ for the asset is looked for in lines formatted as `<sum>  <name>` or
 `<sum> *<name>` (as output by `sha256sum` and friends), or as
 `ALGO (<name>) = <sum>` (BSD style, `shasum --tag`, or `ALGO(<name>)= <sum>` as
 printed by `openssl dgst`). Names are compared without their leading
-directories. A file containing a single sum and nothing else is used as is.
+directories. A file containing a single sum and nothing else, or followed by
+`-` (as printed by `sha256sum < file`), is used as is.
 
 Other algorithms have sums of the same length as sha256 and sha512, e.g. SHA3,
 BLAKE3 (64 digits) or BLAKE2b (128 digits). The algorithm of sums from checksum
 files is taken, in order, from the tag of BSD-style lines, from the name of the
-file (e.g. `SHA512SUMS`, `*.sha256`, `B2SUMS`, `*.md5`), and otherwise from the
-length of the sum. Sums of other algorithms than sha256 and sha512, or which
+file (e.g. `SHA512SUMS`, `*.sha256`, `B2SUMS`, `*.md5`, ignoring the name of the
+asset at its start), and otherwise from the length of the sum. Sums of other algorithms than sha256 and sha512, or which
 length does not match their algorithm, fail the step.
 
 When the checksum file cannot be found or downloaded, has no sum for the asset,
@@ -154,7 +155,7 @@ See above for format.
 ### `--verify`
 
 A boolean (`yes`/`no`, `true`/`false`, `on`/`off`, an integer), false by
-default. When true, assets without a checksum in the specification file are not
+default, and when empty. When true, assets without a checksum in the specification file are not
 installed, and the step fails.
 
 ## Environment Variables

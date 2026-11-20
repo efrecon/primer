@@ -40,9 +40,11 @@ in. This defaults to the master branch.
 
 ### `--commit`
 
-Commit of machinery to install, the tip of master when this version of primer
-was released by default. An empty value installs the tip of the branch, without
-verification.
+Hash of the commit of machinery to install, full or short (resolved from the
+history of the branch, it must be unambiguous). Tags are refused: they can move.
+By default, the tip of master when this version of primer was released, for the
+master branch only: other branches need a commit. An empty value installs the
+tip of the branch, without verification.
 
 ## Environment Variables
 

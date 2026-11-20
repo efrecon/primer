@@ -4,10 +4,13 @@
 # installed: branches coexist, each in its own directory.
 PRIMER_STEP_MACHINERY_BRANCH=${PRIMER_STEP_MACHINERY_BRANCH:-master}
 
-# Commit of machinery to install, verified by git: the tip of master when this
-# version of primer was released. Empty to install the tip of the branch,
-# unverified.
-PRIMER_STEP_MACHINERY_COMMIT=${PRIMER_STEP_MACHINERY_COMMIT-9eadd4fd1c226ec14e5420d18f3b63ec571e7a3a}
+# Commit of machinery to install, verified by git. When unset, the tip of master
+# when this version of primer was released, for the master branch only: other
+# branches need a commit. Empty to install the tip of the branch, unverified.
+#PRIMER_STEP_MACHINERY_COMMIT=
+
+# Tip of master when this version of primer was released.
+_PRIMER_STEP_MACHINERY_MASTER=9eadd4fd1c226ec14e5420d18f3b63ec571e7a3a
 
 PRIMER_STEP_MACHINERY_REPO=https://github.com/efrecon/machinery.git
 
@@ -52,9 +55,10 @@ primer_step_machinery() {
                 esac
             fi
             # At the commit, when given: an existing checkout moves to it.
-            yush_info "Installing machinery from $PRIMER_STEP_MACHINERY_REPO (branch: $PRIMER_STEP_MACHINERY_BRANCH, commit: ${PRIMER_STEP_MACHINERY_COMMIT:-none})"
+            _commit=$(_primer_step_machinery_commit) || return 1
+            yush_info "Installing machinery from $PRIMER_STEP_MACHINERY_REPO (branch: $PRIMER_STEP_MACHINERY_BRANCH, commit: ${_commit:-none})"
             primer_net_git_clone "$PRIMER_STEP_MACHINERY_REPO" "$PRIMER_STEP_MACHINERY_BRANCH" \
-                "$PRIMER_STEP_MACHINERY_COMMIT" "$_dir" || return 1
+                "$_commit" "$_dir" || return 1
             $PRIMER_OS_SUDO chmod a+x "$_dir/machinery"
             # Point the link to the branch, unless machinery was installed
             # otherwise.
@@ -84,4 +88,17 @@ primer_step_machinery() {
             fi
             ;;
     esac
+}
+
+# Print the commit to install: the one set, even empty, or the pinned commit of
+# master. Fails for other branches without a commit.
+_primer_step_machinery_commit() {
+    if [ -n "${PRIMER_STEP_MACHINERY_COMMIT+x}" ]; then
+        printf %s\\n "$PRIMER_STEP_MACHINERY_COMMIT"
+    elif [ "$PRIMER_STEP_MACHINERY_BRANCH" = master ]; then
+        printf %s\\n "$_PRIMER_STEP_MACHINERY_MASTER"
+    else
+        yush_error "No commit for branch $PRIMER_STEP_MACHINERY_BRANCH of machinery: give one with --commit, or --commit \"\" to install its tip unverified"
+        return 1
+    fi
 }
