@@ -615,10 +615,11 @@ calls authenticated and avoid anonymous rate limits.
 
 Most of the time goes to installing packages, which is CPU-bound. By default,
 the suite runs as many tests in parallel as the container runtime has CPUs.
-Debian and Ubuntu tests run in warm copies of the official images, built once a
-day: their package lists are fetched, apt keeps its caches, common packages are
-downloaded (not installed) and documentation is not installed. Primer still has
-to install everything it needs. Set `PRIMER_TEST_WARM=0` to use the official images.
+Debian, Ubuntu and Fedora tests run in warm copies of the official images,
+built once a day from [test/assets](./test/assets/): their package lists are
+fetched, apt keeps its caches, common packages are downloaded (not installed)
+and documentation is not installed. Primer still has to install everything it
+needs. Set `PRIMER_TEST_WARM=0` to use the official images.
 
   [docker]: https://docker.com/
   [podman]: https://podman.io/

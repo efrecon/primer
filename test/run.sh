@@ -207,10 +207,11 @@ for _img in "$IMG_ALPINE" "$IMG_ALPINE_PINNED" "$IMG_TRIXIE" "$IMG_BOOKWORM" "$I
     "$PRIMER_TEST_RUNTIME" pull -q "$_img" >/dev/null 2>&1 || true
 done
 
-# Use warm copies of the Debian and Ubuntu images, when the selected tests use
-# them.
+# Use warm copies of the Debian, Ubuntu and Fedora images, when the selected
+# tests use them. Each image is listed with its packaging: apt or dnf.
 if [ "${PRIMER_TEST_WARM:-1}" != "0" ]; then
-    for _var in IMG_TRIXIE IMG_BOOKWORM IMG_UBUNTU; do
+    for _pair in IMG_TRIXIE:apt IMG_BOOKWORM:apt IMG_UBUNTU:apt IMG_FEDORA:dnf; do
+        _var=${_pair%:*}
         for _file in $(printf %s\\n "$TESTS" | cut -d: -f1 | sort -u); do
             if grep -qF -e "\$$_var" -e "\${$_var}" "$TEST_ROOT/test/${_file}.test.sh"; then
                 eval "_img=\$$_var"
@@ -219,7 +220,7 @@ if [ "${PRIMER_TEST_WARM:-1}" != "0" ]; then
                 else
                     echo "Preparing warm copy of $_img"
                 fi
-                _warm=$(warm_image "$_img")
+                _warm=$(warm_image "$_img" "${_pair#*:}")
                 eval "$_var=\$_warm"
                 break
             fi

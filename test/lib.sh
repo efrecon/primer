@@ -80,34 +80,36 @@ container_runtime() {
     printf %s\\n "$PRIMER_TEST_RUNTIME"
 }
 
-# Packages downloaded (not installed) in warm Debian images: the ones that
-# steps commonly install, so tests do not download them over and over again.
+# Packages downloaded (not installed) in warm images: the ones that steps
+# commonly install, so tests do not download them over and over again. For
+# Debian and Ubuntu (apt), and Fedora (dnf).
 WARM_PACKAGES=${WARM_PACKAGES:-"bash ca-certificates curl e2fsprogs git iproute2 iptables locales openssh-client tzdata ufw wpasupplicant"}
+WARM_PACKAGES_DNF=${WARM_PACKAGES_DNF:-"e2fsprogs git iproute iptables-nft openssh-clients tzdata util-linux"}
 
-# Print the name of the "warm" copy of the Debian image passed as an argument,
-# building it when it does not exist yet. Warm images are rebuilt every day and
-# differ from the official images in ways that make tests much faster, without
-# changing what primer has to do (no package is installed), and are closer to
-# a real Debian host:
+# Print the name of the "warm" copy of the image passed as an argument, building
+# it when it does not exist yet, from test/assets/Dockerfile.$2: apt (Debian,
+# Ubuntu) or dnf (Fedora). Warm images are rebuilt every day and differ from
+# the official images in ways that make tests much faster, without changing
+# what primer has to do (no package is installed), and are closer to a real
+# host:
 # - apt caches are kept: the official images remove them after every apt call
 #   (/etc/apt/apt.conf.d/docker-clean), so every call parses all package lists
 #   again, which is costly on small machines.
-# - Package lists are already fetched, so updating them only checks for changes.
-# - Common packages (WARM_PACKAGES) are downloaded, not installed.
-# - Documentation is not installed.
+# - Package lists (dnf metadata) are already fetched, so updating them only
+#   checks for changes.
+# - Common packages are downloaded, not installed.
+# - Documentation is not installed (already the case on Fedora).
 # Prints the official image when building fails, e.g. offline.
 warm_image() {
     _warm_tag=localhost/primer-test-$(printf %s "${1##*/}" | tr ':' '-'):$(date +%Y%m%d)
+    case "$2" in
+        dnf) _warm_pkgs=$WARM_PACKAGES_DNF;;
+        *) _warm_pkgs=$WARM_PACKAGES;;
+    esac
     if ! "$PRIMER_TEST_RUNTIME" image inspect "$_warm_tag" >/dev/null 2>&1; then
-        _warm_dir=$(mktemp -d)
-        cat > "$_warm_dir/Dockerfile" <<EOF
-FROM $1
-RUN rm -f /etc/apt/apt.conf.d/docker-clean \\
-    && printf 'path-exclude=/usr/share/doc/*\\npath-exclude=/usr/share/man/*\\npath-exclude=/usr/share/info/*\\n' > /etc/dpkg/dpkg.cfg.d/primer-test-nodoc \\
-    && apt-get update -qq \\
-    && for p in $WARM_PACKAGES; do apt-get install -y -qq --download-only "\$p" >/dev/null || true; done
-EOF
-        if "$PRIMER_TEST_RUNTIME" build -q -t "$_warm_tag" "$_warm_dir" >/dev/null 2>&1; then
+        if "$PRIMER_TEST_RUNTIME" build -q -t "$_warm_tag" \
+                --build-arg "BASE=$1" --build-arg "WARM_PACKAGES=$_warm_pkgs" \
+                -f "$TEST_ROOT/test/assets/Dockerfile.$2" "$TEST_ROOT/test/assets" >/dev/null 2>&1; then
             # Remove the warm images of previous days.
             "$PRIMER_TEST_RUNTIME" images --format '{{.Repository}}:{{.Tag}}' \
                 | grep -F "${_warm_tag%:*}:" | grep -vxF "$_warm_tag" \
@@ -117,7 +119,6 @@ EOF
         else
             _warm_tag=$1
         fi
-        rm -rf "$_warm_dir"
     fi
     printf %s\\n "$_warm_tag"
 }
@@ -137,30 +138,11 @@ _quote() {
     done
 }
 
-# Prelude executed in every container: extract the repository streamed on
-# stdin to /primer, detach stdin, and arrange for authenticated GitHub API
-# access when GITHUB_TOKEN is set (to avoid anonymous rate limits). The script
-# runs with set -e, and must reach its end: an early exit with status 0 would
-# skip the remaining assertions, so it fails the test (see _test_exit).
-# shellcheck disable=SC2016
-_TEST_PRELUDE='
-set -e
-mkdir -p /primer
-tar -xf - -C /primer
-exec </dev/null
-cd /primer
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-    printf "%s -u x-access-token:%s\n" "^https%3A//api%5C.github%5C.com/" "$GITHUB_TOKEN" > /tmp/curl.opts
-    PRIMER_CURL_OPTIONS=/tmp/curl.opts
-    export PRIMER_CURL_OPTIONS
-fi
-. /primer/test/lib.sh
-trap _test_exit EXIT
-eval "$1"
-_TEST_RC=$?
-test_done
-exit "$_TEST_RC"
-'
+# Prelude executed in every container, from test/assets/prelude.sh. It cannot
+# run from the copy of the repository in the container, as it is what extracts
+# it: its content is passed to sh -c instead. Read from the repository on the
+# host, from its copy at /primer in containers (for the tests of the framework).
+_TEST_PRELUDE=$(cat "${TEST_ROOT:-/primer}/test/assets/prelude.sh")
 
 # Print the files to stream into containers, relative to TEST_ROOT: the files
 # known to git, including submodules, and new files that are not ignored. Files

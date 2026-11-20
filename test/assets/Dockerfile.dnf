@@ -1,0 +1,19 @@
+# Warm copy of a Fedora image (dnf), see warm_image in test/lib.sh. BASE is the
+# official image, WARM_PACKAGES the packages to download (not install).
+# Documentation is already off in the official images (tsflags=nodocs), and
+# dnf keeps its cache. Heredocs need BuildKit (Docker 23 and later) or Buildah
+# 1.33 (Podman 4.8 and later): with older builders, the build fails and tests
+# use the official image, only slower.
+ARG BASE
+FROM ${BASE}
+ARG WARM_PACKAGES
+
+# Fetch the metadata of the repositories: refreshing it then only downloads
+# what changed. Download the common packages, used when installing them.
+RUN <<EOF
+set -e
+dnf makecache -q
+for p in $WARM_PACKAGES; do
+    dnf install -y -q --downloadonly "$p" >/dev/null 2>&1 || true
+done
+EOF
